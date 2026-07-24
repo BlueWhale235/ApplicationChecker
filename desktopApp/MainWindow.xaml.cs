@@ -11,6 +11,9 @@ public partial class MainWindow : Window
 {
     private readonly DesktopPaths _paths = new(AppContext.BaseDirectory);
     private readonly ProcessSupervisor _processes = new();
+    private readonly bool _devToolsEnabled = Environment.GetCommandLineArgs()
+        .Skip(1)
+        .Any(argument => string.Equals(argument, "--devtools", StringComparison.OrdinalIgnoreCase));
     private bool _shutdownStarted;
 
     public MainWindow()
@@ -100,7 +103,8 @@ public partial class MainWindow : Window
         cookie.IsHttpOnly = true;
         cookie.SameSite = CoreWebView2CookieSameSiteKind.Strict;
         Browser.CoreWebView2.CookieManager.AddOrUpdateCookie(cookie);
-        Browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
+        Browser.CoreWebView2.Settings.AreDevToolsEnabled = _devToolsEnabled;
+        Browser.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = _devToolsEnabled;
         Browser.CoreWebView2.Settings.IsStatusBarEnabled = false;
         Browser.Source = new Uri(baseUrl);
         Browser.Visibility = Visibility.Visible;
