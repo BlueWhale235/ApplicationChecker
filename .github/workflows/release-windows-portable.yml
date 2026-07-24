@@ -1,0 +1,133 @@
+name: Release Windows portable
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag, for example v0.1.0"
+        required: true
+        type: string
+      release_name:
+        description: "Release title (defaults to the tag)"
+        required: false
+        type: string
+      prerelease:
+        description: "Mark as a pre-release"
+        required: true
+        default: false
+        type: boolean
+      draft:
+        description: "Create as a draft release"
+        required: true
+        default: false
+        type: boolean
+      confirm_publish:
+        description: "I confirm that this workflow should build and publish a GitHub Release"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-release-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    if: ${{ inputs.confirm_publish }}
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 25.9.0
+          cache: pnpm
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install dependencies
+        shell: pwsh
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and test portable application
+        shell: pwsh
+        run: pnpm desktop:build
+
+      - name: Verify release package
+        id: package
+        shell: pwsh
+        run: |
+          $packagePath = Join-Path $env:GITHUB_WORKSPACE "desktopApp\artifacts\ApplicationChecker-portable-win-x64.zip"
+          if (-not (Test-Path -LiteralPath $packagePath)) {
+            throw "Portable package was not created: $packagePath"
+          }
+          $package = Get-Item -LiteralPath $packagePath
+          if ($package.Length -le 0) {
+            throw "Portable package is empty: $packagePath"
+          }
+          "path=$packagePath" >> $env:GITHUB_OUTPUT
+          "size=$($package.Length)" >> $env:GITHUB_OUTPUT
+          Write-Host "Verified $($package.Name), $([Math]::Round($package.Length / 1MB, 1)) MB"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ApplicationChecker-portable-win-x64-${{ inputs.release_tag }}
+          path: desktopApp/artifacts/ApplicationChecker-portable-win-x64.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_NAME: ${{ inputs.release_name }}
+          IS_PRERELEASE: ${{ inputs.prerelease }}
+          IS_DRAFT: ${{ inputs.draft }}
+          PACKAGE_PATH: ${{ steps.package.outputs.path }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
+            throw "release_tag is required"
+          }
+          if ($env:RELEASE_TAG -notmatch '^v?[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$') {
+            throw "release_tag must be a semantic version such as v0.1.0 or v0.1.0-beta.1"
+          }
+          $title = if ([string]::IsNullOrWhiteSpace($env:RELEASE_NAME)) {
+            $env:RELEASE_TAG
+          } else {
+            $env:RELEASE_NAME
+          }
+          $arguments = @(
+            "release", "create", $env:RELEASE_TAG, $env:PACKAGE_PATH,
+            "--repo", $env:GITHUB_REPOSITORY,
+            "--target", $env:GITHUB_SHA,
+            "--title", $title,
+            "--generate-notes"
+          )
+          if ($env:IS_PRERELEASE -eq "true") {
+            $arguments += "--prerelease"
+          }
+          if ($env:IS_DRAFT -eq "true") {
+            $arguments += "--draft"
+          }
+          & gh @arguments
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub Release creation failed"
+          }

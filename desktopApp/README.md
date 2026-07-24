@@ -130,3 +130,17 @@ ICO 包含 16、20、24、32、40、48、64、128 和 256 像素版本，并用�
 - 不包含安装程序或自动更新
 - 不内置 Chromium，自动检查复用系统 Edge
 - 英文为 .NET 主程序集的默认资源，额外仅保留 `zh-Hans`
+
+## GitHub Release
+
+仓库工作流 `.github/workflows/release-windows-portable.yml` 只接受手动触发，不会在 push、Pull Request 或创建 tag 时自动发布。
+
+在 GitHub 仓库中打开 **Actions → Release Windows portable → Run workflow**：
+
+1. 输入语义化版本标签，例如 `v0.1.0`
+2. 按需填写 Release 标题
+3. 选择是否为预发布或草稿
+4. 勾选发布确认
+5. 点击运行
+
+工作流会执行完整测试与构建、上传短期 Actions Artifact，并将 `ApplicationChecker-portable-win-x64.zip` 添加到对应的 GitHub Release。
