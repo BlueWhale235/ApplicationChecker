@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@11.2.2",
-  "engines": { "node": ">=22" },
+  "engines": { "node": "24.x" },
   "scripts": {
     "dev": "pnpm --parallel --filter @application-checker/api --filter @application-checker/web dev",
     "dev:runner": "pnpm --filter @application-checker/runner dev",
@@ -14,7 +14,7 @@
     "desktop:build": "powershell -ExecutionPolicy Bypass -File desktopApp/build-portable.ps1"
   },
   "devDependencies": {
-    "@types/node": "^26.1.1",
+    "@types/node": "^24.13.3",
     "@vercel/ncc": "^0.38.3",
     "typescript": "^6.0.2",
     "vitest": "^4.1.10"

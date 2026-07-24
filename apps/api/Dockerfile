@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS build
+FROM node:24-bookworm-slim AS build
 WORKDIR /workspace
 ARG DEBIAN_MIRROR=http://mirrors.aliyun.com
 RUN sed -i "s|http://deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources
@@ -18,7 +18,7 @@ COPY apps/web ./apps/web
 RUN pnpm --filter @application-checker/api... build
 RUN pnpm --filter @application-checker/web... build
 
-FROM node:22-bookworm-slim
+FROM node:24-bookworm-slim
 ENV NODE_ENV=production WEB_HOST=0.0.0.0 WEB_PORT=8080 DATA_PATH=/data WEB_DIST_PATH=/workspace/apps/web/dist
 WORKDIR /workspace
 COPY --from=build /workspace/node_modules ./node_modules

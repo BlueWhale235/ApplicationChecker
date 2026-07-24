@@ -4,7 +4,7 @@
   <p>本地优先的求职申请管理与招聘网站状态检查工具</p>
   <p>
     <img alt="Vue 3" src="https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white">
-    <img alt="Node.js" src="https://img.shields.io/badge/Node.js-%3E%3D22-43853d?logo=nodedotjs&logoColor=white">
+    <img alt="Node.js" src="https://img.shields.io/badge/Node.js-24_LTS-43853d?logo=nodedotjs&logoColor=white">
     <img alt="Docker" src="https://img.shields.io/badge/Docker-Compose-2496ed?logo=docker&logoColor=white">
     <img alt="Windows" src="https://img.shields.io/badge/Windows-WebView2-0078d4?logo=windows&logoColor=white">
   </p>
@@ -129,7 +129,7 @@ data/
 构建机需要：
 
 - Windows 10/11 x64
-- Node.js `v25.9.0`
+- Node.js `v24.18.0` LTS
 - pnpm `11.2.2`
 - .NET 10 SDK
 - Microsoft Edge / WebView2 Runtime
@@ -176,7 +176,7 @@ Docker 版需要保证该地址能从 Runner 容器访问；不要在容器配�
 
 ### 环境要求
 
-- Node.js 22 或更高版本
+- Node.js 24 LTS
 - pnpm 11
 
 ```bash

@@ -17,7 +17,7 @@
 ### 从源码构建
 
 - Windows 10/11 x64
-- Node.js `v25.9.0`
+- Node.js `v24.18.0` LTS
 - pnpm `11.2.2`
 - .NET 10 SDK
 - Microsoft Edge / WebView2 Runtime
@@ -122,7 +122,7 @@ ICO 包含 16、20、24、32、40、48、64、128 和 256 像素版本，并用�
 - 确认 Edge 和 WebView2 Runtime 可用
 - 确认没有另一个 Application Checker 实例
 - 确认 ZIP 已完整解压
-- 从源码构建时确认 Node.js 为 `v25.9.0`
+- 从源码构建时确认 Node.js 为 `v24.18.0` LTS
 
 ## 发布边界
 

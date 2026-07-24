@@ -1,5 +1,5 @@
 param(
-    [string]$NodeVersion = "v25.9.0",
+    [string]$NodeVersion = "v24.18.0",
     [switch]$SkipChecks
 )
 
