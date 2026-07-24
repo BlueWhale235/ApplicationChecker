@@ -11,8 +11,17 @@
 - Windows 10 或 Windows 11 x64
 - Microsoft Edge
 - Microsoft Edge WebView2 Runtime
+- Microsoft .NET 10 Desktop Runtime x64
 
-便携版已自包含 .NET 10 Runtime 和固定版本的 Node.js，无需安装 Docker、WSL、系统 Node.js 或系统 .NET Runtime。
+便携版不携带 .NET/WPF Runtime，但自带固定版本的 Node.js，无需安装 Docker、WSL 或系统 Node.js。
+
+缺少 .NET 10 Desktop Runtime 时，`ApplicationChecker.exe` 的 AppHost 会显示缺失框架信息和官方下载链接。也可以使用 WinGet 安装：
+
+```powershell
+winget install Microsoft.DotNet.DesktopRuntime.10
+```
+
+官方页面：<https://dotnet.microsoft.com/download/dotnet/10.0>
 
 ### 从源码构建
 
@@ -38,7 +47,7 @@ pnpm desktop:build
 1. TypeScript 类型检查和单元测试
 2. Web、API 和 Runner 构建
 3. API 与 Runner 的 ncc bundle
-4. .NET 10 WPF 自包含发布
+4. .NET 10 WPF framework-dependent 发布
 5. Node.js 运行时整理
 6. 非必要 .NET 语言资源裁剪
 7. Windows x64 便携 ZIP 打包
@@ -97,7 +106,7 @@ internal/
 ├─ node/      精简 Node.js 运行时
 └─ web/       Vue 静态资源
 data/         本地业务数据与运行日志
-runtimes/     .NET/WebView2 Windows 运行组件
+runtimes/     WebView2 Windows 运行组件
 zh-Hans/      简体中文卫星资源
 ```
 
@@ -130,6 +139,7 @@ ICO 包含 16、20、24、32、40、48、64、128 和 256 像素版本，并用�
 
 - 确认应用目录可写
 - 确认 Edge 和 WebView2 Runtime 可用
+- 确认已安装 .NET 10 Desktop Runtime x64
 - 确认没有另一个 Application Checker 实例
 - 确认 ZIP 已完整解压
 - 从源码构建时确认 Node.js 为 `v24.18.0` LTS
@@ -138,6 +148,7 @@ ICO 包含 16、20、24、32、40、48、64、128 和 256 像素版本，并用�
 
 - 当前仅构建 Windows x64 便携版
 - 不包含安装程序或自动更新
+- 不内置 .NET/WPF Runtime，依赖系统 .NET 10 Desktop Runtime x64
 - 不内置 Chromium，自动检查复用系统 Edge
 - 英文为 .NET 主程序集的默认资源，额外仅保留 `zh-Hans`
 

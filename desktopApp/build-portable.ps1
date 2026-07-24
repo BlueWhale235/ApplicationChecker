@@ -50,12 +50,25 @@ try {
     & dotnet publish (Join-Path $desktopRoot "ApplicationChecker.Desktop.csproj") `
         --configuration Release `
         --runtime win-x64 `
-        --self-contained true `
+        --self-contained false `
         --output $publishRoot
     if ($LASTEXITCODE -ne 0) { throw "Desktop host publish failed." }
 
-    # .NET satellite assemblies are optional localized framework messages.
-    # Keep the neutral English resources embedded in the main assemblies and Simplified Chinese.
+    # Framework-dependent publishing must not accidentally ship a private .NET/WPF runtime.
+    $forbiddenRuntimeFiles = @(
+        "coreclr.dll",
+        "hostfxr.dll",
+        "hostpolicy.dll",
+        "System.Private.CoreLib.dll",
+        "PresentationFramework.dll"
+    )
+    foreach ($runtimeFile in $forbiddenRuntimeFiles) {
+        if (Test-Path -LiteralPath (Join-Path $publishRoot $runtimeFile)) {
+            throw "Framework-dependent package unexpectedly contains .NET runtime file: $runtimeFile"
+        }
+    }
+
+    # Keep only neutral English and Simplified Chinese optional package resources.
     $culturesToRemove = @("cs", "de", "es", "fr", "it", "ja", "ko", "pl", "pt-BR", "ru", "tr", "zh-Hant")
     foreach ($culture in $culturesToRemove) {
         $culturePath = Join-Path $publishRoot $culture
@@ -99,6 +112,18 @@ try {
     Set-Content -LiteralPath (Join-Path $dataTarget "README.txt") -Encoding UTF8 -Value @"
 Application Checker portable data directory.
 Database, screenshots, settings, WebView2 data, browser profiles, logs and temporary files stay here.
+"@
+    Set-Content -LiteralPath (Join-Path $publishRoot "安装运行环境.txt") -Encoding UTF8 -Value @"
+Application Checker requires Microsoft .NET 10 Desktop Runtime (x64).
+
+If ApplicationChecker.exe reports that Microsoft.WindowsDesktop.App 10 is missing, install it with:
+
+winget install Microsoft.DotNet.DesktopRuntime.10
+
+Official download page:
+https://dotnet.microsoft.com/download/dotnet/10.0
+
+The regular .NET Runtime is not sufficient; select ".NET Desktop Runtime" for Windows x64.
 "@
 
     if (Test-Path -LiteralPath $zipPath) {

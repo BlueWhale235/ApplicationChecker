@@ -99,8 +99,15 @@ Docker 版数据保存在仓库根目录的 `data`。执行 `docker compose down
 - Windows 10 或 Windows 11 x64
 - Microsoft Edge
 - Microsoft Edge WebView2 Runtime
+- Microsoft .NET 10 Desktop Runtime x64
 
-桌面版基于 .NET 10 WPF 和 WebView2。它已自包含 .NET、Node.js、API、Runner 和前端资源，不包含业务 `node_modules`，也不需要 Docker、WSL、系统 Node.js 或系统 .NET Runtime。
+桌面版基于 .NET 10 WPF 和 WebView2。便携包采用 framework-dependent 发布，不携带 .NET/WPF Runtime；它仍自带 Node.js、API、Runner 和前端资源，不包含业务 `node_modules`，也不需要 Docker、WSL 或系统 Node.js。
+
+如果未安装 .NET 10 Desktop Runtime，双击 EXE 时 .NET AppHost 会显示缺失框架信息和官方下载链接。也可以提前执行：
+
+```powershell
+winget install Microsoft.DotNet.DesktopRuntime.10
+```
 
 ### 使用便携版
 
@@ -145,7 +152,7 @@ pnpm desktop:build
 desktopApp/artifacts/ApplicationChecker-portable-win-x64.zip
 ```
 
-构建脚本会完成类型检查、测试、Web/API/Runner 构建、ncc bundle、.NET 10 自包含发布和 ZIP 打包。Node 版本必须与脚本中的固定版本一致，以保证 `better-sqlite3` 原生模块 ABI 兼容。
+构建脚本会完成类型检查、测试、Web/API/Runner 构建、ncc bundle、.NET 10 framework-dependent 发布和 ZIP 打包。Node 版本必须与脚本中的固定版本一致，以保证 `better-sqlite3` 原生模块 ABI 兼容。
 
 ## AI 状态识别
 
