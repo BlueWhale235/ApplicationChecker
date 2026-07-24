@@ -1,0 +1,66 @@
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@600;700&display=swap");
+
+:root {
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  color: #172521;
+  background: #f5f2ea;
+  font-synthesis: none;
+  --forest: #183a37;
+  --forest-2: #214b46;
+  --ivory: #f5f2ea;
+  --surface: #fffdf8;
+  --terracotta: #c95f2d;
+  --border: #ded7c8;
+  --muted: #6f7974;
+}
+
+* { box-sizing: border-box; }
+html, body, #app { margin: 0; min-width: 0; min-height: 100%; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .52; }
+.v-application { background: var(--ivory) !important; }
+
+.page-content { max-width: 1320px; margin: 0 auto; padding: 28px 31px 48px; }
+.page-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 24px; }
+.page-heading h1 { margin: 0; color: var(--forest); font: 700 34px/1.15 "Noto Serif SC", serif; letter-spacing: .05em; }
+.page-heading p { margin: 8px 0 0; color: #6e7772; font-size: 13px; }
+.primary-button, .secondary-button, .row-action, .login-button, .danger-ghost, .icon-button { border: 0; border-radius: 8px; transition: .18s ease; }
+.primary-button { min-height: 40px; padding: 0 20px; color: white; background: #c75927; font-weight: 600; box-shadow: 0 5px 14px #b9512425; }
+.primary-button:hover { background: #b94e20; transform: translateY(-1px); }
+.secondary-button { min-height: 38px; padding: 0 15px; color: #31433d; background: #fffdf8; border: 1px solid #d8d1c3; }
+.secondary-button:hover { border-color: #a8b3ad; background: #fff; }
+.add-button { min-width: 122px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+
+
+.status-chip { display: inline-flex; height: 26px; align-items: center; padding: 0 11px; border-radius: 14px; border: 1px solid currentColor; font-size: 11px; white-space: nowrap; }
+.status-chip[data-status="unset"] { color: #737c78; background: #f1f1ee; border-color: #d9dcda; }
+.status-chip[data-status="screening"] { color: #3975b9; background: #edf5ff; border-color: #bdd7f4; }
+.status-chip[data-status="screening_passed"] { color: #28745f; background: #eaf6f1; border-color: #b9ddcf; }
+.status-chip[data-status="interview_pending"] { color: #b96f0a; background: #fff5df; border-color: #f1cf91; }
+.status-chip[data-status="interviewed"] { color: #7656b1; background: #f3effd; border-color: #d3c5f1; }
+.status-chip[data-status="signing_pending"] { color: #4e8655; background: #eef7ee; border-color: #c9dec9; }
+.status-chip[data-status="offer"] { color: #287747; background: #eaf6ed; border-color: #bcdcc5; }
+.status-chip[data-status="rejected"] { color: #b74e3d; background: #fceeea; border-color: #ecc5bd; }
+.login-state { display: inline-flex; gap: 5px; align-items: center; font-size: 11px; white-space: nowrap; }
+.login-state.ok { color: #39835a; }
+.login-state.warning { color: #c46a2e; }
+.login-state.muted { color: #87908c; }
+.row-action { height: 31px; padding: 0 11px; background: #fffdf8; color: #46534e; border: 1px solid #d8d1c3; font-size: 11px; white-space: nowrap; }
+.row-action:hover { border-color: #7d9187; color: var(--forest); }
+
+.icon-button { width: 31px; height: 31px; display: grid; place-items: center; background: transparent; color: #62706a; font-size: 20px; }
+.icon-button:hover { background: #f0ece2; }
+.login-button { align-self: center; padding: 5px 8px; color: #b65c27; background: #fff7eb; border: 1px solid #e6b27d; font-size: 9px; }
+.danger-ghost { padding: 8px 0; color: #af5645; background: transparent; font-size: 11px; }
+
+.modal-backdrop { position: fixed; z-index: 60; inset: 0; display: grid; place-items: center; padding: 30px; background: #10221f99; backdrop-filter: blur(4px); }
+.spinner { width: 24px; height: 24px; display: inline-block; border: 3px solid #7da19755; border-top-color: #c97843; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.global-message { position: fixed; z-index: 80; left: 50%; top: 66px; transform: translateX(-50%); min-width: 300px; padding: 11px 14px; border-radius: 8px; box-shadow: 0 8px 28px #17252125; font-size: 12px; }
+.error-message { display: flex; justify-content: space-between; gap: 20px; color: #8f3f32; background: #fff0ed; border: 1px solid #ecc9c2; }
+.error-message button { border: 0; color: inherit; background: transparent; }
+.notice-message { color: #eaf5ef; background: #255d4c; text-align: center; }
+
+.route-marker { display: none !important; }

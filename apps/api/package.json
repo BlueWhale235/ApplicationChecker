@@ -1,0 +1,36 @@
+{
+  "name": "@application-checker/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run src",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@application-checker/ai-status": "workspace:*",
+    "@application-checker/contracts": "workspace:*",
+    "@application-checker/cookie-state": "workspace:*",
+    "@fastify/cookie": "^11.1.1",
+    "@fastify/http-proxy": "^11.5.0",
+    "@fastify/static": "^10.1.0",
+    "@fastify/type-provider-typebox": "^6.1.0",
+    "@sinclair/typebox": "^0.34.52",
+    "better-sqlite3": "^12.4.1",
+    "cron-parser": "^5.4.0",
+    "dotenv": "^17.4.2",
+    "fastify": "^5.10.0",
+    "kysely": "^0.29.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^26.1.1",
+    "tsx": "^4.23.1",
+    "vitest": "^4.1.10"
+  }
+}

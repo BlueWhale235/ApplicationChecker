@@ -1,0 +1,56 @@
+name: application-checker
+
+x-shared-environment: &shared-environment
+  NODE_ENV: production
+  RUNNER_INTERNAL_TOKEN: ${RUNNER_INTERNAL_TOKEN:-local-runner-token-change-me-1234567890}
+  UPSTREAM_PROXY_URL: ${UPSTREAM_PROXY_URL:-}
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      <<: *shared-environment
+      WEB_HOST: 0.0.0.0
+      WEB_PORT: 8080
+      DATA_PATH: /data
+      WEB_DIST_PATH: /workspace/apps/web/dist
+      APP_BASE_URL: http://127.0.0.1:8080
+      RUNNER_URL: http://runner:8090
+      STATE_ENCRYPTION_KEY: ${STATE_ENCRYPTION_KEY:-CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws=}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
+      AI_CONFIDENCE_THRESHOLD: ${AI_CONFIDENCE_THRESHOLD:-0.75}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./data:/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  runner:
+    build:
+      context: .
+      dockerfile: apps/runner/Dockerfile
+    environment:
+      <<: *shared-environment
+      APP_INTERNAL_URL: http://app:8080/api
+      BROWSER_BIN: /usr/bin/chromium
+      DISPLAY: :99
+    depends_on:
+      app:
+        condition: service_healthy
+    networks: [internal]
+    shm_size: 1gb
+    restart: unless-stopped
+
+networks:
+  internal:

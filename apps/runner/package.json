@@ -1,0 +1,25 @@
+{
+  "name": "@application-checker/runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/runner.js",
+  "scripts": {
+    "dev": "tsx watch src/runner.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/runner.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run src",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@application-checker/contracts": "workspace:*",
+    "dotenv": "^17.4.2",
+    "puppeteer-core": "^25.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "tsx": "^4.23.1",
+    "vitest": "^4.1.10"
+  }
+}

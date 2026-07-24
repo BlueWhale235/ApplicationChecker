@@ -1,0 +1,28 @@
+# .NET build output
+bin/
+obj/
+
+# Portable build caches and staging
+.cache/
+.stage/
+.bundle-test/
+.deploy-api-test/
+
+# Generated release packages and extracted smoke-test copies
+artifacts/
+
+# Local portable application data
+data/
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# Generated icon intermediates
+assets/app-icon-chroma.png
+assets/exe-icon-preview.png
+
+# IDE and user-specific files
+.vs/
+*.user
+*.suo

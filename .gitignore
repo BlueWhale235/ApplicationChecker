@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+.env.local
+data/
+Codex/
+apps/web/dist/
+coverage/
+*.log
+*.tsbuildinfo
+desktopApp/bin/
+desktopApp/obj/
+desktopApp/.cache/
+desktopApp/.stage/
+desktopApp/.deploy-api-test/
+desktopApp/.bundle-test/
+desktopApp/artifacts/

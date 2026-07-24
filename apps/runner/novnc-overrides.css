@@ -1,0 +1,8 @@
+/* The application provides its own login controls outside the iframe. */
+#noVNC_control_bar_anchor {
+  display: none !important;
+}
+
+#noVNC_container {
+  inset: 0 !important;
+}

@@ -1,0 +1,645 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { RouterView, useRoute, useRouter } from "vue-router";
+import type {
+  AiSettingsUpdate, AppSettings, ApplicationDetail, ApplicationSummary, BrowserProfileSummary,
+  CheckPlanUpdate, CreateApplication, NotificationPage, NotificationSummary, ProgressStatus, RunSummary, TaskRunPage, TaskRunSummary,
+} from "@application-checker/contracts";
+import { DEFAULT_USER_AGENT, progressLabels } from "@application-checker/contracts";
+import { api } from "./api";
+import AppSidebar from "./components/AppSidebar.vue";
+import ApplicationForm from "./components/ApplicationForm.vue";
+import LoginDialog from "./components/LoginDialog.vue";
+import ScreenshotViewer from "./components/ScreenshotViewer.vue";
+import TaskManager from "./components/TaskManager.vue";
+import ConfirmDialog from "./components/ConfirmDialog.vue";
+import AiSettingsDialog from "./components/AiSettingsDialog.vue";
+import CheckPlanDialog from "./components/CheckPlanDialog.vue";
+import NotificationsPage from "./components/NotificationsPage.vue";
+import ProgressPage from "./pages/ProgressPage.vue";
+import BrowserProfilesPage from "./pages/BrowserProfilesPage.vue";
+import SettingsPage from "./pages/SettingsPage.vue";
+import { pagePaths, type AppPage } from "./router";
+
+const route = useRoute();
+const router = useRouter();
+const active = computed<AppPage>(() => (route.meta.page as AppPage | undefined) ?? "progress");
+const applications = ref<ApplicationSummary[]>([]);
+const detail = ref<ApplicationDetail | null>(null);
+const profiles = ref<BrowserProfileSummary[]>([]);
+const settings = ref<AppSettings>({
+  globalCron: null,
+  timezone: "Asia/Shanghai",
+  screenshotRetentionDays: 30,
+  defaultUserAgent: DEFAULT_USER_AGENT,
+  aiConfigured: false,
+  aiBaseUrl: null,
+  aiModel: null,
+  aiApiKeySet: false,
+  aiConfidenceThreshold: 0.75,
+  runnerHealthy: false,
+  loginPresentation: "vnc",
+});
+const settingsForm = reactive({
+  globalCron: "",
+  timezone: "Asia/Shanghai",
+  screenshotRetentionDays: 30,
+  defaultUserAgent: DEFAULT_USER_AGENT,
+});
+const emptyTaskPage = (): TaskRunPage => ({ items: [], total: 0, limit: 50, offset: 0 });
+const taskPage = ref<TaskRunPage>(emptyTaskPage());
+const taskScope = ref<"active" | "history">("active");
+const taskQuery = ref("");
+const taskHistoryPage = ref(1);
+const taskHistoryPerPage = 10;
+const taskHistoryPageCount = computed(() => Math.max(1, Math.ceil(taskPage.value.total / taskHistoryPerPage)));
+const emptyNotificationPage = (): NotificationPage => ({ items: [], total: 0, unreadCount: 0, limit: 20, offset: 0 });
+const notificationPage = ref<NotificationPage>(emptyNotificationPage());
+const notificationScope = ref<"all" | "unread">("all");
+const notificationCurrentPage = ref(1);
+const notificationsPerPage = 10;
+const notificationPageCount = computed(() => Math.max(1, Math.ceil(notificationPage.value.total / notificationsPerPage)));
+const unreadNotificationCount = ref(0);
+const screenshotRun = ref<RunSummary | null>(null);
+const screenshotCompany = ref("");
+const screenshotJobTitle = ref("");
+const selected = ref(new Set<string>());
+const query = ref("");
+const statusFilter = ref("");
+const applicationPage = ref(1);
+const applicationsPerPage = 10;
+const loading = ref(true);
+const detailLoading = ref(false);
+const busy = ref(false);
+const formOpen = ref(false);
+const formEditItem = ref<ApplicationSummary | null>(null);
+const loginOpen = ref(false);
+const loginRunId = ref<string | null>(null);
+const aiSettingsOpen = ref(false);
+const checkPlanOpen = ref(false);
+const error = ref("");
+const notice = ref("");
+let timer: number | undefined;
+let taskTimer: number | undefined;
+let taskSearchTimer: number | undefined;
+const confirmState = reactive({
+  open: false,
+  title: "",
+  message: "",
+  confirmLabel: "确认",
+  danger: false,
+});
+let confirmResolver: ((value: boolean) => void) | undefined;
+
+const filtered = computed(() => applications.value.filter((item) => {
+  const matchesQuery = !query.value || `${item.company} ${item.jobTitle} ${item.checkUrl}`.toLowerCase().includes(query.value.toLowerCase());
+  const matchesStatus = !statusFilter.value
+    || (statusFilter.value === "needs_login" ? item.lastRunStatus === "needs_login" : item.progressStatus === statusFilter.value);
+  return matchesQuery && matchesStatus;
+}));
+const applicationPageCount = computed(() => Math.max(1, Math.ceil(filtered.value.length / applicationsPerPage)));
+const paginatedApplications = computed(() => {
+  const start = (applicationPage.value - 1) * applicationsPerPage;
+  return filtered.value.slice(start, start + applicationsPerPage);
+});
+const progressFilterItems = computed(() => [
+  { title: "全部状态", value: "" },
+  { title: "需要登录", value: "needs_login" },
+  ...Object.entries(progressLabels).map(([value, title]) => ({ value, title })),
+]);
+
+async function refreshTasks() {
+  const history = taskScope.value === "history";
+  const limit = history ? taskHistoryPerPage : 50;
+  const offset = history ? (taskHistoryPage.value - 1) * taskHistoryPerPage : 0;
+  taskPage.value = await api.tasks(taskScope.value, { q: taskQuery.value, limit, offset });
+}
+
+async function refreshNotifications() {
+  const offset = (notificationCurrentPage.value - 1) * notificationsPerPage;
+  const page = await api.notifications(notificationScope.value, notificationsPerPage, offset);
+  notificationPage.value = page;
+  unreadNotificationCount.value = page.unreadCount;
+}
+
+async function refresh(silent = false) {
+  if (!silent) loading.value = true;
+  try {
+    const [apps, appSettings, browserProfiles, notificationCount] = await Promise.all([
+      api.applications(), api.settings(), api.profiles(), api.unreadNotifications(),
+    ]);
+    applications.value = apps;
+    settings.value = appSettings;
+    profiles.value = browserProfiles;
+    unreadNotificationCount.value = notificationCount.unreadCount;
+    if (!silent) {
+      settingsForm.globalCron = appSettings.globalCron ?? "";
+      settingsForm.timezone = appSettings.timezone;
+      settingsForm.screenshotRetentionDays = appSettings.screenshotRetentionDays;
+      settingsForm.defaultUserAgent = appSettings.defaultUserAgent;
+    }
+    if (detail.value) detail.value = await api.application(detail.value.application.id).catch(() => null);
+  } catch (value) {
+    error.value = value instanceof Error ? value.message : "加载失败";
+  } finally {
+    loading.value = false;
+  }
+}
+onMounted(() => {
+  void refresh();
+  timer = window.setInterval(() => void refresh(true), 5000);
+  taskTimer = window.setInterval(() => {
+    if (active.value === "tasks" && taskScope.value === "active") void refreshTasks();
+    if (active.value === "notifications") void refreshNotifications();
+  }, 3000);
+});
+onBeforeUnmount(() => {
+  if (timer) clearInterval(timer);
+  if (taskTimer) clearInterval(taskTimer);
+  if (taskSearchTimer) clearTimeout(taskSearchTimer);
+});
+watch([active, taskScope], ([page], previous) => {
+  if (previous && taskScope.value !== previous[1] && taskHistoryPage.value !== 1) {
+    taskHistoryPage.value = 1;
+    return;
+  }
+  if (page === "tasks") void refreshTasks();
+  if (page === "notifications") void refreshNotifications();
+});
+watch(notificationScope, () => {
+  if (notificationCurrentPage.value !== 1) {
+    notificationCurrentPage.value = 1;
+    return;
+  }
+  void refreshNotifications();
+});
+watch(notificationCurrentPage, () => {
+  if (active.value === "notifications") void refreshNotifications();
+});
+watch(notificationPageCount, (count) => {
+  if (notificationCurrentPage.value > count) notificationCurrentPage.value = count;
+});
+watch(taskQuery, () => {
+  if (taskSearchTimer) clearTimeout(taskSearchTimer);
+  taskHistoryPage.value = 1;
+  taskSearchTimer = window.setTimeout(() => void refreshTasks(), 250);
+});
+watch(taskHistoryPage, () => {
+  if (active.value === "tasks" && taskScope.value === "history") void refreshTasks();
+});
+watch(taskHistoryPageCount, (count) => {
+  if (taskHistoryPage.value > count) taskHistoryPage.value = count;
+});
+watch([query, statusFilter], () => { applicationPage.value = 1; });
+watch(applicationPageCount, (count) => {
+  if (applicationPage.value > count) applicationPage.value = count;
+});
+watch(
+  () => [active.value, route.query.applicationId] as const,
+  ([page, applicationId]) => {
+    if (page === "progress" && typeof applicationId === "string" && detail.value?.application.id !== applicationId) {
+      void openDetail(applicationId);
+    }
+  },
+  { immediate: true },
+);
+
+function navigate(page: AppPage) {
+  detail.value = null;
+  void router.push(pagePaths[page]);
+}
+
+async function openNotification(item: NotificationSummary) {
+  await action(async () => {
+    if (!item.readAt) await api.readNotification(item.id);
+    unreadNotificationCount.value = Math.max(0, unreadNotificationCount.value - (item.readAt ? 0 : 1));
+    await refreshNotifications();
+    await openDetail(item.applicationId);
+  });
+}
+
+async function readAllNotifications() {
+  await action(async () => {
+    await api.readAllNotifications();
+    unreadNotificationCount.value = 0;
+    await refreshNotifications();
+    flash("消息已全部标记为已读");
+  });
+}
+
+function askConfirm(options: { title: string; message: string; confirmLabel?: string; danger?: boolean }): Promise<boolean> {
+  confirmState.title = options.title;
+  confirmState.message = options.message;
+  confirmState.confirmLabel = options.confirmLabel ?? "确认";
+  confirmState.danger = options.danger ?? false;
+  confirmState.open = true;
+  return new Promise((resolve) => { confirmResolver = resolve; });
+}
+
+function finishConfirm(value: boolean) {
+  confirmState.open = false;
+  confirmResolver?.(value);
+  confirmResolver = undefined;
+}
+
+function flash(message: string) {
+  notice.value = message;
+  window.setTimeout(() => { notice.value = ""; }, 3500);
+}
+async function action(work: () => Promise<void>) {
+  busy.value = true;
+  error.value = "";
+  try { await work(); }
+  catch (value) { error.value = value instanceof Error ? value.message : "操作失败"; }
+  finally { busy.value = false; }
+}
+async function openDetail(id: string) {
+  detailLoading.value = true;
+  try { detail.value = await api.application(id); }
+  finally { detailLoading.value = false; }
+}
+function toggle(id: string) {
+  const next = new Set(selected.value);
+  if (next.has(id)) next.delete(id); else next.add(id);
+  selected.value = next;
+}
+function openCreateApplication() {
+  formEditItem.value = null;
+  formOpen.value = true;
+}
+function openApplicationEditor() {
+  if (!detail.value) return;
+  formEditItem.value = detail.value.application;
+  formOpen.value = true;
+}
+function closeApplicationForm() {
+  formOpen.value = false;
+  formEditItem.value = null;
+}
+async function run(id: string) {
+  await action(async () => {
+    await api.run(id);
+    flash("已加入检查队列");
+    await refresh(true);
+    if (detail.value?.application.id === id) detail.value = await api.application(id);
+  });
+}
+async function bulkRun() {
+  await action(async () => {
+    const result = await api.bulkRun(selected.value.size ? [...selected.value] : undefined);
+    selected.value = new Set();
+    flash(`已加入 ${result.queued.length} 个检查${result.skipped ? `，跳过 ${result.skipped} 个进行中岗位` : ""}`);
+    await refresh(true);
+  });
+}
+async function saveApplication(value: CreateApplication, runNow: boolean) {
+  await action(async () => {
+    if (formEditItem.value) {
+      const id = formEditItem.value.id;
+      const updated = await api.updateApplication(id, value);
+      closeApplicationForm();
+      applications.value = applications.value.map((item) => item.id === id ? updated : item);
+      if (detail.value?.application.id === id) detail.value = await api.application(id);
+      await refresh(true);
+      flash("投递信息已更新");
+      return;
+    }
+    const created = await api.createApplication(value);
+    closeApplicationForm();
+    if (runNow) await api.run(created.id);
+    const joined = created.checkGroupMemberCount > 1 ? "，已加入现有检查组并共享检查计划" : "";
+    flash(`${runNow ? "岗位已保存并加入检查队列" : "岗位已保存"}${joined}`);
+    await refresh(true);
+  });
+}
+async function setProgress(id: string, status: ProgressStatus) {
+  await action(async () => {
+    await api.setProgress(id, status);
+    detail.value = await api.application(id);
+    await refresh(true);
+    flash(`已手动设置为“${progressLabels[status]}”`);
+  });
+}
+async function saveNotes(id: string, notes: string, done: (ok: boolean) => void) {
+  try {
+    const updated = await api.updateApplication(id, { notes });
+    applications.value = applications.value.map((item) => item.id === id ? updated : item);
+    if (detail.value?.application.id === id) {
+      detail.value = { ...detail.value, application: updated };
+    }
+    done(true);
+  } catch (value) {
+    error.value = value instanceof Error ? value.message : "备注保存失败";
+    done(false);
+  }
+}
+async function saveCheckPlan(value: CheckPlanUpdate) {
+  if (!detail.value) return;
+  await action(async () => {
+    const result = await api.updateCheckPlan(detail.value!.application.id, value);
+    checkPlanOpen.value = false;
+    detail.value = await api.application(detail.value!.application.id);
+    await refresh(true);
+    flash(`检查计划已更新，并同步到 ${result.affected} 个岗位`);
+  });
+}
+async function unlock(id: string) {
+  await action(async () => {
+    await api.unlockProgress(id);
+    detail.value = await api.application(id);
+    await refresh(true);
+    flash("已恢复 AI 自动识别");
+  });
+}
+async function resumeAutomation(id: string) {
+  await action(async () => {
+    await api.resumeAutomation(id);
+    detail.value = await api.application(id);
+    await refresh(true);
+    flash("已恢复自动检查");
+  });
+}
+function startLogin(runId: string) {
+  loginRunId.value = runId;
+  loginOpen.value = true;
+}
+async function refreshLogin(id: string) {
+  await action(async () => {
+    const result = await api.refreshLogin(id);
+    if (detail.value?.application.id === id) detail.value = await api.application(id);
+    await refresh(true);
+    startLogin(result.runId);
+  });
+}
+async function deleteApplication(id: string) {
+  if (!await askConfirm({
+    title: "删除岗位",
+    message: "删除后，该岗位的运行记录和全部截图也会被删除。此操作无法恢复。",
+    confirmLabel: "删除岗位",
+    danger: true,
+  })) return;
+  await action(async () => {
+    await api.deleteApplication(id);
+    detail.value = null;
+    await refresh(true);
+    flash("岗位及其截图已删除");
+  });
+}
+async function saveSettings() {
+  if (settingsForm.screenshotRetentionDays < settings.value.screenshotRetentionDays
+      && !await askConfirm({
+        title: "缩短截图保留期限",
+        message: "保存后会立即删除超过新期限的旧截图，但任务历史和识别结果仍会保留。",
+        confirmLabel: "保存并清理",
+        danger: true,
+      })) return;
+  await action(async () => {
+    const result = await api.updateSettings({
+      globalCron: settingsForm.globalCron.trim() || null,
+      timezone: settingsForm.timezone,
+      screenshotRetentionDays: Number(settingsForm.screenshotRetentionDays),
+      defaultUserAgent: settingsForm.defaultUserAgent.trim(),
+    });
+    await refresh();
+    const cleaned = result.screenshotCleanup.deleted + result.screenshotCleanup.missing;
+    flash(cleaned ? `设置已保存，并清理了 ${cleaned} 张过期截图` : "设置已保存");
+  });
+}
+async function saveAiSettings(value: AiSettingsUpdate) {
+  await action(async () => {
+    await api.updateAiSettings(value);
+    aiSettingsOpen.value = false;
+    await refresh();
+    flash("AI 配置已保存并同步到本地加密配置文件");
+  });
+}
+function viewScreenshot(run: RunSummary, company: string, jobTitle: string) {
+  screenshotRun.value = run;
+  screenshotCompany.value = company;
+  screenshotJobTitle.value = jobTitle;
+}
+async function deleteScreenshot(run: RunSummary) {
+  if (!await askConfirm({
+    title: run.groupMemberCount > 1 ? "删除共享截图" : "删除截图",
+    message: run.groupMemberCount > 1
+      ? `这张截图由同组 ${run.groupMemberCount} 个岗位共享，删除后所有岗位都无法再查看；任务记录和识别结果仍会保留。`
+      : "只删除这张截图，任务记录和识别结果会继续保留。",
+    confirmLabel: "删除截图",
+    danger: true,
+  })) return;
+  await action(async () => {
+    await api.deleteScreenshot(run.id);
+    if (screenshotRun.value?.id === run.id) screenshotRun.value = null;
+    if (detail.value) detail.value = await api.application(detail.value.application.id);
+    if (active.value === "tasks") await refreshTasks();
+    flash("截图已删除");
+  });
+}
+async function cancelTask(run: TaskRunSummary) {
+  if (!await askConfirm({
+    title: "取消截图任务",
+    message: `确认取消 ${run.company} · ${run.jobTitle} 的当前截图任务？`,
+    confirmLabel: "取消任务",
+    danger: true,
+  })) return;
+  await action(async () => {
+    await api.cancelRun(run.id);
+    await Promise.all([refreshTasks(), refresh(true)]);
+    flash("任务已取消");
+  });
+}
+async function retryTask(run: TaskRunSummary) {
+  await action(async () => {
+    await api.retryRun(run.id);
+    taskScope.value = "active";
+    await Promise.all([refreshTasks(), refresh(true)]);
+    flash("任务已重新加入队列");
+  });
+}
+async function deleteProfile(site: string) {
+  if (!await askConfirm({
+    title: "清除浏览器状态",
+    message: `清除 ${site} 的登录状态后，下一次检查可能需要重新登录。`,
+    confirmLabel: "清除状态",
+    danger: true,
+  })) return;
+  await action(async () => {
+    await api.deleteProfile(site);
+    await refresh(true);
+    flash("浏览器状态已清除");
+  });
+}
+</script>
+
+<template>
+  <v-app>
+    <div class="app-shell">
+      <AppSidebar
+        :active="active"
+        :runner-healthy="settings.runnerHealthy"
+        :unread-count="unreadNotificationCount"
+        @change="navigate"
+      />
+      <main class="main-area" :class="{ 'with-drawer': detail }">
+        <header class="topbar">
+          <div class="window-controls"><span></span><span></span><span></span></div>
+          <div class="topbar-spacer"></div>
+          <span class="local-mode"><i></i>本地模式</span>
+        </header>
+        <v-snackbar :model-value="Boolean(error)" color="error" location="top" :timeout="-1" @update:model-value="!$event && (error = '')">
+          {{ error }}
+          <template #actions><v-btn icon="mdi-close" variant="text" aria-label="关闭错误提示" @click="error = ''" /></template>
+        </v-snackbar>
+        <v-snackbar :model-value="Boolean(notice)" color="success" location="top" :timeout="3500" @update:model-value="!$event && (notice = '')">
+          {{ notice }}
+          <template #actions><v-btn icon="mdi-close" variant="text" aria-label="关闭提示" @click="notice = ''" /></template>
+        </v-snackbar>
+
+        <ProgressPage
+          v-if="active === 'progress'"
+          :applications="applications"
+          :items="paginatedApplications"
+          :selected="selected"
+          :active-id="detail?.application.id ?? null"
+          :detail="detail"
+          :detail-loading="detailLoading"
+          :query="query"
+          :status-filter="statusFilter"
+          :status-items="progressFilterItems"
+          :busy="busy"
+          :page="applicationPage"
+          :page-count="applicationPageCount"
+          :total="filtered.length"
+          :per-page="applicationsPerPage"
+          @add="openCreateApplication"
+          @query="query = $event"
+          @status-filter="statusFilter = $event"
+          @page="applicationPage = $event"
+          @toggle="toggle"
+          @open="openDetail"
+          @run="run"
+          @bulk-run="bulkRun"
+          @close-detail="detail = null"
+          @progress="setProgress"
+          @unlock="unlock"
+          @resume-automation="resumeAutomation"
+          @login="startLogin($event.id)"
+          @refresh-login="refreshLogin"
+          @view-screenshot="viewScreenshot($event, detail?.application.company || '', detail?.application.jobTitle || '')"
+          @delete-screenshot="deleteScreenshot"
+          @remove="deleteApplication"
+          @save-notes="saveNotes"
+          @edit-plan="checkPlanOpen = true"
+          @edit-application="openApplicationEditor"
+        />
+
+        <NotificationsPage
+          v-else-if="active === 'notifications'"
+          :page="notificationPage"
+          :scope="notificationScope"
+          :busy="busy"
+          :detail="detail"
+          :detail-loading="detailLoading"
+          :current-page="notificationCurrentPage"
+          :page-count="notificationPageCount"
+          :per-page="notificationsPerPage"
+          @scope="notificationScope = $event"
+          @page="notificationCurrentPage = $event"
+          @open="openNotification"
+          @read-all="readAllNotifications"
+          @close-detail="detail = null"
+          @run="run"
+          @progress="setProgress"
+          @unlock="unlock"
+          @resume-automation="resumeAutomation"
+          @login="startLogin($event.id)"
+          @refresh-login="refreshLogin"
+          @view-screenshot="viewScreenshot($event, detail?.application.company || '', detail?.application.jobTitle || '')"
+          @delete-screenshot="deleteScreenshot"
+          @remove="deleteApplication"
+          @save-notes="saveNotes"
+          @edit-plan="checkPlanOpen = true"
+          @edit-application="openApplicationEditor"
+        />
+
+        <TaskManager
+          v-else-if="active === 'tasks'"
+          :scope="taskScope"
+          :page="taskPage"
+          :query="taskQuery"
+          :busy="busy"
+          :current-page="taskHistoryPage"
+          :page-count="taskHistoryPageCount"
+          @scope="taskScope = $event"
+          @query="taskQuery = $event"
+          @refresh="refreshTasks()"
+          @page="taskHistoryPage = $event"
+          @cancel="cancelTask"
+          @retry="retryTask"
+          @login="startLogin($event.id)"
+          @view="viewScreenshot($event, $event.company, $event.jobTitle)"
+          @delete-screenshot="deleteScreenshot"
+        />
+
+        <BrowserProfilesPage v-else-if="active === 'profiles'" :profiles="profiles" @remove="deleteProfile" />
+        <SettingsPage
+          v-else
+          :settings="settings"
+          :form="settingsForm"
+          :busy="busy"
+          @save="saveSettings"
+          @configure-ai="aiSettingsOpen = true"
+        />
+        <RouterView class="route-marker" />
+      </main>
+
+    </div>
+    <ApplicationForm :open="formOpen" :edit-item="formEditItem" @close="closeApplicationForm" @save="saveApplication" />
+    <LoginDialog :open="loginOpen" :run-id="loginRunId" @close="loginOpen = false" @completed="refresh(true)" />
+    <ScreenshotViewer
+      :open="Boolean(screenshotRun)"
+      :run="screenshotRun"
+      :company="screenshotCompany"
+      :job-title="screenshotJobTitle"
+      @close="screenshotRun = null"
+    />
+    <ConfirmDialog
+      :open="confirmState.open"
+      :title="confirmState.title"
+      :message="confirmState.message"
+      :confirm-label="confirmState.confirmLabel"
+      :danger="confirmState.danger"
+      :busy="busy"
+      @confirm="finishConfirm(true)"
+      @cancel="finishConfirm(false)"
+    />
+    <AiSettingsDialog
+      :open="aiSettingsOpen"
+      :settings="settings"
+      :busy="busy"
+      @close="aiSettingsOpen = false"
+      @save="saveAiSettings"
+    />
+    <CheckPlanDialog
+      :open="checkPlanOpen"
+      :group="detail?.checkGroup ?? null"
+      :settings="settings"
+      :saving="busy"
+      @close="checkPlanOpen = false"
+      @save="saveCheckPlan"
+    />
+  </v-app>
+</template>
+
+<style scoped>
+.app-shell { min-height: 100vh; display: flex; background: radial-gradient(circle at 85% 0, #efe5ce 0, transparent 27%), var(--ivory); }
+.main-area { margin-left: 202px; width: calc(100% - 202px); min-height: 100vh; }
+.topbar { height: 51px; padding: 0 20px; border-bottom: 1px solid #ded8ca; background: #fffdf9d9; backdrop-filter: blur(12px); display: flex; align-items: center; position: sticky; top: 0; z-index: 10; }
+.window-controls { display: flex; gap: 7px; }
+.window-controls span { width: 10px; height: 10px; border-radius: 50%; background: #df6354; }
+.window-controls span:nth-child(2) { background: #dfa832; }
+.window-controls span:nth-child(3) { background: #49a86d; }
+.topbar-spacer { flex: 1; }
+.local-mode { font-size: 12px; color: #51615b; display: flex; gap: 8px; align-items: center; }
+.local-mode i { width: 7px; height: 7px; border-radius: 50%; background: #34a261; box-shadow: 0 0 0 4px #34a26114; }
+</style>
