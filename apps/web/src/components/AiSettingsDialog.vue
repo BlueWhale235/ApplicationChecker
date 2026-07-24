@@ -10,6 +10,7 @@ const form = reactive({
   model: "",
   apiKey: "",
   confidenceThreshold: 0.75,
+  deepThinking: false,
   clearApiKey: false,
 });
 
@@ -19,6 +20,7 @@ watch(() => props.open, (open) => {
   form.model = props.settings.aiModel ?? "";
   form.apiKey = "";
   form.confidenceThreshold = props.settings.aiConfidenceThreshold;
+  form.deepThinking = props.settings.aiDeepThinking;
   form.clearApiKey = false;
 });
 
@@ -27,6 +29,7 @@ function submit() {
     baseUrl: form.baseUrl.trim() || null,
     model: form.model.trim() || null,
     confidenceThreshold: Number(form.confidenceThreshold),
+    deepThinking: form.deepThinking,
     ...(form.clearApiKey ? { apiKey: null } : form.apiKey.trim() ? { apiKey: form.apiKey.trim() } : {}),
   };
   emit("save", value);
@@ -83,6 +86,14 @@ function submit() {
             :step="0.05"
             thumb-label
             color="primary"
+          />
+          <v-switch
+            v-model="form.deepThinking"
+            color="primary"
+            density="compact"
+            label="启用深度思考"
+            hint="优先使用 reasoning_effort: high；模型不支持时自动回退到普通模式"
+            persistent-hint
           />
           <p class="ai-storage-note"><v-icon icon="mdi-shield-lock-outline" /> API Key 使用 AES-256-GCM 加密，并同步到本地运行时配置文件。</p>
         </v-form>

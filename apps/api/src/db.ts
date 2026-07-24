@@ -153,6 +153,7 @@ export interface AppSettingsTable {
   ai_model: string | null;
   ai_api_key_encrypted: string | null;
   ai_confidence_threshold: number;
+  ai_deep_thinking: number;
   updated_at: string;
 }
 
@@ -322,6 +323,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
   ai_model TEXT,
   ai_api_key_encrypted TEXT,
   ai_confidence_threshold REAL NOT NULL DEFAULT 0.75 CHECK(ai_confidence_threshold BETWEEN 0 AND 1),
+  ai_deep_thinking INTEGER NOT NULL DEFAULT 0 CHECK(ai_deep_thinking IN (0,1)),
   updated_at TEXT NOT NULL
 );
 `;
@@ -351,6 +353,9 @@ export function createDb(filename: string): DbContext {
   }
   if (!settingsColumns.some((column) => column.name === "ai_confidence_threshold")) {
     raw.exec("ALTER TABLE app_settings ADD COLUMN ai_confidence_threshold REAL NOT NULL DEFAULT 0.75 CHECK(ai_confidence_threshold BETWEEN 0 AND 1)");
+  }
+  if (!settingsColumns.some((column) => column.name === "ai_deep_thinking")) {
+    raw.exec("ALTER TABLE app_settings ADD COLUMN ai_deep_thinking INTEGER NOT NULL DEFAULT 0 CHECK(ai_deep_thinking IN (0,1))");
   }
   const applicationColumns = raw.prepare("PRAGMA table_info(applications)").all() as Array<{ name: string }>;
   if (!applicationColumns.some((column) => column.name === "check_group_id")) {
@@ -511,8 +516,8 @@ export function createDb(filename: string): DbContext {
   raw.prepare(`
     INSERT OR IGNORE INTO app_settings(
       id,global_cron,timezone,screenshot_retention_days,default_user_agent,
-      ai_base_url,ai_model,ai_api_key_encrypted,ai_confidence_threshold,updated_at
-    ) VALUES(1,NULL,'Asia/Shanghai',30,?,NULL,NULL,NULL,0.75,?)
+      ai_base_url,ai_model,ai_api_key_encrypted,ai_confidence_threshold,ai_deep_thinking,updated_at
+    ) VALUES(1,NULL,'Asia/Shanghai',30,?,NULL,NULL,NULL,0.75,0,?)
   `).run(DEFAULT_USER_AGENT, new Date().toISOString());
   return { db: new Kysely<Database>({ dialect: new SqliteDialect({ database: raw }) }), raw };
 }

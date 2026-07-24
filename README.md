@@ -151,6 +151,8 @@ desktopApp/artifacts/ApplicationChecker-portable-win-x64.zip
 
 AI 功能完全可选。可以在“设置 → AI 状态识别”中配置兼容 OpenAI Chat Completions 视觉输入格式的服务。
 
+可以在 AI 设置中启用“深度思考”。启用后请求会优先携带 `reasoning_effort: high`；如果模型或兼容服务以 400/422 拒绝深度参数，应用会自动改用普通模式重试，并在本次服务进程中记住该模型不支持深度思考。
+
 | 配置 | 说明 | 默认值 |
 |---|---|---|
 | `AI_BASE_URL` | OpenAI-compatible API 地址 | 空 |

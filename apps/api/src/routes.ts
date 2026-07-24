@@ -728,6 +728,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
       aiModel: activeRecognizer.model,
       aiApiKeySet: Boolean(settings.ai_api_key_encrypted) || Boolean(injectedRecognizer?.configured),
       aiConfidenceThreshold: settings.ai_confidence_threshold,
+      aiDeepThinking: Boolean(settings.ai_deep_thinking),
       runnerHealthy: Date.now() - runnerHeartbeat.at < 20_000,
       loginPresentation: config.desktopMode ? "external-window" : "vnc",
     };
@@ -766,6 +767,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
       aiConfigured: activeRecognizer.configured,
       aiModel: activeRecognizer.model,
       aiApiKeySet: Boolean(settings.ai_api_key_encrypted),
+      aiDeepThinking: Boolean(settings.ai_deep_thinking),
     };
   });
 

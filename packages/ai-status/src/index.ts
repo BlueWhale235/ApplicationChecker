@@ -52,6 +52,7 @@ export interface StatusRecognizer {
 }
 
 const allowed = new Set<ProgressStatus>(Object.keys(progressLabels) as ProgressStatus[]);
+const deepThinkingUnsupported = new Set<string>();
 
 function jsonObject(text: string): Record<string, unknown> {
   const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text)?.[1] ?? text;
@@ -66,7 +67,7 @@ export class OpenAiCompatibleRecognizer implements StatusRecognizer {
   readonly model: string | null;
 
   constructor(
-    private readonly options: { baseUrl?: string; apiKey?: string; model?: string },
+    private readonly options: { baseUrl?: string; apiKey?: string; model?: string; deepThinking?: boolean },
   ) {
     this.configured = Boolean(options.baseUrl && options.apiKey && options.model);
     this.model = options.model ?? null;
@@ -95,40 +96,55 @@ export class OpenAiCompatibleRecognizer implements StatusRecognizer {
       throw new Error("AI recognizer is not configured");
     }
     const endpoint = `${this.options.baseUrl.replace(/\/$/, "")}/chat/completions`;
-    const response = await fetch(endpoint, {
+    const requestBody = {
+      model: this.options.model,
+      response_format: { type: "json_object" },
+      messages: [{
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: [
+              `识别招聘官网截图中“${input.company}”以下岗位各自的投递状态。页面标题：${input.pageTitle ?? "未知"}。`,
+              `候选岗位 JSON：${JSON.stringify(input.applications)}。`,
+              "部分状态映射示例：简历筛选/简历初筛/简历投递=screening；业务筛选-进行中=screening_passed；待面试/面试邀约/已安排面试=interview_pending；到面/面试完成/已参加面试=interviewed；待签约=signing_pending；录用/OFFER=offer；不合适/不匹配/流程终止=rejected。",
+              "只返回 JSON 对象，格式为：",
+              '{"results":[{"applicationId":"候选岗位UUID","matched":true,"rawStatus":"页面原文","status":"unset|screening|screening_passed|interview_pending|interviewed|signing_pending|offer|rejected|null","confidence":0到1,"evidence":"不超过120字的截图证据"}]}。',
+              "必须为每个候选岗位返回一项；无法可靠区分或没有找到时 matched=false、status=null。",
+            ].join("\n"),
+          },
+          {
+            type: "image_url",
+            image_url: { url: `data:image/png;base64,${input.screenshot.toString("base64")}` },
+          },
+        ],
+      }],
+    };
+    const send = (deepThinking: boolean) => fetch(endpoint, {
       method: "POST",
       headers: {
         authorization: `Bearer ${this.options.apiKey}`,
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: this.options.model,
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [{
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: [
-                `识别招聘官网截图中“${input.company}”以下岗位各自的投递状态。页面标题：${input.pageTitle ?? "未知"}。`,
-                `候选岗位 JSON：${JSON.stringify(input.applications)}。`,
-                "部分状态映射示例：简历筛选/简历初筛/简历投递=screening；业务筛选-进行中=screening_passed；待面试/面试邀约/已安排面试=interview_pending；到面/面试完成/已参加面试=interviewed；待签约=signing_pending；录用/OFFER=offer；不合适/不匹配/流程终止=rejected。",
-                "只返回 JSON 对象，格式为：",
-                '{"results":[{"applicationId":"候选岗位UUID","matched":true,"rawStatus":"页面原文","status":"unset|screening|screening_passed|interview_pending|interviewed|signing_pending|offer|rejected|null","confidence":0到1,"evidence":"不超过120字的截图证据"}]}。',
-                "必须为每个候选岗位返回一项；无法可靠区分或没有找到时 matched=false、status=null。",
-              ].join("\n"),
-            },
-            {
-              type: "image_url",
-              image_url: { url: `data:image/png;base64,${input.screenshot.toString("base64")}` },
-            },
-          ],
-        }],
+        ...requestBody,
+        ...(deepThinking ? { reasoning_effort: "high" } : { temperature: 0 }),
       }),
-      signal: AbortSignal.timeout(90_000),
+      signal: AbortSignal.timeout(deepThinking ? 180_000 : 90_000),
     });
-    if (!response.ok) throw new Error(`AI request failed with ${response.status}`);
+    const supportKey = `${this.options.baseUrl}\n${this.options.model}`;
+    const tryDeepThinking = Boolean(this.options.deepThinking && !deepThinkingUnsupported.has(supportKey));
+    let response = await send(tryDeepThinking);
+    if (tryDeepThinking && !response.ok && [400, 422].includes(response.status)) {
+      await response.body?.cancel().catch(() => {});
+      const fallback = await send(false);
+      if (fallback.ok) deepThinkingUnsupported.add(supportKey);
+      response = fallback;
+    }
+    if (!response.ok) {
+      const detail = (await response.text().catch(() => "")).trim().slice(0, 500);
+      throw new Error(`AI request failed with ${response.status}${detail ? `: ${detail}` : ""}`);
+    }
     const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
     const value = jsonObject(body.choices?.[0]?.message?.content ?? "");
     const rawResults = Array.isArray(value.results) ? value.results : [];

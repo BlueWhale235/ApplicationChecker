@@ -80,6 +80,7 @@ export const api = {
     aiConfigured: boolean;
     aiModel: string | null;
     aiApiKeySet: boolean;
+    aiDeepThinking: boolean;
   }>("/settings/ai/update", { method: "POST", body: JSON.stringify(body) }),
   createLogin: (runId: string) => request<{ session: LoginSessionSummary; accessUrl: string | null }>("/login-sessions", {
     method: "POST", body: JSON.stringify({ runId }),

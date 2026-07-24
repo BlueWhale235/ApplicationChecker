@@ -51,6 +51,7 @@ export async function syncRuntimeSettingsFile(settings: RuntimeSettingsRow, conf
       model: settings.ai_model,
       apiKeyEncrypted: settings.ai_api_key_encrypted,
       confidenceThreshold: settings.ai_confidence_threshold,
+      deepThinking: Boolean(settings.ai_deep_thinking),
       configured: Boolean(settings.ai_base_url && settings.ai_model && settings.ai_api_key_encrypted),
     },
   };
@@ -90,6 +91,7 @@ export async function updateAiSettings(
     ai_model: body.model?.trim() || null,
     ai_api_key_encrypted: encrypted,
     ai_confidence_threshold: body.confidenceThreshold,
+    ai_deep_thinking: body.deepThinking ? 1 : 0,
     updated_at: new Date().toISOString(),
   }).where("id", "=", 1).execute();
   const settings = await appSettings(context);
@@ -103,5 +105,6 @@ export function recognizerFromSettings(settings: RuntimeSettingsRow, config: Con
     ...(settings.ai_base_url ? { baseUrl: settings.ai_base_url } : {}),
     ...(settings.ai_model ? { model: settings.ai_model } : {}),
     ...(apiKey ? { apiKey } : {}),
+    deepThinking: Boolean(settings.ai_deep_thinking),
   });
 }

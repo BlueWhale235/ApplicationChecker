@@ -76,6 +76,7 @@ export const AiSettingsUpdateSchema = Type.Object({
   model: Type.Union([Type.String({ maxLength: 240 }), Type.Null()]),
   apiKey: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 4096 }), Type.Null()])),
   confidenceThreshold: Type.Number({ minimum: 0, maximum: 1 }),
+  deepThinking: Type.Optional(Type.Boolean()),
 });
 export type AiSettingsUpdate = Static<typeof AiSettingsUpdateSchema>;
 
@@ -252,6 +253,7 @@ export interface AppSettings {
   aiModel: string | null;
   aiApiKeySet: boolean;
   aiConfidenceThreshold: number;
+  aiDeepThinking: boolean;
   runnerHealthy: boolean;
   loginPresentation: "vnc" | "external-window";
 }

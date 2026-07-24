@@ -37,6 +37,7 @@ const settings = ref<AppSettings>({
   aiModel: null,
   aiApiKeySet: false,
   aiConfidenceThreshold: 0.75,
+  aiDeepThinking: false,
   runnerHealthy: false,
   loginPresentation: "vnc",
 });

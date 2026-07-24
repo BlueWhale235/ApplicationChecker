@@ -83,6 +83,7 @@ describe("screenshot retention", () => {
     expect(row.screenshot_retention_days).toBe(30);
     expect(row.default_user_agent).toContain("Mozilla/5.0");
     expect(row.ai_confidence_threshold).toBe(0.75);
+    expect(row.ai_deep_thinking).toBe(0);
     await context.db.destroy();
     context.raw.close();
   });
@@ -155,14 +156,21 @@ describe("runtime settings and POST action routes", () => {
         model: "vision-model",
         apiKey: "secret-test-key",
         confidenceThreshold: 0.8,
+        deepThinking: true,
       },
     });
     expect(ai.statusCode).toBe(200);
-    expect(ai.json()).toMatchObject({ aiConfigured: true, aiApiKeySet: true, aiModel: "vision-model" });
+    expect(ai.json()).toMatchObject({
+      aiConfigured: true,
+      aiApiKeySet: true,
+      aiModel: "vision-model",
+      aiDeepThinking: true,
+    });
 
     const runtime = await readFile(path.join(folder, "runtime-settings.json"), "utf8");
     expect(runtime).toContain("ApplicationChecker-QA/1.0");
     expect(runtime).toContain("vision-model");
+    expect(runtime).toContain('"deepThinking": true');
     expect(runtime).not.toContain("secret-test-key");
 
     expect((await app.inject({ method: "PATCH", url: "/settings" })).statusCode).toBe(404);
