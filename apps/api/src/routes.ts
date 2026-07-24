@@ -119,6 +119,7 @@ export interface RouteDeps {
 
 export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   const { context, config, recognizer: injectedRecognizer, runnerHeartbeat } = deps;
+  const publicUrlOptions = { allowProxyFakeIp: config.desktopMode };
 
   app.addHook("preHandler", async (request) => {
     const pathname = apiPath(request);
@@ -145,8 +146,8 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
   app.post("/applications", { schema: { body: CreateApplicationSchema } }, async (request, reply) => {
     const body = request.body as typeof CreateApplicationSchema.static;
     const checkUrl = body.checkUrl?.trim() ?? "";
-    if (checkUrl) await assertPublicUrl(checkUrl);
-    if (body.postingUrl) await assertPublicUrl(body.postingUrl);
+    if (checkUrl) await assertPublicUrl(checkUrl, publicUrlOptions);
+    if (body.postingUrl) await assertPublicUrl(body.postingUrl, publicUrlOptions);
     const site = checkUrl ? siteForUrl(checkUrl) : "manual";
     const id = randomUUID();
     const now = nowIso();
@@ -244,8 +245,8 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     const body = request.body as typeof UpdateApplicationSchema.static;
     const current = await context.db.selectFrom("applications").selectAll().where("id", "=", id).executeTakeFirst();
     if (!current) throw httpError(404, "岗位不存在");
-    if (body.checkUrl) await assertPublicUrl(body.checkUrl);
-    if (body.postingUrl) await assertPublicUrl(body.postingUrl);
+    if (body.checkUrl) await assertPublicUrl(body.checkUrl, publicUrlOptions);
+    if (body.postingUrl) await assertPublicUrl(body.postingUrl, publicUrlOptions);
     const currentGroup = current.check_group_id
       ? await context.db.selectFrom("check_groups").selectAll().where("id", "=", current.check_group_id).executeTakeFirst()
       : null;
