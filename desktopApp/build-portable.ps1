@@ -113,18 +113,6 @@ try {
 Application Checker portable data directory.
 Database, screenshots, settings, WebView2 data, browser profiles, logs and temporary files stay here.
 "@
-    Set-Content -LiteralPath (Join-Path $publishRoot "安装运行环境.txt") -Encoding UTF8 -Value @"
-Application Checker requires Microsoft .NET 10 Desktop Runtime (x64).
-
-If ApplicationChecker.exe reports that Microsoft.WindowsDesktop.App 10 is missing, install it with:
-
-winget install Microsoft.DotNet.DesktopRuntime.10
-
-Official download page:
-https://dotnet.microsoft.com/download/dotnet/10.0
-
-The regular .NET Runtime is not sufficient; select ".NET Desktop Runtime" for Windows x64.
-"@
 
     if (Test-Path -LiteralPath $zipPath) {
         Remove-Item -LiteralPath $zipPath -Force
