@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
@@ -99,6 +100,7 @@ public partial class MainWindow : Window
         StatusText.Text = "正在初始化 WebView2…";
         var webViewEnvironment = await CoreWebView2Environment.CreateAsync(null, _paths.WebView2);
         await Browser.EnsureCoreWebView2Async(webViewEnvironment);
+        Browser.CoreWebView2.NewWindowRequested += OnNewWindowRequested;
         var cookie = Browser.CoreWebView2.CookieManager.CreateCookie("ac_desktop", sessionToken, "127.0.0.1", "/api");
         cookie.IsHttpOnly = true;
         cookie.SameSite = CoreWebView2CookieSameSiteKind.Strict;
@@ -109,6 +111,30 @@ public partial class MainWindow : Window
         Browser.Source = new Uri(baseUrl);
         Browser.Visibility = Visibility.Visible;
         LoadingPanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
+    {
+        e.Handled = true;
+        if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+        }
+        catch (Exception error)
+        {
+            TryWriteFatal(error);
+            MessageBox.Show(
+                $"无法使用默认浏览器打开链接：\n{uri}\n\n{error.Message}",
+                "打开链接失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     private static int ReservePort()

@@ -65,6 +65,8 @@ powershell -ExecutionPolicy Bypass -File desktopApp/build-portable.ps1 -SkipChec
 
 桌面版只允许一个实例运行。招聘网站需要人工登录时，Runner 会弹出独立的 Microsoft Edge 窗口。
 
+岗位详情中的“查询链接”和“岗位链接”会使用 Windows 默认浏览器打开，不会在应用内的 WebView2 中加载。
+
 ## 数据目录
 
 所有应用专属可变数据都保存在 EXE 同级的 `data`，不会写入应用专属的 `%LOCALAPPDATA%` 目录：
