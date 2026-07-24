@@ -1,5 +1,5 @@
 import { isIP } from "node:net";
-import { resolve4, resolve6 } from "node:dns/promises";
+import { lookup } from "node:dns/promises";
 
 export interface PublicUrlValidationOptions {
   /**
@@ -9,6 +9,11 @@ export interface PublicUrlValidationOptions {
    * local desktop runtime.
    */
   allowProxyFakeIp?: boolean;
+  /**
+   * Desktop browsers may delegate DNS resolution to a system proxy. In that
+   * case Node cannot resolve the hostname even though Edge can navigate to it.
+   */
+  allowUnresolvedHostname?: boolean;
   resolveHostname?: (hostname: string) => Promise<string[]>;
 }
 
@@ -28,11 +33,8 @@ function blockedIp(address: string, allowProxyFakeIp: boolean): boolean {
 }
 
 async function resolveHostname(hostname: string): Promise<string[]> {
-  const [ipv4, ipv6] = await Promise.all([
-    resolve4(hostname).catch(() => []),
-    resolve6(hostname).catch(() => []),
-  ]);
-  return [...ipv4, ...ipv6];
+  const results = await lookup(hostname, { all: true, verbatim: true }).catch(() => []);
+  return results.map(({ address }) => address);
 }
 
 export async function assertPublicUrl(
@@ -44,13 +46,16 @@ export async function assertPublicUrl(
     throw new Error("只允许不含账号密码的 HTTP/HTTPS 地址");
   }
   const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
-  if (["localhost", "metadata.google.internal"].includes(hostname)) {
+  if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname === "metadata.google.internal") {
     throw new Error("不允许访问本机或内部地址");
   }
   const addresses = isIP(hostname)
     ? [hostname]
     : await (options.resolveHostname ?? resolveHostname)(hostname);
-  if (!addresses.length) throw new Error("无法解析目标域名，请检查网址、网络或代理 DNS 设置");
+  if (!addresses.length) {
+    if (options.allowUnresolvedHostname) return url;
+    throw new Error("无法解析目标域名，请检查网址、网络或代理 DNS 设置");
+  }
   if (addresses.some((address) => blockedIp(address, options.allowProxyFakeIp === true))) {
     throw new Error("目标地址解析到了本机、内网或其他受限地址");
   }

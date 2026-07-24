@@ -33,4 +33,17 @@ describe("public URL validation", () => {
       resolveHostname: async () => [],
     })).rejects.toThrow("无法解析目标域名");
   });
+
+  it("lets the desktop browser proxy resolve an otherwise unresolved hostname", async () => {
+    await expect(assertPublicUrl("https://proxy-resolved.example", {
+      allowUnresolvedHostname: true,
+      resolveHostname: async () => [],
+    })).resolves.toBeInstanceOf(URL);
+    await expect(assertPublicUrl("http://127.0.0.1", {
+      allowUnresolvedHostname: true,
+    })).rejects.toThrow("受限地址");
+    await expect(assertPublicUrl("http://service.localhost", {
+      allowUnresolvedHostname: true,
+    })).rejects.toThrow("内部地址");
+  });
 });

@@ -119,7 +119,10 @@ export interface RouteDeps {
 
 export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   const { context, config, recognizer: injectedRecognizer, runnerHeartbeat } = deps;
-  const publicUrlOptions = { allowProxyFakeIp: config.desktopMode };
+  const publicUrlOptions = {
+    allowProxyFakeIp: config.desktopMode,
+    allowUnresolvedHostname: config.desktopMode,
+  };
 
   app.addHook("preHandler", async (request) => {
     const pathname = apiPath(request);
