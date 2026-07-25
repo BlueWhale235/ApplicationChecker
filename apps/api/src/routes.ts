@@ -35,7 +35,6 @@ const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 const nowIso = () => new Date().toISOString();
 const appliedAtIso = (value: string) => new Date(`${value}T00:00:00+08:00`).toISOString();
 const apiPath = (request: FastifyRequest) => request.url.replace(/^\/api(?=\/)/, "").split("?")[0] ?? "";
-const routeRateWindows = new Map<string, number[]>();
 
 async function syncAppliedEvent(context: DbContext, applicationId: string, appliedAt: string | null): Promise<void> {
   const existing = await context.db.selectFrom("status_events").select("id")
@@ -67,14 +66,6 @@ async function syncAppliedEvent(context: DbContext, applicationId: string, appli
 
 function httpError(statusCode: number, message: string) {
   return Object.assign(new Error(message), { statusCode });
-}
-
-function enforceRateLimit(key: string, max: number, windowMs: number): void {
-  const now = Date.now();
-  const recent = (routeRateWindows.get(key) ?? []).filter((value) => now - value < windowMs);
-  if (recent.length >= max) throw httpError(429, "Too many requests");
-  recent.push(now);
-  routeRateWindows.set(key, recent);
 }
 
 async function applicationRows(context: DbContext) {
@@ -959,7 +950,6 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
 
   app.post("/internal/runs/:id/complete", async (request) => {
     const id = (request.params as { id: string }).id;
-    enforceRateLimit(`internal:runs:complete:${id}`, 2, 30_000);
     const body = request.body as {
       finalUrl: string; pageTitle: string | null; screenshotBase64: string; truncated: boolean; browserState: BrowserStateEnvelope;
     };
