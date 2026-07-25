@@ -15,9 +15,6 @@ $cacheRoot = Join-Path $desktopRoot ".cache"
 $zipPath = Join-Path $artifactsRoot "ApplicationChecker-portable-win-x64.zip"
 $originalCi = $env:CI
 $originalViteAppVersion = $env:VITE_APP_VERSION
-$originalNpmConfigPlatform = $env:npm_config_platform
-$originalNpmConfigArch = $env:npm_config_arch
-$originalNpmConfigIgnoreScripts = $env:npm_config_ignore_scripts
 $isWindowsPlatform = [System.IO.Path]::DirectorySeparatorChar -eq '\'
 $pathComparison = if ($isWindowsPlatform) {
     [System.StringComparison]::OrdinalIgnoreCase
@@ -152,21 +149,57 @@ try {
     Copy-Item -LiteralPath (Join-Path $nodeSource "node.exe") -Destination $nodeTarget -Force
     Copy-Item -LiteralPath (Join-Path $nodeSource "LICENSE") -Destination $nodeTarget -Force
 
-    $installedNativeModules = @(
-        Get-ChildItem -LiteralPath (Join-Path $repositoryRoot "node_modules/.pnpm") `
-            -Recurse -Filter "better_sqlite3.node" -File
+    $pnpmVirtualStore = Join-Path $repositoryRoot "node_modules/.pnpm"
+    $betterSqlitePackages = @(
+        Get-ChildItem -LiteralPath $pnpmVirtualStore -Directory -Filter "better-sqlite3@*" |
+            ForEach-Object { Join-Path $_.FullName "node_modules/better-sqlite3" } |
+            Where-Object { Test-Path -LiteralPath $_ }
     )
-    $hasWindowsNativeModule = $installedNativeModules.Count -gt 0 -and @(
-        $installedNativeModules | Where-Object { -not (Test-WindowsPortableExecutable $_.FullName) }
+    if ($betterSqlitePackages.Count -eq 0) {
+        throw "better-sqlite3 package directory was not found."
+    }
+    $installedNativeModules = @(
+        $betterSqlitePackages |
+            ForEach-Object { Join-Path $_ "build/Release/better_sqlite3.node" } |
+            Where-Object { Test-Path -LiteralPath $_ }
+    )
+    $hasWindowsNativeModule = $installedNativeModules.Count -eq $betterSqlitePackages.Count -and @(
+        $installedNativeModules | Where-Object { -not (Test-WindowsPortableExecutable $_) }
     ).Count -eq 0
     if (-not $hasWindowsNativeModule) {
-        # The release runs on Windows, so native dependencies must be rebuilt for
-        # win32 even when this script itself is running on a Linux GitHub runner.
-        $env:npm_config_platform = "win32"
-        $env:npm_config_arch = "x64"
-        $env:npm_config_ignore_scripts = $null
-        & pnpm rebuild better-sqlite3
-        if ($LASTEXITCODE -ne 0) { throw "Windows native dependency rebuild failed." }
+        # pnpm rebuild can reuse its Linux side-effects cache even after setting
+        # npm_config_platform. Invoke prebuild-install directly so a Linux runner
+        # always replaces the ELF binary with the Windows x64 prebuild.
+        $runtimeNodeVersion = $NodeVersion.TrimStart("v")
+        foreach ($betterSqlitePackage in $betterSqlitePackages) {
+            $packageBuildDirectory = Join-Path $betterSqlitePackage "build"
+            if (Test-Path -LiteralPath $packageBuildDirectory) {
+                Remove-Item -LiteralPath $packageBuildDirectory -Recurse -Force
+            }
+            $prebuildInstall = Join-Path (Split-Path -Parent $betterSqlitePackage) "prebuild-install/bin.js"
+            if (-not (Test-Path -LiteralPath $prebuildInstall)) {
+                throw "prebuild-install was not found for better-sqlite3."
+            }
+            Push-Location $betterSqlitePackage
+            try {
+                & node $prebuildInstall `
+                    "--platform=win32" `
+                    "--arch=x64" `
+                    "--runtime=node" `
+                    "--target=$runtimeNodeVersion" `
+                    --force
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Windows better-sqlite3 prebuild download failed."
+                }
+            } finally {
+                Pop-Location
+            }
+            $nativeModule = Join-Path $betterSqlitePackage "build/Release/better_sqlite3.node"
+            if (-not (Test-Path -LiteralPath $nativeModule) -or
+                -not (Test-WindowsPortableExecutable $nativeModule)) {
+                throw "Downloaded better-sqlite3 module is not a Windows PE binary."
+            }
+        }
     } else {
         Write-Host "Using the existing Windows x64 better-sqlite3 native module."
     }
@@ -211,8 +244,5 @@ Database, screenshots, settings, WebView2 data, browser profiles, logs and tempo
 finally {
     $env:CI = $originalCi
     $env:VITE_APP_VERSION = $originalViteAppVersion
-    $env:npm_config_platform = $originalNpmConfigPlatform
-    $env:npm_config_arch = $originalNpmConfigArch
-    $env:npm_config_ignore_scripts = $originalNpmConfigIgnoreScripts
     Pop-Location
 }
