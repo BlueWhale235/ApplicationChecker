@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 import { RouterView, useRoute, useRouter } from "vue-router";
 import type {
   AiSettingsUpdate, AppSettings, ApplicationDetail, ApplicationSummary, BrowserProfileSummary,
-  CheckPlanUpdate, CreateApplication, NotificationPage, NotificationSummary, ProgressStatus, RunSummary, TaskRunPage, TaskRunSummary,
+  CheckPlanUpdate, CreateApplication, NotificationPage, NotificationSummary, ProgressStatus, RunSummary, ScheduleMode, TaskRunPage, TaskRunSummary,
 } from "@application-checker/contracts";
 import { DEFAULT_USER_AGENT, progressLabels } from "@application-checker/contracts";
 import { api } from "./api";
@@ -67,6 +67,7 @@ const screenshotJobTitle = ref("");
 const selected = ref(new Set<string>());
 const query = ref("");
 const statusFilter = ref("");
+const scheduleFilter = ref<ScheduleMode | "">("");
 const applicationPage = ref(1);
 const applicationsPerPage = 10;
 const loading = ref(true);
@@ -96,7 +97,8 @@ const filtered = computed(() => applications.value.filter((item) => {
   const matchesQuery = !query.value || `${item.company} ${item.jobTitle} ${item.checkUrl}`.toLowerCase().includes(query.value.toLowerCase());
   const matchesStatus = !statusFilter.value
     || (statusFilter.value === "needs_login" ? item.lastRunStatus === "needs_login" : item.progressStatus === statusFilter.value);
-  return matchesQuery && matchesStatus;
+  const matchesSchedule = !scheduleFilter.value || item.scheduleMode === scheduleFilter.value;
+  return matchesQuery && matchesStatus && matchesSchedule;
 }));
 const applicationPageCount = computed(() => Math.max(1, Math.ceil(filtered.value.length / applicationsPerPage)));
 const paginatedApplications = computed(() => {
@@ -108,6 +110,12 @@ const progressFilterItems = computed(() => [
   { title: "需要登录", value: "needs_login" },
   ...Object.entries(progressLabels).map(([value, title]) => ({ value, title })),
 ]);
+const scheduleFilterItems: Array<{ title: string; value: ScheduleMode | "" }> = [
+  { title: "全部检查计划", value: "" },
+  { title: "继承全局计划", value: "inherit" },
+  { title: "自定义计划", value: "custom" },
+  { title: "仅手动检查", value: "manual" },
+];
 
 async function refreshTasks() {
   const history = taskScope.value === "history";
@@ -191,7 +199,7 @@ watch(taskHistoryPage, () => {
 watch(taskHistoryPageCount, (count) => {
   if (taskHistoryPage.value > count) taskHistoryPage.value = count;
 });
-watch([query, statusFilter], () => { applicationPage.value = 1; });
+watch([query, statusFilter, scheduleFilter], () => { applicationPage.value = 1; });
 watch(applicationPageCount, (count) => {
   if (applicationPage.value > count) applicationPage.value = count;
 });
@@ -294,12 +302,12 @@ async function run(id: string) {
   });
 }
 async function bulkRun() {
-  if (!selected.value.size && (query.value.trim() || statusFilter.value) && !filtered.value.length) {
+  if (!selected.value.size && (query.value.trim() || statusFilter.value || scheduleFilter.value) && !filtered.value.length) {
     flash("当前筛选没有可检查的岗位");
     return;
   }
   await action(async () => {
-    const hasActiveFilter = Boolean(query.value.trim() || statusFilter.value);
+    const hasActiveFilter = Boolean(query.value.trim() || statusFilter.value || scheduleFilter.value);
     const applicationIds = selected.value.size
       ? [...selected.value]
       : hasActiveFilter
@@ -525,6 +533,8 @@ async function deleteProfile(site: string) {
           :query="query"
           :status-filter="statusFilter"
           :status-items="progressFilterItems"
+          :schedule-filter="scheduleFilter"
+          :schedule-items="scheduleFilterItems"
           :busy="busy"
           :page="applicationPage"
           :page-count="applicationPageCount"
@@ -533,6 +543,7 @@ async function deleteProfile(site: string) {
           @add="openCreateApplication"
           @query="query = $event"
           @status-filter="statusFilter = $event"
+          @schedule-filter="scheduleFilter = $event"
           @page="applicationPage = $event"
           @toggle="toggle"
           @toggle-page="togglePage"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { ApplicationDetail, ProgressStatus, RunSummary } from "@application-checker/contracts";
 import { progressLabels, runLabels } from "@application-checker/contracts";
 
@@ -70,7 +70,22 @@ onBeforeUnmount(() => {
 });
 
 const stages: ProgressStatus[] = ["screening", "screening_passed", "interview_pending", "interviewed", "signing_pending", "offer"];
+const displayedStages = computed<ProgressStatus[]>(() => (
+  props.detail?.application.progressStatus === "rejected" ? ["rejected"] : stages
+));
 const progressItems = Object.entries(progressLabels).map(([value, title]) => ({ value, title }));
+function stageLabel(stage: ProgressStatus): string {
+  return stage === "rejected" ? "投递-淘汰" : progressLabels[stage];
+}
+function stageReached(stage: ProgressStatus): boolean {
+  const current = props.detail?.application.progressStatus;
+  if (!current) return false;
+  if (stage === "rejected") return current === "rejected";
+  return stages.indexOf(stage) <= stages.indexOf(current);
+}
+function stageInProgress(stage: ProgressStatus): boolean {
+  return stage === props.detail?.application.progressStatus && !["offer", "rejected"].includes(stage);
+}
 function date(value: string | null): string {
   if (!value) return "—";
   return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
@@ -96,7 +111,9 @@ function date(value: string | null): string {
         <button class="icon-button" @click="$emit('close')"><i class="mdi mdi-close"></i></button>
         </header>
       <div class="drawer-status-row">
-        <span class="status-chip" :data-status="detail.application.progressStatus">{{ progressLabels[detail.application.progressStatus] }}</span>
+        <span class="status-chip" :data-status="detail.application.progressStatus">
+          {{ detail.application.progressStatus === "rejected" ? "投递-淘汰" : progressLabels[detail.application.progressStatus] }}
+        </span>
         <div class="login-state-control">
           <span v-if="detail.application.lastRunStatus === 'needs_login'" class="login-state warning"><i class="mdi mdi-lock-alert-outline"></i>需要登录</span>
           <span v-else class="login-state ok"><i class="mdi mdi-check-circle"></i>正常</span>
@@ -114,9 +131,18 @@ function date(value: string | null): string {
 
       <section class="drawer-section">
         <h3>当前进度</h3>
-        <div class="progress-track">
-          <div v-for="stage in stages" :key="stage" :class="{ reached: stages.indexOf(stage) <= stages.indexOf(detail.application.progressStatus), active: stage === detail.application.progressStatus }">
-            <i></i><span>{{ progressLabels[stage] }}</span>
+        <div class="progress-track" :class="{ terminal: detail.application.progressStatus === 'rejected' }">
+          <div
+            v-for="stage in displayedStages"
+            :key="stage"
+            :class="{
+              reached: stageReached(stage),
+              active: stage === detail.application.progressStatus,
+              'in-progress': stageInProgress(stage),
+              rejected: stage === 'rejected',
+            }"
+          >
+            <i></i><span>{{ stageLabel(stage) }}</span>
           </div>
         </div>
         <div class="manual-progress">
@@ -257,9 +283,21 @@ function date(value: string | null): string {
 .progress-track { display: grid; grid-template-columns: repeat(6, 1fr); margin: 20px 0 18px; position: relative; }
 .progress-track:before { content: ""; position: absolute; left: 9%; right: 9%; top: 7px; height: 2px; background: #e0e2df; }
 .progress-track div { z-index: 1; text-align: center; color: #939b97; font-size: 9px; }
-.progress-track i { display: block; width: 15px; height: 15px; margin: 0 auto 8px; border-radius: 50%; border: 2px solid #d6dbd8; background: #fffdf9; }
+.progress-track i { position: relative; display: block; width: 15px; height: 15px; margin: 0 auto 8px; border-radius: 50%; border: 2px solid #d6dbd8; background: #fffdf9; }
 .progress-track div.reached i { border-color: #5589c2; background: #dcecff; box-shadow: 0 0 0 3px #eaf4ff; }
 .progress-track div.active { color: #3975b9; font-weight: 600; }
+.progress-track div.in-progress i:after { content: ""; position: absolute; inset: -7px; border: 2px solid #75a9df; border-radius: 50%; animation: progress-node-pulse 1.8s ease-out infinite; }
+.progress-track.terminal { grid-template-columns: 1fr; }
+.progress-track.terminal:before { display: none; }
+.progress-track div.rejected { color: #747d79; font-weight: 600; }
+.progress-track div.rejected i { border-color: #aab1ad; background: #e9ecea; box-shadow: 0 0 0 3px #f2f3f1; }
+@keyframes progress-node-pulse {
+  0% { opacity: .85; transform: scale(.72); }
+  70%, 100% { opacity: 0; transform: scale(1.28); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-track div.in-progress i:after { animation: none; opacity: .35; }
+}
 .manual-progress { display: flex; gap: 8px; }
 .manual-progress .v-select { min-width: 0; flex: 1; }
 .compact-button { min-height: 36px; font-size: 11px; }

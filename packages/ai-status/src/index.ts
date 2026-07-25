@@ -52,6 +52,12 @@ export interface StatusRecognizer {
 }
 
 const allowed = new Set<ProgressStatus>(Object.keys(progressLabels) as ProgressStatus[]);
+const resetPageTypes = new Set(["official_homepage", "login", "blank"]);
+const resetPageLabels: Record<string, string> = {
+  official_homepage: "官网首页或非个人投递状态页",
+  login: "需要登录或验证",
+  blank: "空白页或无有效内容",
+};
 const deepThinkingUnsupported = new Set<string>();
 
 function jsonObject(text: string): Record<string, unknown> {
@@ -107,9 +113,11 @@ export class OpenAiCompatibleRecognizer implements StatusRecognizer {
             text: [
               `识别招聘官网截图中“${input.company}”以下岗位各自的投递状态。页面标题：${input.pageTitle ?? "未知"}。`,
               `候选岗位 JSON：${JSON.stringify(input.applications)}。`,
+              "先判断整个页面类型：application_status=个人投递状态页；official_homepage=公司官网首页、招聘首页或职位列表且没有个人投递记录；login=登录、注册或验证页面；blank=空白、持续加载、错误页或没有有效内容；other=其他页面。",
+              "页面类型规则优先级最高：若为 official_homepage、login 或 blank，所有候选岗位必须返回 matched=true、status=unset，不能根据页面缺少岗位状态而推测为淘汰或其他进度。",
               "部分状态映射示例：简历筛选/简历初筛/简历投递=screening；业务筛选-进行中=screening_passed；待面试/面试邀约/已安排面试=interview_pending；到面/面试完成/已参加面试=interviewed；待签约=signing_pending；录用/OFFER=offer；不合适/不匹配/流程终止=rejected。",
               "只返回 JSON 对象，格式为：",
-              '{"results":[{"applicationId":"候选岗位UUID","matched":true,"rawStatus":"页面原文","status":"unset|screening|screening_passed|interview_pending|interviewed|signing_pending|offer|rejected|null","confidence":0到1,"evidence":"不超过120字的截图证据"}]}。',
+              '{"pageType":"application_status|official_homepage|login|blank|other","pageEvidence":"不超过120字的页面类型证据","results":[{"applicationId":"候选岗位UUID","matched":true,"rawStatus":"页面原文","status":"unset|screening|screening_passed|interview_pending|interviewed|signing_pending|offer|rejected|null","confidence":0到1,"evidence":"不超过120字的截图证据"}]}。',
               "必须为每个候选岗位返回一项；无法可靠区分或没有找到时 matched=false、status=null。",
             ].join("\n"),
           },
@@ -147,6 +155,21 @@ export class OpenAiCompatibleRecognizer implements StatusRecognizer {
     }
     const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
     const value = jsonObject(body.choices?.[0]?.message?.content ?? "");
+    const pageType = typeof value.pageType === "string" ? value.pageType : "";
+    if (resetPageTypes.has(pageType)) {
+      const evidence = String(value.pageEvidence ?? resetPageLabels[pageType] ?? "非投递状态页").trim().slice(0, 500);
+      return {
+        results: input.applications.map((application) => ({
+          applicationId: application.id,
+          matched: true,
+          rawStatus: resetPageLabels[pageType] ?? pageType,
+          status: "unset",
+          confidence: 1,
+          evidence,
+        })),
+        provider: this.options.model,
+      };
+    }
     const rawResults = Array.isArray(value.results) ? value.results : [];
     const results = rawResults.map((item): GroupRecognitionResultItem | null => {
       if (!item || typeof item !== "object") return null;

@@ -119,13 +119,14 @@ function relative(value: string | null): string {
 .application-table th:nth-child(5), .application-table th:nth-child(6) { width: 11%; }
 .application-table th:nth-child(7) { width: 12%; }
 .application-table th:nth-child(8) { width: 13%; }
-.application-table .check-col { width: 3%; text-align: center; padding: 0; }
+.application-table .check-col { width: 42px; text-align: center; padding: 0; }
 .application-table td { height: 73px; padding: 10px 13px; border-bottom: 1px solid #ece6da; color: #3d4944; font-size: 12px; vertical-align: middle; overflow: hidden; }
+.application-table td.check-col { overflow: visible; }
 .application-table tr:last-child td { border-bottom: 0; }
 .application-table tbody tr { transition: .16s ease; cursor: pointer; }
 .application-table tbody tr:hover { background: #f7faf7; }
 .application-table tbody tr.selected { background: #eef5f0; box-shadow: inset 3px 0 #32765c; }
-.application-checkbox :deep(.v-selection-control__input) { margin-left: 10px; width: 34px; height: 34px; }
+.application-checkbox :deep(.v-selection-control__input) { margin: 0 auto; width: 34px; height: 34px; }
 .application-checkbox :deep(.v-selection-control__input > .v-icon) { font-size: 21px; }
 .company, .job-title, .link-line, .application-table td > small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .company { color: #24312d; font-size: 14px; font-weight: 600; }

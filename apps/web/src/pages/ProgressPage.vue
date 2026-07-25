@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { ApplicationDetail, ApplicationSummary, ProgressStatus, RunSummary } from "@application-checker/contracts";
+import type { ApplicationDetail, ApplicationSummary, ProgressStatus, RunSummary, ScheduleMode } from "@application-checker/contracts";
 import SummaryStrip from "../components/SummaryStrip.vue";
 import ApplicationTable from "../components/ApplicationTable.vue";
 import ApplicationDrawer from "../components/ApplicationDrawer.vue";
@@ -15,6 +15,8 @@ const props = defineProps<{
   query: string;
   statusFilter: string;
   statusItems: Array<{ title: string; value: string }>;
+  scheduleFilter: ScheduleMode | "";
+  scheduleItems: Array<{ title: string; value: ScheduleMode | "" }>;
   busy: boolean;
   page: number;
   pageCount: number;
@@ -24,11 +26,16 @@ const props = defineProps<{
 
 const bulkRunLabel = computed(() => {
   if (props.selected.size) return `检查已选 (${props.selected.size})`;
-  if (props.statusFilter) {
-    const label = props.statusItems.find((item) => item.value === props.statusFilter)?.title ?? props.statusFilter;
-    return `检查<${label}>`;
-  }
-  if (props.query.trim()) return "检查筛选结果";
+  const labels = [
+    props.statusFilter
+      ? props.statusItems.find((item) => item.value === props.statusFilter)?.title ?? props.statusFilter
+      : "",
+    props.scheduleFilter
+      ? props.scheduleItems.find((item) => item.value === props.scheduleFilter)?.title ?? props.scheduleFilter
+      : "",
+  ].filter(Boolean);
+  if (!props.query.trim() && labels.length === 1) return `检查<${labels[0]}>`;
+  if (props.query.trim() || labels.length > 1) return "检查筛选结果";
   return "检查全部";
 });
 
@@ -36,6 +43,7 @@ defineEmits<{
   add: [];
   query: [value: string];
   statusFilter: [value: string];
+  scheduleFilter: [value: ScheduleMode | ""];
   page: [value: number];
   toggle: [id: string];
   togglePage: [ids: string[], checked: boolean];
@@ -80,10 +88,21 @@ defineEmits<{
         :model-value="statusFilter"
         class="status-filter"
         :items="statusItems"
+        aria-label="状态筛选"
         variant="outlined"
         density="compact"
         hide-details
         @update:model-value="$emit('statusFilter', $event ?? '')"
+      />
+      <v-select
+        :model-value="scheduleFilter"
+        class="schedule-filter"
+        :items="scheduleItems"
+        aria-label="检查计划"
+        variant="outlined"
+        density="compact"
+        hide-details
+        @update:model-value="$emit('scheduleFilter', $event ?? '')"
       />
       <v-btn
         variant="outlined"
@@ -134,7 +153,7 @@ defineEmits<{
 .progress-page.with-detail { max-width: none; padding-right: 421px; }
 .toolbar { display: flex; gap: 10px; margin: 23px 0 12px; }
 .search-field { flex: 1 1 360px; max-width: 520px; }
-.status-filter { flex: 0 0 168px; }
+.status-filter, .schedule-filter { flex: 0 0 168px; }
 .toolbar :deep(.v-field) { background: #fffdf8; border-radius: 8px; }
 .toolbar :deep(.v-field__input) { font-size: 12px; }
 .application-pagination { min-height: 70px; display: flex; align-items: center; justify-content: space-between; gap: 20px; color: #77817c; font-size: 11px; }
@@ -144,5 +163,10 @@ defineEmits<{
 }
 @media (max-width: 1100px) {
   .progress-page.with-detail { padding-right: 31px; }
+}
+@media (max-width: 900px) {
+  .toolbar { flex-wrap: wrap; }
+  .search-field { flex: 1 0 100%; max-width: none; }
+  .status-filter, .schedule-filter { flex: 1 1 168px; }
 }
 </style>

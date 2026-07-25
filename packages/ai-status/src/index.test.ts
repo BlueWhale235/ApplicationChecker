@@ -41,6 +41,43 @@ describe("recognizer configuration", () => {
     expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain("业务筛选-进行中=screening_passed");
   });
 
+  it.each([
+    ["official_homepage", "官网首页"],
+    ["login", "登录页面"],
+    ["blank", "页面没有有效内容"],
+  ])("resets every application for a %s page", async (pageType, pageEvidence) => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        pageType,
+        pageEvidence,
+        results: [{
+          applicationId: "a",
+          matched: true,
+          rawStatus: "AI 错误推测",
+          status: "rejected",
+          confidence: 0.9,
+          evidence: "不应采用",
+        }],
+      }) } }],
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const recognizer = new OpenAiCompatibleRecognizer({ baseUrl: "https://api.example/v1", apiKey: "x", model: "vision" });
+    const result = await recognizer.recognizeGroup({
+      screenshot: Buffer.from("png"),
+      company: "示例公司",
+      applications: [
+        { id: "a", jobTitle: "岗位 A", appliedAt: null, location: null },
+        { id: "b", jobTitle: "岗位 B", appliedAt: null, location: null },
+      ],
+      pageTitle: pageEvidence,
+      finalUrl: "https://example.com",
+    });
+    expect(result.results).toEqual([
+      expect.objectContaining({ applicationId: "a", matched: true, status: "unset", confidence: 1, evidence: pageEvidence }),
+      expect.objectContaining({ applicationId: "b", matched: true, status: "unset", confidence: 1, evidence: pageEvidence }),
+    ]);
+  });
+
   it("falls back to normal mode when deep thinking is rejected", async () => {
     const successBody = JSON.stringify({
       choices: [{ message: { content: JSON.stringify({ results: [] }) } }],
