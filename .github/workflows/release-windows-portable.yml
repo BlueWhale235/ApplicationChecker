@@ -6,6 +6,7 @@ on:
       release_tag:
         description: "Release tag, for example v0.1.0"
         required: true
+        default: "v0.0.1"
         type: string
       release_name:
         description: "Release title (defaults to the tag)"
@@ -37,7 +38,7 @@ concurrency:
 jobs:
   build-and-release:
     if: ${{ inputs.confirm_publish }}
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 45
 
     steps:
@@ -67,13 +68,15 @@ jobs:
 
       - name: Build and test portable application
         shell: pwsh
-        run: pnpm desktop:build
+        env:
+          BUILD_VERSION: ${{ inputs.release_tag }}
+        run: ./desktopApp/build-portable.ps1 -BuildVersion $env:BUILD_VERSION -SkipInstall
 
       - name: Verify release package
         id: package
         shell: pwsh
         run: |
-          $packagePath = Join-Path $env:GITHUB_WORKSPACE "desktopApp\artifacts\ApplicationChecker-portable-win-x64.zip"
+          $packagePath = Join-Path $env:GITHUB_WORKSPACE "desktopApp/artifacts/ApplicationChecker-portable-win-x64.zip"
           if (-not (Test-Path -LiteralPath $packagePath)) {
             throw "Portable package was not created: $packagePath"
           }

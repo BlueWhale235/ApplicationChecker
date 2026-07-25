@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { AppSettings } from "@application-checker/contracts";
 
+const appVersion = __APP_VERSION__;
+const githubUrl = "https://github.com/BlueWhale235/ApplicationChecker";
+
 defineProps<{
   settings: AppSettings;
   form: {
@@ -42,6 +45,19 @@ defineEmits<{ save: []; configureAi: [] }>();
           <div><strong>{{ settings.runnerHealthy ? "运行正常" : "未连接" }}</strong><span>{{ settings.runnerHealthy ? "可以执行截图任务" : "请检查 Runner 容器" }}</span></div>
         </div>
       </div>
+      <div class="content-card project-card">
+        <div>
+          <span class="project-kicker">关于职迹</span>
+          <strong>Application Checker</strong>
+          <small>本地优先的求职申请管理与状态检查工具</small>
+        </div>
+        <a :href="githubUrl" target="_blank" rel="noreferrer" aria-label="在 GitHub 查看 Application Checker 仓库">
+          <i class="mdi mdi-github"></i>
+          <span>BlueWhale235/ApplicationChecker</span>
+          <b>{{ appVersion }}</b>
+          <i class="mdi mdi-open-in-new"></i>
+        </a>
+      </div>
     </div>
   </section>
 </template>
@@ -64,8 +80,22 @@ defineEmits<{ save: []; configureAi: [] }>();
 .service-state strong { font-size: 12px; }
 .service-state span { margin-top: 3px; font-size: 10px; opacity: .75; }
 .settings-help { color: #7d8782; font-size: 10px; line-height: 1.8; }
+.project-card { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 22px; padding-top: 21px; padding-bottom: 21px; }
+.project-card > div { min-width: 0; }
+.project-card > div strong, .project-card > div small { display: block; }
+.project-card > div strong { margin-top: 4px; color: #25352f; font: 600 16px "Noto Serif SC", serif; }
+.project-card > div small { margin-top: 5px; color: #7a837f; font-size: 10px; }
+.project-kicker { color: #b75b2f; font-size: 9px; font-weight: 700; letter-spacing: .12em; }
+.project-card a { min-width: 0; display: flex; align-items: center; gap: 9px; padding: 10px 12px; border: 1px solid #d9d3c8; border-radius: 9px; color: #31564b; text-decoration: none; background: #fbf8f1; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+.project-card a:hover, .project-card a:focus-visible { border-color: #9eb4aa; background: #f3f7f3; transform: translateY(-1px); outline: none; }
+.project-card a .mdi-github { flex: none; font-size: 24px; }
+.project-card a span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 600; }
+.project-card a b { flex: none; padding: 3px 7px; border-radius: 999px; background: #e4eee8; color: #3d6a59; font-size: 9px; }
+.project-card a .mdi-open-in-new { flex: none; color: #89958f; font-size: 14px; }
 @media (max-width: 850px) {
   .settings-grid { grid-template-columns: 1fr; }
   .settings-grid .content-card:first-child { grid-row: auto; }
+  .project-card { grid-column: auto; align-items: stretch; flex-direction: column; }
+  .project-card a { width: 100%; }
 }
 </style>

@@ -25,11 +25,10 @@ winget install Microsoft.DotNet.DesktopRuntime.10
 
 ### 从源码构建
 
-- Windows 10/11 x64
 - Node.js `v24.18.0` LTS
 - pnpm `11.2.2`
 - .NET 10 SDK
-- Microsoft Edge / WebView2 Runtime
+- PowerShell（Windows PowerShell 或 Linux 上的 PowerShell 7）
 
 Node.js 版本必须与 `build-portable.ps1` 中的固定版本一致，否则 `better-sqlite3` 原生模块可能出现 ABI 不兼容。
 
@@ -42,11 +41,19 @@ pnpm install
 pnpm desktop:build
 ```
 
+默认版本为 `v0.0.1`。指定版本或在 Linux 上构建时，可直接运行：
+
+```powershell
+./desktopApp/build-portable.ps1 -BuildVersion v0.1.0
+```
+
+Linux 构建会交叉发布 WPF Windows x64 程序，并将原生 Node 模块重建为 Windows x64 二进制。
+
 构建命令会执行：
 
 1. TypeScript 类型检查和单元测试
 2. Web、API 和 Runner 构建
-3. API 与 Runner 的 ncc bundle
+3. API 与 Runner 的压缩 ncc bundle
 4. .NET 10 WPF framework-dependent 发布
 5. Node.js 运行时整理
 6. 非必要 .NET 语言资源裁剪
@@ -154,7 +161,7 @@ ICO 包含 16、20、24、32、40、48、64、128 和 256 像素版本，并用�
 
 ## GitHub Release
 
-仓库工作流 `.github/workflows/release-windows-portable.yml` 只接受手动触发，不会在 push、Pull Request 或创建 tag 时自动发布。
+仓库工作流 `.github/workflows/release-windows-portable.yml` 使用 Ubuntu 构建服务器，只接受手动触发，不会在 push、Pull Request 或创建 tag 时自动发布。输入的 Release 标签会作为构建版本编译进设置页；未指定时默认使用 `v0.0.1`。
 
 在 GitHub 仓库中打开 **Actions → Release Windows portable → Run workflow**：
 

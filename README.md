@@ -135,16 +135,23 @@ data/
 
 构建机需要：
 
-- Windows 10/11 x64
 - Node.js `v24.18.0` LTS
 - pnpm `11.2.2`
 - .NET 10 SDK
-- Microsoft Edge / WebView2 Runtime
+- PowerShell（Windows PowerShell 或 Linux 上的 PowerShell 7）
 
 ```powershell
 pnpm install
 pnpm desktop:build
 ```
+
+默认构建版本为 `v0.0.1`。需要指定版本时可直接调用脚本：
+
+```powershell
+./desktopApp/build-portable.ps1 -BuildVersion v0.1.0
+```
+
+脚本可以在 Windows 上原生构建，也可以在 Linux 上交叉生成 Windows x64 便携包。Linux 构建会把 `better-sqlite3` 重建为 Windows x64 原生模块，并在打包前检查其 PE 文件头。
 
 输出文件：
 
@@ -152,7 +159,7 @@ pnpm desktop:build
 desktopApp/artifacts/ApplicationChecker-portable-win-x64.zip
 ```
 
-构建脚本会完成类型检查、测试、Web/API/Runner 构建、ncc bundle、.NET 10 framework-dependent 发布和 ZIP 打包。Node 版本必须与脚本中的固定版本一致，以保证 `better-sqlite3` 原生模块 ABI 兼容。
+构建脚本会完成类型检查、测试、Web/API/Runner 构建、压缩后的 ncc bundle、.NET 10 framework-dependent 发布和 ZIP 打包。版本号会编译进 Web 的 `__APP_VERSION__` 常量，并显示在设置页。Node 版本必须与脚本中的固定版本一致，以保证 `better-sqlite3` 原生模块 ABI 兼容。
 
 ## AI 状态识别
 

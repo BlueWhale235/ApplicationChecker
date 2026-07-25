@@ -1,5 +1,7 @@
 param(
     [string]$NodeVersion = "v24.18.0",
+    [string]$BuildVersion = "v0.0.1",
+    [switch]$SkipInstall,
     [switch]$SkipChecks
 )
 
@@ -12,11 +14,36 @@ $artifactsRoot = Join-Path $desktopRoot "artifacts"
 $cacheRoot = Join-Path $desktopRoot ".cache"
 $zipPath = Join-Path $artifactsRoot "ApplicationChecker-portable-win-x64.zip"
 $originalCi = $env:CI
+$originalViteAppVersion = $env:VITE_APP_VERSION
+$originalNpmConfigPlatform = $env:npm_config_platform
+$originalNpmConfigArch = $env:npm_config_arch
+$originalNpmConfigIgnoreScripts = $env:npm_config_ignore_scripts
+$isWindowsPlatform = [System.IO.Path]::DirectorySeparatorChar -eq '\'
+$pathComparison = if ($isWindowsPlatform) {
+    [System.StringComparison]::OrdinalIgnoreCase
+} else {
+    [System.StringComparison]::Ordinal
+}
+
+if ($BuildVersion -notmatch '^v?[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$') {
+    throw "BuildVersion must be a semantic version such as v0.0.1 or v0.1.0-beta.1."
+}
+$normalizedBuildVersion = if ($BuildVersion.StartsWith("v")) { $BuildVersion } else { "v$BuildVersion" }
+$assemblyVersion = $normalizedBuildVersion.Substring(1)
+
+function Get-DirectoryPrefix([string]$Path) {
+    $separator = [System.IO.Path]::DirectorySeparatorChar
+    $trimCharacters = [char[]]@(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.IO.Path]::AltDirectorySeparatorChar
+    )
+    return [System.IO.Path]::GetFullPath($Path).TrimEnd($trimCharacters) + $separator
+}
 
 function Remove-BuildDirectory([string]$Path) {
-    $resolvedDesktop = [System.IO.Path]::GetFullPath($desktopRoot).TrimEnd('\') + '\'
+    $resolvedDesktop = Get-DirectoryPrefix $desktopRoot
     $resolvedTarget = [System.IO.Path]::GetFullPath($Path)
-    if (-not $resolvedTarget.StartsWith($resolvedDesktop, [System.StringComparison]::OrdinalIgnoreCase)) {
+    if (-not $resolvedTarget.StartsWith($resolvedDesktop, $pathComparison)) {
         throw "Refusing to remove a path outside desktopApp: $resolvedTarget"
     }
     if (Test-Path -LiteralPath $resolvedTarget) {
@@ -24,15 +51,43 @@ function Remove-BuildDirectory([string]$Path) {
     }
 }
 
+function Test-WindowsPortableExecutable([string]$Path) {
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        return $stream.ReadByte() -eq 0x4D -and $stream.ReadByte() -eq 0x5A
+    } finally {
+        $stream.Dispose()
+    }
+}
+
+function Compress-JavaScriptTree([string]$Path) {
+    $javascriptFiles = @(Get-ChildItem -LiteralPath $Path -Recurse -Filter "*.js" -File)
+    foreach ($javascriptFile in $javascriptFiles) {
+        $temporaryPath = "$($javascriptFile.FullName).minified"
+        & pnpm exec esbuild $javascriptFile.FullName `
+            --minify `
+            --platform=node `
+            "--outfile=$temporaryPath"
+        if ($LASTEXITCODE -ne 0) {
+            throw "JavaScript minification failed: $($javascriptFile.FullName)"
+        }
+        Move-Item -LiteralPath $temporaryPath -Destination $javascriptFile.FullName -Force
+    }
+}
+
 Push-Location $repositoryRoot
 try {
     $env:CI = "true"
+    $env:VITE_APP_VERSION = $normalizedBuildVersion
+    Write-Host "Building Application Checker $normalizedBuildVersion"
     $buildNodeVersion = (& node --version).Trim()
     if ($buildNodeVersion -ne $NodeVersion) {
         throw "The build Node.js version is $buildNodeVersion, but the portable runtime is $NodeVersion. Use the same version so native modules are ABI-compatible."
     }
-    & pnpm install --frozen-lockfile
-    if ($LASTEXITCODE -ne 0) { throw "Workspace dependency restore failed." }
+    if (-not $SkipInstall) {
+        & pnpm install --frozen-lockfile
+        if ($LASTEXITCODE -ne 0) { throw "Workspace dependency restore failed." }
+    }
 
     if (-not $SkipChecks) {
         & pnpm typecheck
@@ -51,6 +106,7 @@ try {
         --configuration Release `
         --runtime win-x64 `
         --self-contained false `
+        -p:Version=$assemblyVersion `
         --output $publishRoot
     if ($LASTEXITCODE -ne 0) { throw "Desktop host publish failed." }
 
@@ -74,8 +130,8 @@ try {
         $culturePath = Join-Path $publishRoot $culture
         if (Test-Path -LiteralPath $culturePath) {
             $resolvedCulture = [System.IO.Path]::GetFullPath($culturePath)
-            $resolvedPublish = [System.IO.Path]::GetFullPath($publishRoot).TrimEnd('\') + '\'
-            if (-not $resolvedCulture.StartsWith($resolvedPublish, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $resolvedPublish = Get-DirectoryPrefix $publishRoot
+            if (-not $resolvedCulture.StartsWith($resolvedPublish, $pathComparison)) {
                 throw "Refusing to remove a culture directory outside the publish root: $resolvedCulture"
             }
             Remove-Item -LiteralPath $resolvedCulture -Recurse -Force
@@ -91,19 +147,50 @@ try {
     $nodeExtract = Join-Path $stageRoot "node-extract"
     Expand-Archive -LiteralPath $nodeArchive -DestinationPath $nodeExtract -Force
     $nodeSource = Join-Path $nodeExtract "node-$NodeVersion-win-x64"
-    $nodeTarget = Join-Path $publishRoot "internal\node"
+    $nodeTarget = Join-Path $publishRoot "internal/node"
     New-Item -ItemType Directory -Force -Path $nodeTarget | Out-Null
     Copy-Item -LiteralPath (Join-Path $nodeSource "node.exe") -Destination $nodeTarget -Force
     Copy-Item -LiteralPath (Join-Path $nodeSource "LICENSE") -Destination $nodeTarget -Force
 
-    $apiTarget = Join-Path $publishRoot "internal\api"
-    $runnerTarget = Join-Path $publishRoot "internal\runner"
+    $installedNativeModules = @(
+        Get-ChildItem -LiteralPath (Join-Path $repositoryRoot "node_modules/.pnpm") `
+            -Recurse -Filter "better_sqlite3.node" -File
+    )
+    $hasWindowsNativeModule = $installedNativeModules.Count -gt 0 -and @(
+        $installedNativeModules | Where-Object { -not (Test-WindowsPortableExecutable $_.FullName) }
+    ).Count -eq 0
+    if (-not $hasWindowsNativeModule) {
+        # The release runs on Windows, so native dependencies must be rebuilt for
+        # win32 even when this script itself is running on a Linux GitHub runner.
+        $env:npm_config_platform = "win32"
+        $env:npm_config_arch = "x64"
+        $env:npm_config_ignore_scripts = $null
+        & pnpm rebuild better-sqlite3
+        if ($LASTEXITCODE -ne 0) { throw "Windows native dependency rebuild failed." }
+    } else {
+        Write-Host "Using the existing Windows x64 better-sqlite3 native module."
+    }
+
+    $apiTarget = Join-Path $publishRoot "internal/api"
+    $runnerTarget = Join-Path $publishRoot "internal/runner"
     & pnpm exec ncc build (Join-Path $repositoryRoot "apps\api\dist\server.js") -o $apiTarget
     if ($LASTEXITCODE -ne 0) { throw "API bundle failed." }
     & pnpm exec ncc build (Join-Path $repositoryRoot "apps\runner\dist\runner.js") -o $runnerTarget
     if ($LASTEXITCODE -ne 0) { throw "Runner bundle failed." }
+    Compress-JavaScriptTree $apiTarget
+    Compress-JavaScriptTree $runnerTarget
 
-    $webTarget = Join-Path $publishRoot "internal\web"
+    $nativeModules = @(Get-ChildItem -LiteralPath $apiTarget -Recurse -Filter "*.node" -File)
+    if ($nativeModules.Count -eq 0) {
+        throw "API bundle does not contain the required Windows native module."
+    }
+    foreach ($nativeModule in $nativeModules) {
+        if (-not (Test-WindowsPortableExecutable $nativeModule.FullName)) {
+            throw "Native module is not a Windows PE binary: $($nativeModule.FullName)"
+        }
+    }
+
+    $webTarget = Join-Path $publishRoot "internal/web"
     New-Item -ItemType Directory -Force -Path $webTarget | Out-Null
     Copy-Item -Path (Join-Path $repositoryRoot "apps\web\dist\*") -Destination $webTarget -Recurse -Force
 
@@ -123,5 +210,9 @@ Database, screenshots, settings, WebView2 data, browser profiles, logs and tempo
 }
 finally {
     $env:CI = $originalCi
+    $env:VITE_APP_VERSION = $originalViteAppVersion
+    $env:npm_config_platform = $originalNpmConfigPlatform
+    $env:npm_config_arch = $originalNpmConfigArch
+    $env:npm_config_ignore_scripts = $originalNpmConfigIgnoreScripts
     Pop-Location
 }
