@@ -13,7 +13,7 @@ public partial class App : Application
         _singleInstance = new Mutex(true, @"Local\ApplicationChecker.Desktop", out var createdNew);
         if (!createdNew)
         {
-            MessageBox.Show("求职进度已经在运行。", "求职进度", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("职迹已经在运行。", "职迹", MessageBoxButton.OK, MessageBoxImage.Information);
             Shutdown();
             return;
         }

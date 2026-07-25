@@ -35,7 +35,7 @@ public partial class MainWindow : Window
             TryWriteFatal(error);
             MessageBox.Show(
                 $"{error.Message}\n\n详细日志目录：\n{_paths.Logs}",
-                "求职进度启动失败",
+                "职迹启动失败",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             Close();

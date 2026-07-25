@@ -71,16 +71,17 @@ onBeforeUnmount(() => {
 
 const stages: ProgressStatus[] = ["screening", "screening_passed", "interview_pending", "interviewed", "signing_pending", "offer"];
 const displayedStages = computed<ProgressStatus[]>(() => (
-  props.detail?.application.progressStatus === "rejected" ? ["rejected"] : stages
+  props.detail?.application.progressStatus === "rejected" ? ["unset", "rejected"] : stages
 ));
 const progressItems = Object.entries(progressLabels).map(([value, title]) => ({ value, title }));
 function stageLabel(stage: ProgressStatus): string {
-  return stage === "rejected" ? "投递-淘汰" : progressLabels[stage];
+  if (props.detail?.application.progressStatus === "rejected" && stage === "unset") return "投递";
+  return stage === "rejected" ? "淘汰" : progressLabels[stage];
 }
 function stageReached(stage: ProgressStatus): boolean {
   const current = props.detail?.application.progressStatus;
   if (!current) return false;
-  if (stage === "rejected") return current === "rejected";
+  if (current === "rejected") return stage === "unset" || stage === "rejected";
   return stages.indexOf(stage) <= stages.indexOf(current);
 }
 function stageInProgress(stage: ProgressStatus): boolean {
@@ -287,8 +288,11 @@ function date(value: string | null): string {
 .progress-track div.reached i { border-color: #5589c2; background: #dcecff; box-shadow: 0 0 0 3px #eaf4ff; }
 .progress-track div.active { color: #3975b9; font-weight: 600; }
 .progress-track div.in-progress i:after { content: ""; position: absolute; inset: -7px; border: 2px solid #75a9df; border-radius: 50%; animation: progress-node-pulse 1.8s ease-out infinite; }
-.progress-track.terminal { grid-template-columns: 1fr; }
-.progress-track.terminal:before { display: none; }
+.progress-track.terminal { grid-template-columns: repeat(2, 1fr); }
+.progress-track.terminal:before { left: 25%; right: 25%; background: #cfd4d1; }
+.progress-track.terminal div { color: #747d79; }
+.progress-track.terminal div.reached i { border-color: #aab1ad; background: #e9ecea; box-shadow: 0 0 0 3px #f2f3f1; }
+.progress-track.terminal div.active { color: #747d79; }
 .progress-track div.rejected { color: #747d79; font-weight: 600; }
 .progress-track div.rejected i { border-color: #aab1ad; background: #e9ecea; box-shadow: 0 0 0 3px #f2f3f1; }
 @keyframes progress-node-pulse {

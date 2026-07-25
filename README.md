@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="desktopApp/assets/app-icon.png" width="128" alt="求职进度图标">
-  <h1>求职进度 · Application Checker</h1>
+  <img src="desktopApp/assets/app-icon.png" width="128" alt="职迹图标">
+  <h1>职迹 · Application Checker</h1>
   <p>本地优先的求职申请管理与招聘网站状态检查工具</p>
   <p>
     <img alt="Vue 3" src="https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white">
@@ -12,7 +12,7 @@
 
 ## 项目简介
 
-求职进度是一个面向个人用户的本地应用，用来记录岗位、管理投递进度，并按计划自动打开招聘网站检查申请状态。
+职迹是一个面向个人用户的本地应用，用来记录岗位、管理投递进度，并按计划自动打开招聘网站检查申请状态。
 
 应用会复用加密保存的 Cookie 和 localStorage，保存完整网页截图，并可选用 OpenAI-compatible 视觉模型识别页面中的申请状态。所有业务数据默认保存在本机，不需要云端数据库。
 
@@ -262,11 +262,11 @@ docker compose logs runner
 - Runner 日志：`data/logs/runner.log`
 - 桌面外壳日志：`data/logs/desktop.log`
 
-如果提示本地服务启动失败，错误窗口会显示日志的绝对路径和末尾内容。确保应用目录可写、Edge/WebView2 可用，并且没有另一个“求职进度”实例正在运行。
+如果提示本地服务启动失败，错误窗口会显示日志的绝对路径和末尾内容。确保应用目录可写、Edge/WebView2 可用，并且没有另一个“职迹”实例正在运行。
 
 ## 页面路由
 
-- `/applications`：求职进度
+- `/applications`：投递进度
 - `/tasks`：任务管理
 - `/browser-profiles`：浏览器状态
 - `/settings`：全局、浏览器和 AI 设置

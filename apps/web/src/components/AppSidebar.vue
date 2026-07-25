@@ -12,7 +12,7 @@ defineEmits<{ change: [value: Page] }>();
     </div>
     <nav class="nav-list">
       <button :class="{ active: active === 'progress' }" @click="$emit('change', 'progress')">
-        <i class="mdi mdi-compass-outline"></i><span>求职进度</span>
+        <i class="mdi mdi-compass-outline"></i><span>投递进度</span>
       </button>
       <button :class="{ active: active === 'notifications' }" @click="$emit('change', 'notifications')">
         <i class="mdi mdi-bell-outline"></i><span>消息通知</span>

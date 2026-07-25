@@ -15,3 +15,13 @@ desktopApp/.stage/
 desktopApp/.deploy-api-test/
 desktopApp/.bundle-test/
 desktopApp/artifacts/
+
+# Local usage documents and Word temporary files
+使用文档.md
+职迹使用文档*.docx
+求职进度使用文档*.docx
+~$*.docx
+~WRL*.tmp
+
+# Codex QA workspace
+.codex-tmp/

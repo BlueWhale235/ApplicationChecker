@@ -68,7 +68,7 @@ defineEmits<{
 <template>
   <section class="page-content progress-page" :class="{ 'with-detail': detail }">
     <div class="page-heading">
-      <div><h1>求职进度</h1><p>自动检查投递状态，保存每一次进展。</p></div>
+      <div><h1>职迹</h1><p>自动检查投递状态，保存每一次进展。</p></div>
       <button class="primary-button add-button" @click="$emit('add')"><i class="mdi mdi-plus"></i>新增岗位</button>
     </div>
     <SummaryStrip :items="applications" :active-filter="statusFilter" @filter="$emit('statusFilter', $event)" />

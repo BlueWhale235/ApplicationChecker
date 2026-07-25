@@ -1,6 +1,6 @@
 # Application Checker Desktop
 
-求职进度的 Windows 便携桌面版，使用 .NET 10 WPF 和 Microsoft Edge WebView2。
+职迹的 Windows 便携桌面版，使用 .NET 10 WPF 和 Microsoft Edge WebView2。
 
 桌面外壳负责启动内置 API 与 Runner，并在 WebView2 中加载 Vue 前端。API 和 Runner 使用 ncc 编译为独立 JavaScript bundle，发布包不包含业务 `node_modules`。
 
