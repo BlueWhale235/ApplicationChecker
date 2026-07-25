@@ -264,6 +264,14 @@ function toggle(id: string) {
   if (next.has(id)) next.delete(id); else next.add(id);
   selected.value = next;
 }
+function togglePage(ids: string[], checked: boolean) {
+  const next = new Set(selected.value);
+  for (const id of ids) {
+    if (checked) next.add(id);
+    else next.delete(id);
+  }
+  selected.value = next;
+}
 function openCreateApplication() {
   formEditItem.value = null;
   formOpen.value = true;
@@ -286,8 +294,18 @@ async function run(id: string) {
   });
 }
 async function bulkRun() {
+  if (!selected.value.size && (query.value.trim() || statusFilter.value) && !filtered.value.length) {
+    flash("当前筛选没有可检查的岗位");
+    return;
+  }
   await action(async () => {
-    const result = await api.bulkRun(selected.value.size ? [...selected.value] : undefined);
+    const hasActiveFilter = Boolean(query.value.trim() || statusFilter.value);
+    const applicationIds = selected.value.size
+      ? [...selected.value]
+      : hasActiveFilter
+        ? filtered.value.map((item) => item.id)
+        : undefined;
+    const result = await api.bulkRun(applicationIds);
     selected.value = new Set();
     flash(`已加入 ${result.queued.length} 个检查${result.skipped ? `，跳过 ${result.skipped} 个进行中岗位` : ""}`);
     await refresh(true);
@@ -517,6 +535,7 @@ async function deleteProfile(site: string) {
           @status-filter="statusFilter = $event"
           @page="applicationPage = $event"
           @toggle="toggle"
+          @toggle-page="togglePage"
           @open="openDetail"
           @run="run"
           @bulk-run="bulkRun"

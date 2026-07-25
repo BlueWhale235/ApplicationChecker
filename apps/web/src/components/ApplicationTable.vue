@@ -1,13 +1,18 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { ApplicationSummary } from "@application-checker/contracts";
 import { progressLabels, runLabels } from "@application-checker/contracts";
 
-defineProps<{ items: ApplicationSummary[]; selected: Set<string>; activeId: string | null }>();
+const props = defineProps<{ items: ApplicationSummary[]; selected: Set<string>; activeId: string | null }>();
 defineEmits<{
   toggle: [id: string];
+  togglePage: [ids: string[], checked: boolean];
   open: [id: string];
   run: [id: string];
 }>();
+
+const allPageSelected = computed(() => props.items.length > 0 && props.items.every((item) => props.selected.has(item.id)));
+const somePageSelected = computed(() => props.items.some((item) => props.selected.has(item.id)));
 
 function relative(value: string | null): string {
   if (!value) return "—";
@@ -36,7 +41,18 @@ function relative(value: string | null): string {
     <table class="application-table">
       <thead>
         <tr>
-          <th class="check-col"></th>
+          <th class="check-col" @click.stop>
+            <v-checkbox-btn
+              class="application-checkbox page-checkbox"
+              :model-value="allPageSelected"
+              :indeterminate="somePageSelected && !allPageSelected"
+              :disabled="!items.length"
+              aria-label="全选本页"
+              color="primary"
+              density="compact"
+              @update:model-value="$emit('togglePage', items.map((item) => item.id), Boolean($event))"
+            />
+          </th>
           <th>公司 / 岗位</th>
           <th>当前状态</th>
           <th>投递链接 / 域名</th>

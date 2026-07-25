@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { ApplicationDetail, ApplicationSummary, ProgressStatus, RunSummary } from "@application-checker/contracts";
 import SummaryStrip from "../components/SummaryStrip.vue";
 import ApplicationTable from "../components/ApplicationTable.vue";
 import ApplicationDrawer from "../components/ApplicationDrawer.vue";
 
-defineProps<{
+const props = defineProps<{
   applications: ApplicationSummary[];
   items: ApplicationSummary[];
   selected: Set<string>;
@@ -21,12 +22,23 @@ defineProps<{
   perPage: number;
 }>();
 
+const bulkRunLabel = computed(() => {
+  if (props.selected.size) return `检查已选 (${props.selected.size})`;
+  if (props.statusFilter) {
+    const label = props.statusItems.find((item) => item.value === props.statusFilter)?.title ?? props.statusFilter;
+    return `检查<${label}>`;
+  }
+  if (props.query.trim()) return "检查筛选结果";
+  return "检查全部";
+});
+
 defineEmits<{
   add: [];
   query: [value: string];
   statusFilter: [value: string];
   page: [value: number];
   toggle: [id: string];
+  togglePage: [ids: string[], checked: boolean];
   open: [id: string];
   run: [id: string];
   bulkRun: [];
@@ -73,8 +85,14 @@ defineEmits<{
         hide-details
         @update:model-value="$emit('statusFilter', $event ?? '')"
       />
-      <v-btn variant="outlined" color="primary" prepend-icon="mdi-refresh" :disabled="busy || !applications.length" @click="$emit('bulkRun')">
-        {{ selected.size ? `检查已选 (${selected.size})` : "检查全部" }}
+      <v-btn
+        variant="outlined"
+        color="primary"
+        prepend-icon="mdi-refresh"
+        :disabled="busy || (!selected.size && !total)"
+        @click="$emit('bulkRun')"
+      >
+        {{ bulkRunLabel }}
       </v-btn>
     </div>
     <ApplicationTable
@@ -82,6 +100,7 @@ defineEmits<{
       :selected="selected"
       :active-id="activeId"
       @toggle="$emit('toggle', $event)"
+      @toggle-page="(ids, checked) => $emit('togglePage', ids, checked)"
       @open="$emit('open', $event)"
       @run="$emit('run', $event)"
     />
