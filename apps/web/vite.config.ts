@@ -1,7 +1,8 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
+import appVersionConfig from "../../app-version.json";
 
-const appVersion = process.env.VITE_APP_VERSION?.trim() || "v0.0.1";
+const appVersion = process.env.VITE_APP_VERSION?.trim() || appVersionConfig.version;
 
 export default defineConfig({
   plugins: [vue()],

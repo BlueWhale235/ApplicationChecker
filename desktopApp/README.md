@@ -41,7 +41,7 @@ pnpm install
 pnpm desktop:build
 ```
 
-默认版本为 `v0.0.1`。指定版本或在 Linux 上构建时，可直接运行：
+默认版本从仓库根目录的 `app-version.json` 读取。发布新版本时手动更新该文件；也可以通过参数临时覆盖：
 
 ```powershell
 ./desktopApp/build-portable.ps1 -BuildVersion v0.1.0
@@ -161,7 +161,7 @@ ICO 包含 16、20、24、32、40、48、64、128 和 256 像素版本，并用�
 
 ## GitHub Release
 
-仓库工作流 `.github/workflows/release-windows-portable.yml` 使用 Ubuntu 构建服务器，只接受手动触发，不会在 push、Pull Request 或创建 tag 时自动发布。输入的 Release 标签会作为构建版本编译进设置页；未指定时默认使用 `v0.0.1`。
+仓库工作流 `.github/workflows/release-windows-portable.yml` 使用 Ubuntu 构建服务器，只接受手动触发，不会在 push、Pull Request 或创建 tag 时自动发布。输入的 Release 标签会作为构建版本编译进设置页；本地构建未传版本参数时使用 `app-version.json` 中的版本。
 
 在 GitHub 仓库中打开 **Actions → Release Windows portable → Run workflow**：
 

@@ -145,7 +145,7 @@ pnpm install
 pnpm desktop:build
 ```
 
-默认构建版本为 `v0.0.1`。需要指定版本时可直接调用脚本：
+默认构建版本从仓库根目录的 `app-version.json` 读取。需要临时指定其他版本时可直接调用脚本：
 
 ```powershell
 ./desktopApp/build-portable.ps1 -BuildVersion v0.1.0

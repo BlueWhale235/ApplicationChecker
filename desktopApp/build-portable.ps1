@@ -1,6 +1,6 @@
 param(
     [string]$NodeVersion = "v24.18.0",
-    [string]$BuildVersion = "v0.0.1",
+    [string]$BuildVersion = "",
     [switch]$SkipInstall,
     [switch]$SkipChecks
 )
@@ -13,6 +13,7 @@ $publishRoot = Join-Path $stageRoot "ApplicationChecker"
 $artifactsRoot = Join-Path $desktopRoot "artifacts"
 $cacheRoot = Join-Path $desktopRoot ".cache"
 $zipPath = Join-Path $artifactsRoot "ApplicationChecker-portable-win-x64.zip"
+$versionConfigPath = Join-Path $repositoryRoot "app-version.json"
 $originalCi = $env:CI
 $originalViteAppVersion = $env:VITE_APP_VERSION
 $isWindowsPlatform = [System.IO.Path]::DirectorySeparatorChar -eq '\'
@@ -22,8 +23,14 @@ $pathComparison = if ($isWindowsPlatform) {
     [System.StringComparison]::Ordinal
 }
 
+if ([string]::IsNullOrWhiteSpace($BuildVersion)) {
+    if (-not (Test-Path -LiteralPath $versionConfigPath)) {
+        throw "Version config was not found: $versionConfigPath"
+    }
+    $BuildVersion = (Get-Content -LiteralPath $versionConfigPath -Raw -Encoding utf8 | ConvertFrom-Json).version
+}
 if ($BuildVersion -notmatch '^v?[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$') {
-    throw "BuildVersion must be a semantic version such as v0.0.1 or v0.1.0-beta.1."
+    throw "BuildVersion must be a semantic version such as v0.0.8 or v0.1.0-beta.1."
 }
 $normalizedBuildVersion = if ($BuildVersion.StartsWith("v")) { $BuildVersion } else { "v$BuildVersion" }
 $assemblyVersion = $normalizedBuildVersion.Substring(1)
