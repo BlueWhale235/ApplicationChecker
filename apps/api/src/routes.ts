@@ -20,6 +20,7 @@ import {
 } from "@application-checker/contracts";
 import type { StatusRecognizer } from "@application-checker/ai-status";
 import type { Config } from "./config.js";
+import type { AiDebugStore } from "./ai-debug.js";
 import type { DbContext, RunsTable } from "./db.js";
 import { mapApplication, mapEvent, mapLogin, mapProfile, mapRecognitionResult, mapRun } from "./mappers.js";
 import { assertPublicUrl } from "./security.js";
@@ -90,6 +91,11 @@ function runnerAuthorized(request: FastifyRequest, config: Config): boolean {
   return request.headers.authorization === `Bearer ${config.runnerToken}`;
 }
 
+function isInside(root: string, candidate: string): boolean {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
 async function persistScreenshot(config: Config, groupId: string, runId: string, base64: string): Promise<string> {
   const folder = path.join(config.screenshotsPath, "groups", groupId);
   await mkdir(folder, { recursive: true });
@@ -114,11 +120,12 @@ export interface RouteDeps {
   context: DbContext;
   config: Config;
   recognizer?: StatusRecognizer;
+  aiDebugStore?: AiDebugStore;
   runnerHeartbeat: { at: number };
 }
 
 export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
-  const { context, config, recognizer: injectedRecognizer, runnerHeartbeat } = deps;
+  const { context, config, recognizer: injectedRecognizer, aiDebugStore, runnerHeartbeat } = deps;
   const publicUrlOptions = {
     allowProxyFakeIp: config.desktopMode,
     allowUnresolvedHostname: config.desktopMode,
@@ -136,6 +143,26 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     status: "ok",
     runner: Date.now() - runnerHeartbeat.at < 20_000 ? "healthy" : "unavailable",
   }));
+
+  app.get("/debug/status", async () => ({ enabled: Boolean(config.debugTools && aiDebugStore) }));
+
+  app.get("/debug/ai-traces", async (request) => {
+    if (!config.debugTools || !aiDebugStore) throw httpError(404, "AI 调试功能未启用");
+    const limit = Math.min(50, Math.max(1, Number((request.query as { limit?: string }).limit) || 50));
+    return aiDebugStore.list(limit);
+  });
+
+  app.get("/debug/ai-traces/:id", async (request) => {
+    if (!config.debugTools || !aiDebugStore) throw httpError(404, "AI 调试功能未启用");
+    const trace = aiDebugStore.get((request.params as { id: string }).id);
+    if (!trace) throw httpError(404, "AI 调试记录不存在或已被清理");
+    return trace;
+  });
+
+  app.post("/debug/ai-traces/clear", async () => {
+    if (!config.debugTools || !aiDebugStore) throw httpError(404, "AI 调试功能未启用");
+    return { deleted: aiDebugStore.clear() };
+  });
 
   app.get("/applications", async (request) => {
     const query = (request.query as { q?: string; status?: ProgressStatus }).q?.trim().toLowerCase() ?? "";
@@ -512,6 +539,44 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     };
   });
 
+  app.post("/runs/history/delete-all", async () => {
+    const historyStatuses = ["succeeded", "failed", "cancelled"] as const;
+    const rows = await context.db.selectFrom("runs").select(["id", "screenshot_path"])
+      .where("status", "in", [...historyStatuses]).execute();
+    const runIds = rows.map((row) => row.id);
+    let deleted = 0;
+    if (runIds.length) {
+      const result = await context.db.deleteFrom("runs").where("id", "in", runIds).executeTakeFirst();
+      deleted = Number(result.numDeletedRows);
+    }
+    let screenshotsDeleted = 0;
+    let screenshotsMissing = 0;
+    let screenshotsFailed = 0;
+    for (const row of rows) {
+      if (!row.screenshot_path) continue;
+      if (!isInside(config.screenshotsPath, row.screenshot_path)) {
+        screenshotsFailed += 1;
+        continue;
+      }
+      try {
+        const info = await stat(row.screenshot_path).catch((error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return null;
+          throw error;
+        });
+        if (!info) {
+          screenshotsMissing += 1;
+          continue;
+        }
+        await rm(row.screenshot_path, { force: true });
+        screenshotsDeleted += 1;
+      } catch {
+        screenshotsFailed += 1;
+      }
+    }
+    aiDebugStore?.removeRuns(runIds);
+    return { deleted, screenshotsDeleted, screenshotsMissing, screenshotsFailed };
+  });
+
   app.post("/runs/:id/cancel", async (request) => {
     const id = (request.params as { id: string }).id;
     const row = await context.db.selectFrom("runs").select(["application_id", "check_group_id", "status"]).where("id", "=", id).executeTakeFirst();
@@ -704,6 +769,11 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
   app.post("/notifications/read-all", async () => {
     await context.db.updateTable("notifications").set({ read_at: nowIso() }).where("read_at", "is", null).execute();
     return { ok: true };
+  });
+
+  app.post("/notifications/delete-all", async () => {
+    const result = await context.db.deleteFrom("notifications").executeTakeFirst();
+    return { deleted: Number(result.numDeletedRows) };
   });
 
   app.get("/browser-profiles", async () =>
@@ -977,7 +1047,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
       confidence: number; evidence: string;
     }> = [];
     const settings = await appSettings(context);
-    const recognizer = injectedRecognizer ?? recognizerFromSettings(settings, config);
+    const recognizer = injectedRecognizer ?? recognizerFromSettings(settings, config, aiDebugStore);
     if (recognizer.configured) {
       aiStatus = "pending";
       try {
@@ -989,6 +1059,10 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
           })),
           pageTitle: body.pageTitle,
           finalUrl: body.finalUrl,
+          debugContext: {
+            runId: id,
+            screenshotTruncated: body.truncated,
+          },
         };
         if (!recognizer.recognizeGroup) {
           if (members.length !== 1) throw new Error("AI 适配器不支持同页多岗位识别");

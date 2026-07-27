@@ -20,6 +20,7 @@ export interface Config {
   webDistPath: string | null;
   desktopMode: boolean;
   desktopSessionToken: string | null;
+  debugTools: boolean;
 }
 
 function requiredSecret(name: string, value: string | undefined, fallback: string): string {
@@ -66,5 +67,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     webDistPath: env.WEB_DIST_PATH ? path.resolve(env.WEB_DIST_PATH) : null,
     desktopMode,
     desktopSessionToken,
+    debugTools: nodeEnv === "development" || env.DEBUG_TOOLS === "1",
   };
 }

@@ -205,6 +205,60 @@ export interface NotificationPage {
   offset: number;
 }
 
+export interface AiDebugTraceSummary {
+  id: string;
+  runId: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  company: string;
+  applicationCount: number;
+  model: string;
+  status: "pending" | "succeeded" | "failed";
+  durationMs: number | null;
+  httpStatus: number | null;
+}
+
+export interface AiDebugTraceAttempt {
+  deepThinking: boolean;
+  startedAt: string;
+  durationMs: number;
+  httpStatus: number | null;
+  responseBody: string | null;
+  responseTruncated: boolean;
+  error: string | null;
+}
+
+export interface AiDebugTraceDetail extends AiDebugTraceSummary {
+  endpoint: string;
+  pageTitle: string | null;
+  finalUrl: string | null;
+  applications: Array<{
+    id: string;
+    jobTitle: string;
+    appliedAt: string | null;
+    location: string | null;
+  }>;
+  systemPrompt: string;
+  userPrompt: string;
+  sanitizedRequest: string;
+  screenshotBytes: number;
+  screenshotTruncated: boolean;
+  attempts: AiDebugTraceAttempt[];
+  parsed: {
+    pageType: string | null;
+    pageEvidence: string | null;
+    results: Array<{
+      applicationId: string;
+      matched: boolean;
+      rawStatus: string | null;
+      status: ProgressStatus | null;
+      confidence: number;
+      evidence: string;
+    }>;
+  } | null;
+  error: string | null;
+}
+
 export interface StatusEvent {
   id: string;
   applicationId: string;

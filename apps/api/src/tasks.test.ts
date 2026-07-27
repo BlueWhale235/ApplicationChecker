@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import DatabaseDriver from "better-sqlite3";
@@ -10,6 +10,7 @@ import type { Config } from "./config.js";
 import { createDb, type DbContext } from "./db.js";
 import { registerRoutes } from "./routes.js";
 import { cleanupExpiredScreenshots, queueRun } from "./service.js";
+import { AiDebugStore } from "./ai-debug.js";
 
 const folders: string[] = [];
 afterEach(async () => {
@@ -38,6 +39,7 @@ async function setup(): Promise<{ folder: string; context: DbContext; config: Co
     webDistPath: null,
     desktopMode: false,
     desktopSessionToken: null,
+    debugTools: false,
   } satisfies Config;
   await context.db.insertInto("applications").values({
     id: "11111111-1111-4111-8111-111111111111",
@@ -450,6 +452,134 @@ describe("task management routes", () => {
     await app.close();
     await context.db.destroy();
     context.raw.close();
+  });
+
+  it("clears every notification while preserving status events", async () => {
+    const { context, config } = await setup();
+    await context.db.insertInto("status_events").values({
+      id: "event-clear",
+      application_id: "11111111-1111-4111-8111-111111111111",
+      run_id: null,
+      from_status: "screening",
+      to_status: "screening_passed",
+      source: "ai",
+      confidence: 0.9,
+      evidence: "业务筛选",
+      note: "业务筛选",
+      event_type: "progress",
+      created_at: new Date().toISOString(),
+    }).execute();
+    await context.db.insertInto("notifications").values({
+      id: "notification-clear",
+      application_id: "11111111-1111-4111-8111-111111111111",
+      run_id: null,
+      status_event_id: "event-clear",
+      company_snapshot: "示例公司",
+      job_title_snapshot: "产品经理",
+      from_status: "screening",
+      to_status: "screening_passed",
+      confidence: 0.9,
+      evidence: "业务筛选",
+      read_at: null,
+      created_at: new Date().toISOString(),
+    }).execute();
+    const app = Fastify();
+    await registerRoutes(app, { context, config, runnerHeartbeat: { at: Date.now() } });
+    const cleared = await app.inject({ method: "POST", url: "/notifications/delete-all" });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json()).toEqual({ deleted: 1 });
+    expect((await app.inject({ method: "GET", url: "/notifications" })).json()).toMatchObject({ total: 0 });
+    expect(await context.db.selectFrom("status_events").select("id").where("id", "=", "event-clear").executeTakeFirst())
+      .toEqual({ id: "event-clear" });
+    await app.close();
+    await context.db.destroy();
+    context.raw.close();
+  });
+
+  it("deletes all finished tasks, screenshots and matching debug traces but keeps active tasks", async () => {
+    const { context, config } = await setup();
+    const finishedId = await queueRun(context, "11111111-1111-4111-8111-111111111111", "manual");
+    const screenshotPath = path.join(config.screenshotsPath, "groups", "test", `${finishedId}.png`);
+    await mkdir(path.dirname(screenshotPath), { recursive: true });
+    await writeFile(screenshotPath, Buffer.from("png"));
+    await context.db.updateTable("runs").set({
+      status: "cancelled",
+      completed_at: new Date().toISOString(),
+      screenshot_path: screenshotPath,
+    }).where("id", "=", finishedId!).execute();
+    const activeId = await queueRun(context, "11111111-1111-4111-8111-111111111111", "manual");
+    const aiDebugStore = new AiDebugStore();
+    aiDebugStore.start({
+      runId: finishedId!,
+      endpoint: "https://api.example/v1/chat/completions",
+      model: "vision",
+      company: "示例公司",
+      applications: [],
+      pageTitle: null,
+      finalUrl: null,
+      systemPrompt: "规则",
+      userPrompt: "输入",
+      screenshotBytes: 3,
+      screenshotTruncated: false,
+    });
+    const app = Fastify();
+    await registerRoutes(app, { context, config, aiDebugStore, runnerHeartbeat: { at: Date.now() } });
+    const cleared = await app.inject({ method: "POST", url: "/runs/history/delete-all" });
+    expect(cleared.statusCode, cleared.body).toBe(200);
+    expect(cleared.json()).toMatchObject({ deleted: 1, screenshotsDeleted: 1, screenshotsFailed: 0 });
+    expect(await stat(screenshotPath).catch(() => null)).toBeNull();
+    expect(await context.db.selectFrom("runs").select("id").where("id", "=", finishedId!).executeTakeFirst()).toBeUndefined();
+    expect(await context.db.selectFrom("runs").select("id").where("id", "=", activeId!).executeTakeFirst()).toEqual({ id: activeId });
+    expect(aiDebugStore.list()).toEqual([]);
+    await app.close();
+    await context.db.destroy();
+    context.raw.close();
+  });
+
+  it("only exposes in-memory AI traces when debug tools are enabled", async () => {
+    const disabled = await setup();
+    const disabledApp = Fastify();
+    await registerRoutes(disabledApp, {
+      context: disabled.context,
+      config: disabled.config,
+      runnerHeartbeat: { at: Date.now() },
+    });
+    expect((await disabledApp.inject({ method: "GET", url: "/debug/status" })).json()).toEqual({ enabled: false });
+    expect((await disabledApp.inject({ method: "GET", url: "/debug/ai-traces" })).statusCode).toBe(404);
+    await disabledApp.close();
+    await disabled.context.db.destroy();
+    disabled.context.raw.close();
+
+    const enabled = await setup();
+    const store = new AiDebugStore();
+    const traceId = store.start({
+      runId: "run-debug",
+      endpoint: "https://api.example/v1/chat/completions",
+      model: "vision",
+      company: "示例公司",
+      applications: [],
+      pageTitle: null,
+      finalUrl: null,
+      systemPrompt: "规则",
+      userPrompt: "输入",
+      screenshotBytes: 3,
+      screenshotTruncated: false,
+    });
+    const enabledApp = Fastify();
+    await registerRoutes(enabledApp, {
+      context: enabled.context,
+      config: { ...enabled.config, debugTools: true },
+      aiDebugStore: store,
+      runnerHeartbeat: { at: Date.now() },
+    });
+    expect((await enabledApp.inject({ method: "GET", url: "/debug/status" })).json()).toEqual({ enabled: true });
+    expect((await enabledApp.inject({ method: "GET", url: "/debug/ai-traces" })).json()[0]).toMatchObject({ id: traceId });
+    const detail = await enabledApp.inject({ method: "GET", url: `/debug/ai-traces/${traceId}` });
+    expect(detail.json().sanitizedRequest).toContain("[image omitted: 3 bytes]");
+    expect((await enabledApp.inject({ method: "POST", url: "/debug/ai-traces/clear" })).json()).toEqual({ deleted: 1 });
+    await enabledApp.close();
+    await enabled.context.db.destroy();
+    enabled.context.raw.close();
   });
 
   it("records email applications without a URL and adds the applied date to the timeline", async () => {

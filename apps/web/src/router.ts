@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
 
-export type AppPage = "progress" | "notifications" | "tasks" | "profiles" | "settings";
+export type AppPage = "progress" | "notifications" | "tasks" | "profiles" | "settings" | "debug";
 
 const routes: RouteRecordRaw[] = [
   { path: "/", redirect: "/applications" },
@@ -9,6 +9,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/tasks", name: "tasks", component: { template: "<span />" }, meta: { page: "tasks" } },
   { path: "/browser-profiles", name: "profiles", component: { template: "<span />" }, meta: { page: "profiles" } },
   { path: "/settings", name: "settings", component: { template: "<span />" }, meta: { page: "settings" } },
+  { path: "/ai-debug", name: "debug", component: { template: "<span />" }, meta: { page: "debug" } },
   { path: "/:pathMatch(.*)*", redirect: "/applications" },
 ];
 
@@ -23,4 +24,5 @@ export const pagePaths: Record<AppPage, string> = {
   tasks: "/tasks",
   profiles: "/browser-profiles",
   settings: "/settings",
+  debug: "/ai-debug",
 };

@@ -14,7 +14,9 @@ public partial class MainWindow : Window
     private readonly ProcessSupervisor _processes = new();
     private readonly bool _devToolsEnabled = Environment.GetCommandLineArgs()
         .Skip(1)
-        .Any(argument => string.Equals(argument, "--devtools", StringComparison.OrdinalIgnoreCase));
+        .Any(argument =>
+            string.Equals(argument, "--devtools", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(argument, "--dev-tool", StringComparison.OrdinalIgnoreCase));
     private bool _shutdownStarted;
 
     public MainWindow()
@@ -73,6 +75,10 @@ public partial class MainWindow : Window
             ["RUNNER_URL"] = baseUrl,
             ["STATE_ENCRYPTION_KEY"] = settings.StateEncryptionKey,
         };
+        if (_devToolsEnabled)
+        {
+            apiEnvironment["DEBUG_TOOLS"] = "1";
+        }
         var apiProcess = _processes.Start(
             _paths.NodeExecutable,
             _paths.ApiEntry,

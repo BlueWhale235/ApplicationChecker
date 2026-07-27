@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OpenAiCompatibleRecognizer } from "./index.js";
+import { OpenAiCompatibleRecognizer, type AiDebugObserver } from "./index.js";
 
 describe("recognizer configuration", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -39,6 +39,79 @@ describe("recognizer configuration", () => {
       { applicationId: "b", status: "screening_passed" },
     ]);
     expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain("业务筛选-进行中=screening_passed");
+    const sent = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+      messages: Array<{ role: string; content: unknown }>;
+    };
+    expect(sent.messages).toHaveLength(2);
+    expect(sent.messages[0]).toMatchObject({ role: "system" });
+    expect(String(sent.messages[0]?.content)).toContain("业务筛选=screening_passed");
+    expect(String(sent.messages[0]?.content)).toContain("简历筛选=screening");
+    expect(String(sent.messages[0]?.content)).toContain("待评估=screening");
+    expect(sent.messages[1]).toMatchObject({ role: "user" });
+    expect(sent).not.toHaveProperty("previous_response_id");
+  });
+
+  it("reports sanitized lifecycle events to the optional debug observer", async () => {
+    const responseBody = JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        pageType: "application_status",
+        pageEvidence: "投递记录",
+        results: [{ applicationId: "a", matched: true, rawStatus: "待评估", status: "screening", confidence: 0.8, evidence: "状态列" }],
+      }) } }],
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(responseBody, { status: 200 })));
+    const observer = {
+      start: vi.fn().mockReturnValue("trace-1"),
+      attempt: vi.fn(),
+      complete: vi.fn(),
+      fail: vi.fn(),
+    } satisfies AiDebugObserver;
+    const recognizer = new OpenAiCompatibleRecognizer({
+      baseUrl: "https://api.example/v1",
+      apiKey: "secret-key",
+      model: "vision",
+      debugObserver: observer,
+    });
+    await recognizer.recognizeGroup({
+      screenshot: Buffer.from("png"),
+      company: "示例公司",
+      applications: [{ id: "a", jobTitle: "岗位 A", appliedAt: null, location: null }],
+      pageTitle: "投递记录",
+      finalUrl: "https://example.com/status",
+      debugContext: { runId: "run-1", screenshotTruncated: true },
+    });
+    expect(observer.start).toHaveBeenCalledWith(expect.objectContaining({
+      runId: "run-1",
+      screenshotBytes: 3,
+      screenshotTruncated: true,
+      endpoint: "https://api.example/v1/chat/completions",
+    }));
+    expect(JSON.stringify(observer.start.mock.calls)).not.toContain("secret-key");
+    expect(JSON.stringify(observer.start.mock.calls)).not.toContain(Buffer.from("png").toString("base64"));
+    expect(observer.attempt).toHaveBeenCalledWith("trace-1", expect.objectContaining({ httpStatus: 200, responseBody }));
+    expect(observer.complete).toHaveBeenCalledWith("trace-1", expect.objectContaining({
+      pageType: "application_status",
+      results: [expect.objectContaining({ status: "screening" })],
+    }));
+    expect(observer.fail).not.toHaveBeenCalled();
+  });
+
+  it("reports invalid JSON as a failed debug trace", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("not json", { status: 200 })));
+    const observer = {
+      start: vi.fn().mockReturnValue("trace-2"),
+      attempt: vi.fn(),
+      complete: vi.fn(),
+      fail: vi.fn(),
+    } satisfies AiDebugObserver;
+    const recognizer = new OpenAiCompatibleRecognizer({
+      baseUrl: "https://api.example/v1", apiKey: "x", model: "vision", debugObserver: observer,
+    });
+    await expect(recognizer.recognizeGroup({
+      screenshot: Buffer.from("png"), company: "示例公司", applications: [], pageTitle: null, finalUrl: null,
+    })).rejects.toThrow();
+    expect(observer.attempt).toHaveBeenCalledWith("trace-2", expect.objectContaining({ httpStatus: 200 }));
+    expect(observer.fail).toHaveBeenCalledWith("trace-2", expect.any(String));
   });
 
   it.each([

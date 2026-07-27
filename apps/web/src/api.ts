@@ -1,4 +1,6 @@
 import type {
+  AiDebugTraceDetail,
+  AiDebugTraceSummary,
   AppSettings,
   AiSettingsUpdate,
   ApplicationDetail,
@@ -56,6 +58,7 @@ export const api = {
   unreadNotifications: () => request<{ unreadCount: number }>("/notifications/unread-count"),
   readNotification: (id: string) => request<{ ok: true }>(`/notifications/${id}/read`, { method: "POST" }),
   readAllNotifications: () => request<{ ok: true }>("/notifications/read-all", { method: "POST" }),
+  deleteAllNotifications: () => request<{ deleted: number }>("/notifications/delete-all", { method: "POST" }),
   screenshotUrl: (runId: string) => `/api/runs/${runId}/screenshot`,
   deleteScreenshot: (runId: string) => request<void>(`/runs/${runId}/screenshot/delete`, { method: "POST" }),
   tasks: (scope: "active" | "history", options: { status?: string; q?: string; limit?: number; offset?: number } = {}) => {
@@ -68,6 +71,16 @@ export const api = {
   },
   cancelRun: (runId: string) => request<{ ok: true }>(`/runs/${runId}/cancel`, { method: "POST" }),
   retryRun: (runId: string) => request<{ runId: string }>(`/runs/${runId}/retry`, { method: "POST" }),
+  deleteAllHistoryRuns: () => request<{
+    deleted: number;
+    screenshotsDeleted: number;
+    screenshotsMissing: number;
+    screenshotsFailed: number;
+  }>("/runs/history/delete-all", { method: "POST" }),
+  debugStatus: () => request<{ enabled: boolean }>("/debug/status"),
+  aiDebugTraces: (limit = 50) => request<AiDebugTraceSummary[]>(`/debug/ai-traces?limit=${limit}`),
+  aiDebugTrace: (id: string) => request<AiDebugTraceDetail>(`/debug/ai-traces/${id}`),
+  clearAiDebugTraces: () => request<{ deleted: number }>("/debug/ai-traces/clear", { method: "POST" }),
   profiles: () => request<BrowserProfileSummary[]>("/browser-profiles"),
   deleteProfile: (site: string) => request<void>(`/browser-profiles/${encodeURIComponent(site)}/delete`, { method: "POST" }),
   settings: () => request<AppSettings>("/settings"),

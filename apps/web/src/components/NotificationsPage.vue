@@ -20,6 +20,7 @@ defineEmits<{
   page: [value: number];
   open: [notification: NotificationSummary];
   readAll: [];
+  clearAll: [];
   closeDetail: [];
   run: [id: string];
   progress: [id: string, status: ProgressStatus];
@@ -49,15 +50,26 @@ function date(value: string): string {
   <section class="page-content notification-page" :class="{ 'with-detail': detail }">
     <div class="page-heading">
       <div><h1>消息通知</h1><p>集中查看 AI 自动识别到的岗位进展。</p></div>
-      <v-btn
-        variant="outlined"
-        color="primary"
-        prepend-icon="mdi-check-all"
-        :disabled="busy || !page.unreadCount"
-        @click="$emit('readAll')"
-      >
-        全部已读
-      </v-btn>
+      <div class="notification-heading-actions">
+        <v-btn
+          variant="outlined"
+          color="primary"
+          prepend-icon="mdi-check-all"
+          :disabled="busy || !page.unreadCount"
+          @click="$emit('readAll')"
+        >
+          全部已读
+        </v-btn>
+        <v-btn
+          variant="outlined"
+          color="error"
+          prepend-icon="mdi-delete-sweep-outline"
+          :disabled="busy"
+          @click="$emit('clearAll')"
+        >
+          清空消息
+        </v-btn>
+      </div>
     </div>
 
     <div class="notification-toolbar">
@@ -141,6 +153,7 @@ function date(value: string): string {
 </template>
 
 <style scoped>
+.notification-heading-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .notification-page { max-width: 1080px; transition: padding-right .2s ease; }
 .notification-page.with-detail { max-width: none; padding-right: 421px; }
 .notification-toolbar { margin: 22px 0 16px; display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 13px; }

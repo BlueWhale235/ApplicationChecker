@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Selectable } from "kysely";
-import { OpenAiCompatibleRecognizer } from "@application-checker/ai-status";
+import { OpenAiCompatibleRecognizer, type AiDebugObserver } from "@application-checker/ai-status";
 import type { AiSettingsUpdate } from "@application-checker/contracts";
 import type { Config } from "./config.js";
 import type { AppSettingsTable, DbContext } from "./db.js";
@@ -99,12 +99,17 @@ export async function updateAiSettings(
   return settings;
 }
 
-export function recognizerFromSettings(settings: RuntimeSettingsRow, config: Config): OpenAiCompatibleRecognizer {
+export function recognizerFromSettings(
+  settings: RuntimeSettingsRow,
+  config: Config,
+  debugObserver?: AiDebugObserver,
+): OpenAiCompatibleRecognizer {
   const apiKey = decryptSecret(settings.ai_api_key_encrypted, config.stateKey);
   return new OpenAiCompatibleRecognizer({
     ...(settings.ai_base_url ? { baseUrl: settings.ai_base_url } : {}),
     ...(settings.ai_model ? { model: settings.ai_model } : {}),
     ...(apiKey ? { apiKey } : {}),
     deepThinking: Boolean(settings.ai_deep_thinking),
+    ...(debugObserver ? { debugObserver } : {}),
   });
 }

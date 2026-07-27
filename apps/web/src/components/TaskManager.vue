@@ -21,6 +21,7 @@ defineEmits<{
   login: [run: TaskRunSummary];
   view: [run: TaskRunSummary];
   deleteScreenshot: [run: TaskRunSummary];
+  clearHistory: [];
 }>();
 
 function date(value: string | null): string {
@@ -56,7 +57,19 @@ const resultReasonLabels = {
   <section class="page-content task-page">
     <div class="page-heading">
       <div><h1>任务管理</h1><p>查看正在执行和已经完成的网页截图任务。</p></div>
-      <v-btn class="task-refresh" variant="outlined" color="primary" prepend-icon="mdi-refresh" :disabled="busy" @click="$emit('refresh')">刷新</v-btn>
+      <div class="task-heading-actions">
+        <v-btn class="task-refresh" variant="outlined" color="primary" prepend-icon="mdi-refresh" :disabled="busy" @click="$emit('refresh')">刷新</v-btn>
+        <v-btn
+          v-if="scope === 'history'"
+          variant="outlined"
+          color="error"
+          prepend-icon="mdi-delete-sweep-outline"
+          :disabled="busy"
+          @click="$emit('clearHistory')"
+        >
+          删除全部历史任务
+        </v-btn>
+      </div>
     </div>
     <v-btn-toggle
       :model-value="scope"
@@ -185,6 +198,7 @@ const resultReasonLabels = {
 </template>
 
 <style scoped>
+.task-heading-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .task-page { max-width: 1380px; }
 .task-refresh { display: inline-flex; align-items: center; gap: 7px; }
 .task-toolbar { display: flex; align-items: center; gap: 10px; margin: 23px 0 12px; }

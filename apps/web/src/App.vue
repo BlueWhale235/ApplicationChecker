@@ -19,6 +19,7 @@ import NotificationsPage from "./components/NotificationsPage.vue";
 import ProgressPage from "./pages/ProgressPage.vue";
 import BrowserProfilesPage from "./pages/BrowserProfilesPage.vue";
 import SettingsPage from "./pages/SettingsPage.vue";
+import AiDebugPage from "./pages/AiDebugPage.vue";
 import { pagePaths, type AppPage } from "./router";
 
 const route = useRoute();
@@ -81,6 +82,8 @@ const aiSettingsOpen = ref(false);
 const checkPlanOpen = ref(false);
 const error = ref("");
 const notice = ref("");
+const debugEnabled = ref(false);
+const debugRefreshToken = ref(0);
 let timer: number | undefined;
 let taskTimer: number | undefined;
 let taskSearchTimer: number | undefined;
@@ -134,13 +137,15 @@ async function refreshNotifications() {
 async function refresh(silent = false) {
   if (!silent) loading.value = true;
   try {
-    const [apps, appSettings, browserProfiles, notificationCount] = await Promise.all([
-      api.applications(), api.settings(), api.profiles(), api.unreadNotifications(),
+    const [apps, appSettings, browserProfiles, notificationCount, debugStatus] = await Promise.all([
+      api.applications(), api.settings(), api.profiles(), api.unreadNotifications(), api.debugStatus(),
     ]);
     applications.value = apps;
     settings.value = appSettings;
     profiles.value = browserProfiles;
     unreadNotificationCount.value = notificationCount.unreadCount;
+    debugEnabled.value = debugStatus.enabled;
+    if (active.value === "debug" && !debugStatus.enabled) void router.replace(pagePaths.settings);
     if (!silent) {
       settingsForm.globalCron = appSettings.globalCron ?? "";
       settingsForm.timezone = appSettings.timezone;
@@ -200,6 +205,9 @@ watch(taskHistoryPageCount, (count) => {
   if (taskHistoryPage.value > count) taskHistoryPage.value = count;
 });
 watch([query, statusFilter, scheduleFilter], () => { applicationPage.value = 1; });
+watch([active, debugEnabled], ([page, enabled]) => {
+  if (page === "debug" && !loading.value && !enabled) void router.replace(pagePaths.settings);
+});
 watch(applicationPageCount, (count) => {
   if (applicationPage.value > count) applicationPage.value = count;
 });
@@ -233,6 +241,54 @@ async function readAllNotifications() {
     unreadNotificationCount.value = 0;
     await refreshNotifications();
     flash("消息已全部标记为已读");
+  });
+}
+
+async function clearAllNotifications() {
+  if (!await askConfirm({
+    title: "清空全部消息",
+    message: "将删除全部消息通知，不受当前筛选和分页影响。岗位进度与状态时间线会继续保留，此操作无法恢复。",
+    confirmLabel: "清空消息",
+    danger: true,
+  })) return;
+  await action(async () => {
+    const result = await api.deleteAllNotifications();
+    detail.value = null;
+    notificationCurrentPage.value = 1;
+    unreadNotificationCount.value = 0;
+    await refreshNotifications();
+    flash(result.deleted ? `已清空 ${result.deleted} 条消息` : "没有可清空的消息");
+  });
+}
+
+async function clearAllHistoryTasks() {
+  if (!await askConfirm({
+    title: "删除全部历史任务",
+    message: "将删除全部成功、失败和已取消任务，不受当前搜索和分页影响，并清理相关截图与 AI 调试记录。进行中的任务、岗位进度、时间线和消息不会被删除。",
+    confirmLabel: "删除历史任务",
+    danger: true,
+  })) return;
+  await action(async () => {
+    const result = await api.deleteAllHistoryRuns();
+    taskHistoryPage.value = 1;
+    screenshotRun.value = null;
+    await Promise.all([refreshTasks(), refresh(true)]);
+    const warning = result.screenshotsFailed ? `，${result.screenshotsFailed} 张截图清理失败` : "";
+    flash(result.deleted ? `已删除 ${result.deleted} 条历史任务${warning}` : "没有可删除的历史任务");
+  });
+}
+
+async function clearAiDebugTraces() {
+  if (!await askConfirm({
+    title: "清空 AI 调试记录",
+    message: "将清空当前 API 进程内存中的全部 AI 输入输出记录，不会删除任务或截图。",
+    confirmLabel: "清空调试记录",
+    danger: true,
+  })) return;
+  await action(async () => {
+    const result = await api.clearAiDebugTraces();
+    debugRefreshToken.value += 1;
+    flash(result.deleted ? `已清空 ${result.deleted} 条 AI 调试记录` : "没有可清空的调试记录");
   });
 }
 
@@ -505,6 +561,7 @@ async function deleteProfile(site: string) {
         :active="active"
         :runner-healthy="settings.runnerHealthy"
         :unread-count="unreadNotificationCount"
+        :debug-enabled="debugEnabled"
         @change="navigate"
       />
       <main class="main-area" :class="{ 'with-drawer': detail }">
@@ -578,6 +635,7 @@ async function deleteProfile(site: string) {
           @page="notificationCurrentPage = $event"
           @open="openNotification"
           @read-all="readAllNotifications"
+          @clear-all="clearAllNotifications"
           @close-detail="detail = null"
           @run="run"
           @progress="setProgress"
@@ -610,16 +668,25 @@ async function deleteProfile(site: string) {
           @login="startLogin($event.id)"
           @view="viewScreenshot($event, $event.company, $event.jobTitle)"
           @delete-screenshot="deleteScreenshot"
+          @clear-history="clearAllHistoryTasks"
         />
 
         <BrowserProfilesPage v-else-if="active === 'profiles'" :profiles="profiles" @remove="deleteProfile" />
         <SettingsPage
-          v-else
+          v-else-if="active === 'settings'"
           :settings="settings"
           :form="settingsForm"
           :busy="busy"
           @save="saveSettings"
           @configure-ai="aiSettingsOpen = true"
+        />
+        <AiDebugPage
+          v-else-if="active === 'debug' && debugEnabled"
+          :busy="busy"
+          :refresh-token="debugRefreshToken"
+          @clear="clearAiDebugTraces"
+          @failure="error = $event"
+          @notice="flash"
         />
         <RouterView class="route-marker" />
       </main>

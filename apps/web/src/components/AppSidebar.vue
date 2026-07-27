@@ -1,6 +1,6 @@
 <script setup lang="ts">
-type Page = "progress" | "notifications" | "tasks" | "profiles" | "settings";
-defineProps<{ active: Page; runnerHealthy: boolean; unreadCount: number }>();
+type Page = "progress" | "notifications" | "tasks" | "profiles" | "settings" | "debug";
+defineProps<{ active: Page; runnerHealthy: boolean; unreadCount: number; debugEnabled: boolean }>();
 defineEmits<{ change: [value: Page] }>();
 </script>
 
@@ -26,6 +26,9 @@ defineEmits<{ change: [value: Page] }>();
       </button>
       <button :class="{ active: active === 'settings' }" @click="$emit('change', 'settings')">
         <i class="mdi mdi-cog-outline"></i><span>设置</span>
+      </button>
+      <button v-if="debugEnabled" :class="{ active: active === 'debug' }" @click="$emit('change', 'debug')">
+        <i class="mdi mdi-bug-outline"></i><span>AI 调试</span>
       </button>
     </nav>
     <div class="leaf-mark" aria-hidden="true">❧</div>
