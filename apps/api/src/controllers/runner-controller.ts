@@ -287,6 +287,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       : recognitionMode === "local_first"
         ? members.filter((member) => !locallyResolved.has(member.id))
         : members;
+    const aiMemberIds = new Set(aiMembers.map((member) => member.id));
     const recognizer = injectedRecognizer ?? recognizerFromSettings(settings, config, aiDebugStore);
     if (aiMembers.length && recognizer.configured) {
       aiStatus = "pending";
@@ -384,7 +385,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         const blockedByPause = Boolean(member.automation_paused);
         const threshold = result?.source === "local" ? LOCAL_AUTO_APPLY_THRESHOLD : settings.ai_confidence_threshold;
         const applied = matched && result!.confidence >= threshold && !member.manual_locked && !blockedByPause;
-        const notAppliedReason = !result && aiStatus === "failed" ? "ai_failed"
+        const notAppliedReason = aiStatus === "failed" && aiMemberIds.has(member.id) ? "ai_failed"
           : !matched ? "unmatched"
             : member.manual_locked ? "manual_locked"
               : blockedByPause ? null
@@ -402,6 +403,30 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
           adapter_id: result?.adapterId ?? null,
           rule_version: result?.ruleVersion ?? null,
         }).where("run_id", "=", id).where("application_id", "=", member.id).execute();
+        if (notAppliedReason === "ai_failed" || notAppliedReason === "unmatched") {
+          const currentStatus = member.progress_status_v2 ?? "unset";
+          const notificationKind = notAppliedReason === "ai_failed"
+            ? "recognition_failed" as const
+            : "recognition_unmatched" as const;
+          const evidence = notificationKind === "recognition_failed"
+            ? `识别失败：${aiError ?? result?.evidence ?? "识别服务未返回有效结果"}`
+            : `未命中岗位状态：${result?.evidence ?? localResult?.fallbackReason ?? "页面中没有找到可用的状态信息"}`;
+          await trx.insertInto("notifications").values({
+            id: randomUUID(),
+            kind: notificationKind,
+            application_id: member.id,
+            run_id: id,
+            status_event_id: null,
+            company_snapshot: member.company,
+            job_title_snapshot: member.job_title,
+            from_status: currentStatus,
+            to_status: currentStatus,
+            confidence: result?.confidence ?? null,
+            evidence: evidence.slice(0, 500),
+            read_at: null,
+            created_at: completed,
+          }).execute();
+        }
         if (applied && result?.status) {
           const previous = member.progress_status_v2 ?? "unset";
           const rejected = result.status === "rejected";
@@ -488,14 +513,45 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     if (!run) throw httpError(404, "Run not found");
     if (run.status !== "running") return { ok: true, discarded: true };
     const completed = nowIso();
-    const updated = await context.db.updateTable("runs").set({
-      status: "failed",
-      error_code: body.code?.slice(0, 100) ?? "CAPTURE_FAILED",
-      error_message: body.message?.slice(0, 500) ?? "Capture failed",
-      recognition_status: "failed",
-      recognition_evidence: body.message?.slice(0, 500) ?? "Capture failed",
-      completed_at: completed,
-    }).where("id", "=", id).where("status", "=", "running").executeTakeFirst();
+    const failureMessage = body.message?.slice(0, 500) ?? "页面检查失败";
+    const members = await context.db.selectFrom("applications")
+      .innerJoin("run_application_results", "run_application_results.application_id", "applications.id")
+      .select([
+        "applications.id", "applications.company", "applications.job_title", "applications.progress_status_v2",
+      ])
+      .where("run_application_results.run_id", "=", id)
+      .orderBy("applications.created_at")
+      .execute();
+    let updated = { numUpdatedRows: 0n };
+    await context.db.transaction().execute(async (trx) => {
+      updated = await trx.updateTable("runs").set({
+        status: "failed",
+        error_code: body.code?.slice(0, 100) ?? "CAPTURE_FAILED",
+        error_message: failureMessage,
+        recognition_status: "failed",
+        recognition_evidence: failureMessage,
+        completed_at: completed,
+      }).where("id", "=", id).where("status", "=", "running").executeTakeFirst();
+      if (!Number(updated.numUpdatedRows)) return;
+      for (const member of members) {
+        const currentStatus = member.progress_status_v2 ?? "unset";
+        await trx.insertInto("notifications").values({
+          id: randomUUID(),
+          kind: "recognition_failed",
+          application_id: member.id,
+          run_id: id,
+          status_event_id: null,
+          company_snapshot: member.company,
+          job_title_snapshot: member.job_title,
+          from_status: currentStatus,
+          to_status: currentStatus,
+          confidence: null,
+          evidence: `识别失败：${failureMessage}`.slice(0, 500),
+          read_at: null,
+          created_at: completed,
+        }).execute();
+      }
+    });
     if (!Number(updated.numUpdatedRows)) return { ok: true, discarded: true };
     await context.db.updateTable("applications").set({
       last_run_status: "failed", last_run_at: completed, updated_at: completed,

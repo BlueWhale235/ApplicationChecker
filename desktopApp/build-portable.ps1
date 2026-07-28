@@ -16,6 +16,8 @@ $zipPath = Join-Path $artifactsRoot "ApplicationChecker-portable-win-x64.zip"
 $versionConfigPath = Join-Path $repositoryRoot "app-version.json"
 $originalCi = $env:CI
 $originalViteAppVersion = $env:VITE_APP_VERSION
+$buildLockPath = Join-Path $cacheRoot "build.lock"
+$buildLockStream = $null
 $isWindowsPlatform = [System.IO.Path]::DirectorySeparatorChar -eq '\'
 $pathComparison = if ($isWindowsPlatform) {
     [System.StringComparison]::OrdinalIgnoreCase
@@ -77,6 +79,39 @@ function Compress-JavaScriptTree([string]$Path) {
         }
         Move-Item -LiteralPath $temporaryPath -Destination $javascriptFile.FullName -Force
     }
+}
+
+function Invoke-NccBundle(
+    [string]$EntryPath,
+    [string]$TargetPath,
+    [string]$Label
+) {
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        & pnpm exec ncc build $EntryPath -o $TargetPath
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -eq 0) {
+            return
+        }
+        if ($attempt -eq 1) {
+            Write-Warning "$Label ncc bundling exited with code $exitCode. Removing partial output and retrying once."
+            Remove-BuildDirectory $TargetPath
+            Start-Sleep -Milliseconds 300
+            continue
+        }
+        throw "$Label bundling failed after 2 attempts (ncc exit code $exitCode). Entry: $EntryPath; Target: $TargetPath"
+    }
+}
+
+New-Item -ItemType Directory -Force -Path $cacheRoot | Out-Null
+try {
+    $buildLockStream = [System.IO.File]::Open(
+        $buildLockPath,
+        [System.IO.FileMode]::OpenOrCreate,
+        [System.IO.FileAccess]::ReadWrite,
+        [System.IO.FileShare]::None
+    )
+} catch {
+    throw "Another desktop build is already running. Wait for it to finish before starting a portable build."
 }
 
 Push-Location $repositoryRoot
@@ -262,10 +297,8 @@ try {
 
     $apiTarget = Join-Path $publishRoot "internal/api"
     $runnerTarget = Join-Path $publishRoot "internal/runner"
-    & pnpm exec ncc build (Join-Path $repositoryRoot "apps\api\dist\server.js") -o $apiTarget
-    if ($LASTEXITCODE -ne 0) { throw "API bundle failed." }
-    & pnpm exec ncc build (Join-Path $repositoryRoot "apps\runner\dist\runner.js") -o $runnerTarget
-    if ($LASTEXITCODE -ne 0) { throw "Runner bundle failed." }
+    Invoke-NccBundle (Join-Path $repositoryRoot "apps/api/dist/server.js") $apiTarget "API"
+    Invoke-NccBundle (Join-Path $repositoryRoot "apps/runner/dist/runner.js") $runnerTarget "Runner"
     Compress-JavaScriptTree $apiTarget
     Compress-JavaScriptTree $runnerTarget
 
@@ -301,4 +334,5 @@ finally {
     $env:CI = $originalCi
     $env:VITE_APP_VERSION = $originalViteAppVersion
     Pop-Location
+    $buildLockStream.Dispose()
 }

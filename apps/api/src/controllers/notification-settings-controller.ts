@@ -94,6 +94,7 @@ export async function registerNotificationSettingsController(
     return {
       items: rows.map((row) => ({
         id: row.id,
+        kind: row.kind,
         applicationId: row.application_id,
         runId: row.run_id,
         statusEventId: row.status_event_id,

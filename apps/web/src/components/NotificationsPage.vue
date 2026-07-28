@@ -49,7 +49,7 @@ function date(value: string): string {
 <template>
   <section class="page-content notification-page" :class="{ 'with-detail': detail }">
     <div class="page-heading">
-      <div><h1>消息通知</h1><p>集中查看 AI 自动识别到的岗位进展。</p></div>
+      <div><h1>消息通知</h1><p>集中查看自动识别到的岗位进展、识别失败和未命中提醒。</p></div>
       <div class="notification-heading-actions">
         <v-btn
           variant="outlined"
@@ -95,20 +95,35 @@ function date(value: string): string {
         :class="{ unread: !item.readAt }"
         @click="$emit('open', item)"
       >
-        <span class="notification-icon" :data-status="item.toStatus">
-          <i :class="item.toStatus === 'rejected' ? 'mdi mdi-close-circle-outline' : item.toStatus === 'offer' ? 'mdi mdi-party-popper' : 'mdi mdi-trending-up'"></i>
+        <span class="notification-icon" :data-status="item.toStatus" :data-kind="item.kind">
+          <i
+            :class="item.kind === 'recognition_failed'
+              ? 'mdi mdi-alert-circle-outline'
+              : item.kind === 'recognition_unmatched'
+                ? 'mdi mdi-text-search'
+                : item.toStatus === 'rejected'
+                  ? 'mdi mdi-close-circle-outline'
+                  : item.toStatus === 'offer' ? 'mdi mdi-party-popper' : 'mdi mdi-trending-up'"
+          ></i>
         </span>
         <span class="notification-content">
           <span class="notification-title">
             <strong>{{ item.company }}</strong>
             <span>{{ item.jobTitle }}</span>
           </span>
-          <span class="notification-change">
+          <span v-if="item.kind === 'progress'" class="notification-change">
             {{ progressLabels[item.fromStatus] }} <i class="mdi mdi-arrow-right"></i>
             <b :data-status="item.toStatus">{{ progressLabels[item.toStatus] }}</b>
           </span>
+          <span v-else class="notification-change notification-warning">
+            {{ item.kind === "recognition_failed" ? "自动识别失败" : "未命中有效岗位状态" }}
+            <b>岗位状态未修改</b>
+          </span>
           <span v-if="item.evidence" class="notification-evidence">{{ item.evidence }}</span>
-          <small>AI 自动识别<span v-if="item.confidence !== null"> · {{ Math.round(item.confidence * 100) }}%</span></small>
+          <small>
+            {{ item.kind === "progress" ? "自动识别" : "检查提醒" }}
+            <span v-if="item.confidence !== null"> · {{ Math.round(item.confidence * 100) }}%</span>
+          </small>
         </span>
         <time>{{ date(item.createdAt) }}</time>
         <i class="mdi mdi-chevron-right notification-chevron"></i>
@@ -164,6 +179,8 @@ function date(value: string): string {
 .notification-icon { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: #eaf5ef; color: #347a61; font-size: 22px; }
 .notification-icon[data-status="rejected"] { background: #fff0ec; color: #bd583c; }
 .notification-icon[data-status="offer"] { background: #fff6dc; color: #b37a18; }
+.notification-icon[data-kind="recognition_failed"] { background: #fff0ec; color: #bd583c; }
+.notification-icon[data-kind="recognition_unmatched"] { background: #fff6dc; color: #a26f16; }
 .notification-content { min-width: 0; display: grid; gap: 6px; }
 .notification-title { display: flex; gap: 8px; align-items: baseline; }
 .notification-title strong { font-size: 15px; }
@@ -172,6 +189,8 @@ function date(value: string): string {
 .notification-change { display: flex; align-items: center; gap: 7px; color: #68766f; font-size: 13px; }
 .notification-change b { color: #2f8062; }
 .notification-change b[data-status="rejected"] { color: #bd583c; }
+.notification-warning { color: #9a6417; }
+.notification-warning b { margin-left: 4px; color: #75817c; font-weight: 500; }
 .notification-evidence { max-width: 720px; color: #485a53; font-size: 13px; }
 .notification-content small, .notification-card time { color: #87938d; font-size: 12px; }
 .notification-card time { align-self: start; }

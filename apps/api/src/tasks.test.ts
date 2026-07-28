@@ -354,6 +354,7 @@ describe("task management routes", () => {
     expect(notifications.statusCode).toBe(200);
     expect(notifications.json()).toMatchObject({ total: 1 });
     expect(notifications.json().items[0]).toMatchObject({
+      kind: "progress",
       applicationId: "11111111-1111-4111-8111-111111111111",
       fromStatus: "screening",
       toStatus: "rejected",
@@ -387,6 +388,139 @@ describe("task management routes", () => {
       .where("id", "=", "11111111-1111-4111-8111-111111111111").executeTakeFirstOrThrow();
     expect(resumedRow.automation_paused).toBe(0);
 
+    await app.close();
+    await context.db.destroy();
+    context.raw.close();
+  });
+
+  it("notifies the user when recognition returns no matching status", async () => {
+    const { context, config } = await setup();
+    const recognizer = {
+      configured: true,
+      model: "vision-test",
+      recognize: vi.fn(),
+      recognizeGroup: vi.fn().mockResolvedValue({
+        provider: "vision-test",
+        results: [{
+          applicationId: "11111111-1111-4111-8111-111111111111",
+          matched: false,
+          rawStatus: null,
+          status: null,
+          confidence: 0,
+          evidence: "页面中没有找到该岗位的状态",
+        }],
+      }),
+    } satisfies StatusRecognizer;
+    const app = Fastify();
+    await registerRoutes(app, { context, config, recognizer, runnerHeartbeat: { at: Date.now() } });
+    const runId = await queueRun(context, "11111111-1111-4111-8111-111111111111", "manual");
+    await app.inject({
+      method: "POST", url: "/internal/claim",
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+    });
+    const complete = await app.inject({
+      method: "POST",
+      url: `/internal/runs/${runId}/complete`,
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+      payload: {
+        finalUrl: "https://example.com/status",
+        pageTitle: "投递记录",
+        screenshotBase64: Buffer.from("png").toString("base64"),
+        truncated: false,
+        browserState: { version: 1, cookies: [], origins: [] },
+      },
+    });
+    expect(complete.statusCode, complete.body).toBe(200);
+    const notifications = (await app.inject({ method: "GET", url: "/notifications" })).json();
+    expect(notifications).toMatchObject({
+      total: 1,
+      unreadCount: 1,
+      items: [{
+        kind: "recognition_unmatched",
+        applicationId: "11111111-1111-4111-8111-111111111111",
+        statusEventId: null,
+        fromStatus: "screening",
+        toStatus: "screening",
+      }],
+    });
+    expect(notifications.items[0].evidence).toContain("未命中岗位状态");
+    expect(await context.db.selectFrom("status_events").select("id").execute()).toHaveLength(0);
+    await app.close();
+    await context.db.destroy();
+    context.raw.close();
+  });
+
+  it("notifies every affected application when page capture or recognition fails", async () => {
+    const { context, config } = await setup();
+    const app = Fastify();
+    await registerRoutes(app, { context, config, runnerHeartbeat: { at: Date.now() } });
+    const runId = await queueRun(context, "11111111-1111-4111-8111-111111111111", "manual");
+    await app.inject({
+      method: "POST", url: "/internal/claim",
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+    });
+    const failed = await app.inject({
+      method: "POST",
+      url: `/internal/runs/${runId}/fail`,
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+      payload: { code: "CAPTURE_FAILED", message: "页面执行上下文已销毁" },
+    });
+    expect(failed.statusCode, failed.body).toBe(200);
+    const notifications = (await app.inject({ method: "GET", url: "/notifications" })).json();
+    expect(notifications).toMatchObject({
+      total: 1,
+      items: [{
+        kind: "recognition_failed",
+        statusEventId: null,
+        fromStatus: "screening",
+        toStatus: "screening",
+      }],
+    });
+    expect(notifications.items[0].evidence).toContain("页面执行上下文已销毁");
+    await app.close();
+    await context.db.destroy();
+    context.raw.close();
+  });
+
+  it("creates a failure notification when the AI recognizer throws", async () => {
+    const { context, config } = await setup();
+    const recognizer = {
+      configured: true,
+      model: "vision-test",
+      recognize: vi.fn(),
+      recognizeGroup: vi.fn().mockRejectedValue(new Error("AI 服务暂时不可用")),
+    } satisfies StatusRecognizer;
+    const app = Fastify();
+    await registerRoutes(app, { context, config, recognizer, runnerHeartbeat: { at: Date.now() } });
+    const runId = await queueRun(context, "11111111-1111-4111-8111-111111111111", "manual");
+    await app.inject({
+      method: "POST", url: "/internal/claim",
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+    });
+    const complete = await app.inject({
+      method: "POST",
+      url: `/internal/runs/${runId}/complete`,
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+      payload: {
+        finalUrl: "https://example.com/status",
+        pageTitle: "投递记录",
+        screenshotBase64: Buffer.from("png").toString("base64"),
+        truncated: false,
+        browserState: { version: 1, cookies: [], origins: [] },
+      },
+    });
+    expect(complete.statusCode, complete.body).toBe(200);
+    const notifications = (await app.inject({ method: "GET", url: "/notifications" })).json();
+    expect(notifications).toMatchObject({
+      total: 1,
+      items: [{
+        kind: "recognition_failed",
+        statusEventId: null,
+        fromStatus: "screening",
+        toStatus: "screening",
+      }],
+    });
+    expect(notifications.items[0].evidence).toContain("AI 服务暂时不可用");
     await app.close();
     await context.db.destroy();
     context.raw.close();

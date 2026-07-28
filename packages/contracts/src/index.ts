@@ -356,9 +356,10 @@ export interface TaskRunPage {
 
 export interface NotificationSummary {
   id: string;
+  kind: "progress" | "recognition_failed" | "recognition_unmatched";
   applicationId: string;
   runId: string | null;
-  statusEventId: string;
+  statusEventId: string | null;
   company: string;
   jobTitle: string;
   fromStatus: ProgressStatus;

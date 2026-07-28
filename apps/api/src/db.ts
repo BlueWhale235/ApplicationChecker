@@ -119,9 +119,10 @@ export interface StatusEventsTable {
 
 export interface NotificationsTable {
   id: string;
+  kind: Generated<"progress" | "recognition_failed" | "recognition_unmatched">;
   application_id: string;
   run_id: string | null;
-  status_event_id: string;
+  status_event_id: string | null;
   company_snapshot: string;
   job_title_snapshot: string;
   from_status: ProgressStatus;
@@ -317,9 +318,10 @@ CREATE TABLE IF NOT EXISTS status_events (
 CREATE INDEX IF NOT EXISTS status_events_application_created ON status_events(application_id, created_at DESC);
 CREATE TABLE IF NOT EXISTS notifications (
   id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL DEFAULT 'progress' CHECK(kind IN ('progress','recognition_failed','recognition_unmatched')),
   application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
   run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
-  status_event_id TEXT NOT NULL UNIQUE REFERENCES status_events(id) ON DELETE CASCADE,
+  status_event_id TEXT UNIQUE REFERENCES status_events(id) ON DELETE CASCADE,
   company_snapshot TEXT NOT NULL,
   job_title_snapshot TEXT NOT NULL,
   from_status TEXT NOT NULL,
@@ -489,6 +491,45 @@ export function createDb(filename: string): DbContext {
   if (!statusEventColumns.some((column) => column.name === "recognition_source")) {
     raw.exec("ALTER TABLE status_events ADD COLUMN recognition_source TEXT NOT NULL DEFAULT 'manual' CHECK(recognition_source IN ('manual','local','ai'))");
     raw.exec("UPDATE status_events SET recognition_source = source");
+  }
+  const notificationColumns = raw.prepare("PRAGMA table_info(notifications)").all() as Array<{
+    name: string;
+    notnull: number;
+  }>;
+  const notificationKindMissing = !notificationColumns.some((column) => column.name === "kind");
+  const statusEventRequired = notificationColumns.find((column) => column.name === "status_event_id")?.notnull === 1;
+  if (notificationKindMissing || statusEventRequired) {
+    raw.exec(`
+      BEGIN;
+      CREATE TABLE notifications_migrated (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL DEFAULT 'progress' CHECK(kind IN ('progress','recognition_failed','recognition_unmatched')),
+        application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+        run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
+        status_event_id TEXT UNIQUE REFERENCES status_events(id) ON DELETE CASCADE,
+        company_snapshot TEXT NOT NULL,
+        job_title_snapshot TEXT NOT NULL,
+        from_status TEXT NOT NULL,
+        to_status TEXT NOT NULL,
+        confidence REAL,
+        evidence TEXT,
+        read_at TEXT,
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO notifications_migrated(
+        id, kind, application_id, run_id, status_event_id, company_snapshot,
+        job_title_snapshot, from_status, to_status, confidence, evidence, read_at, created_at
+      )
+      SELECT
+        id, 'progress', application_id, run_id, status_event_id, company_snapshot,
+        job_title_snapshot, from_status, to_status, confidence, evidence, read_at, created_at
+      FROM notifications;
+      DROP TABLE notifications;
+      ALTER TABLE notifications_migrated RENAME TO notifications;
+      CREATE INDEX notifications_created ON notifications(created_at DESC);
+      CREATE INDEX notifications_unread ON notifications(read_at, created_at DESC);
+      COMMIT;
+    `);
   }
   raw.exec("CREATE UNIQUE INDEX IF NOT EXISTS status_events_one_applied ON status_events(application_id) WHERE event_type = 'applied'");
   raw.exec(`
