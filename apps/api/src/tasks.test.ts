@@ -582,6 +582,105 @@ describe("task management routes", () => {
     enabled.context.raw.close();
   });
 
+  it("cancels a stale login run when the check URL is removed and allows login refresh after adding a new URL", async () => {
+    const { context, config } = await setup();
+    const app = Fastify();
+    await registerRoutes(app, { context, config, runnerHeartbeat: { at: Date.now() } });
+    const created = await app.inject({
+      method: "POST",
+      url: "/applications",
+      payload: {
+        company: "登录状态公司",
+        jobTitle: "后端工程师",
+        checkUrl: "https://example.com/applications",
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const applicationId = created.json().id as string;
+    const queued = await app.inject({ method: "POST", url: `/applications/${applicationId}/runs` });
+    expect(queued.statusCode, queued.body).toBe(202);
+    const staleRunId = queued.json().runId as string;
+    await context.db.updateTable("runs").set({ status: "needs_login" }).where("id", "=", staleRunId).execute();
+
+    const removed = await app.inject({
+      method: "POST",
+      url: `/applications/${applicationId}/update`,
+      payload: { checkUrl: null },
+    });
+    expect(removed.statusCode, removed.body).toBe(200);
+    expect(removed.json().lastRunStatus).toBe("cancelled");
+    expect(await context.db.selectFrom("runs").select(["status", "error_code"]).where("id", "=", staleRunId)
+      .executeTakeFirstOrThrow()).toEqual({
+      status: "cancelled",
+      error_code: "CHECK_GROUP_CHANGED",
+    });
+    expect((await app.inject({ method: "POST", url: `/applications/${applicationId}/login` })).statusCode).toBe(400);
+
+    const restored = await app.inject({
+      method: "POST",
+      url: `/applications/${applicationId}/update`,
+      payload: { checkUrl: "https://example.org/candidate/status" },
+    });
+    expect(restored.statusCode, restored.body).toBe(200);
+    const refreshed = await app.inject({ method: "POST", url: `/applications/${applicationId}/login` });
+    expect(refreshed.statusCode, refreshed.body).toBe(201);
+    expect(await context.db.selectFrom("runs").select(["status", "application_id"])
+      .where("id", "=", refreshed.json().runId as string).executeTakeFirstOrThrow()).toEqual({
+      status: "needs_login",
+      application_id: applicationId,
+    });
+
+    await app.close();
+    await context.db.destroy();
+    context.raw.close();
+  });
+
+  it("repairs a stale active login run left by an older check-group change", async () => {
+    const { context, config } = await setup();
+    const app = Fastify();
+    await registerRoutes(app, { context, config, runnerHeartbeat: { at: Date.now() } });
+    const first = await app.inject({
+      method: "POST",
+      url: "/applications",
+      payload: {
+        company: "历史数据公司",
+        jobTitle: "前端工程师",
+        checkUrl: "https://example.com/old-status",
+      },
+    });
+    const applicationId = first.json().id as string;
+    const queued = await app.inject({ method: "POST", url: `/applications/${applicationId}/runs` });
+    const staleRunId = queued.json().runId as string;
+    await context.db.updateTable("runs").set({ status: "needs_login" }).where("id", "=", staleRunId).execute();
+
+    const second = await app.inject({
+      method: "POST",
+      url: "/applications",
+      payload: {
+        company: "历史数据公司",
+        jobTitle: "测试工程师",
+        checkUrl: "https://example.org/new-status",
+      },
+    });
+    const currentGroupId = second.json().checkGroupId as string;
+    await context.db.updateTable("applications").set({
+      check_group_id: currentGroupId,
+      check_url: "https://example.org/new-status",
+    }).where("id", "=", applicationId).execute();
+
+    const refreshed = await app.inject({ method: "POST", url: `/applications/${applicationId}/login` });
+    expect(refreshed.statusCode, refreshed.body).toBe(201);
+    expect(await context.db.selectFrom("runs").select(["status", "error_code"]).where("id", "=", staleRunId)
+      .executeTakeFirstOrThrow()).toEqual({
+      status: "cancelled",
+      error_code: "CHECK_GROUP_CHANGED",
+    });
+
+    await app.close();
+    await context.db.destroy();
+    context.raw.close();
+  });
+
   it("records email applications without a URL and adds the applied date to the timeline", async () => {
     const { context, config } = await setup();
     const app = Fastify();
