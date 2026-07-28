@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { onMounted } from "vue";
 import type {
   AppSettings,
+  BrowserStorageUsage,
   RecognitionMode,
 } from "@application-checker/contracts";
 
@@ -15,14 +17,26 @@ defineProps<{
     screenshotRetentionDays: number;
     defaultUserAgent: string;
   };
+  storage: BrowserStorageUsage | null;
   busy: boolean;
 }>();
-defineEmits<{
+const emit = defineEmits<{
   save: [];
   configureAi: [];
   configureStatusMappings: [];
   recognitionMode: [value: RecognitionMode];
+  refreshStorage: [];
+  clearStorage: [kind: "cache" | "temp"];
 }>();
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+}
+
+onMounted(() => emit("refreshStorage"));
 
 const recognitionModes: Array<{ title: string; value: RecognitionMode }> = [
   { title: "本地优先（推荐）", value: "local_first" },
@@ -90,6 +104,27 @@ const recognitionModes: Array<{ title: string; value: RecognitionMode }> = [
           配置状态映射
         </v-btn>
       </div>
+      <div class="content-card browser-storage-card">
+        <div class="card-title">
+          <div><h2>浏览器存储</h2><p>复用网页静态资源，并清理自动检查产生的临时文件。</p></div>
+          <i class="mdi mdi-database-cog-outline"></i>
+        </div>
+        <div class="storage-items">
+          <div>
+            <i class="mdi mdi-cached"></i>
+            <span><strong>网页资源缓存</strong><small>JS、CSS、字体和图片等，最多约 512 MB</small></span>
+            <b>{{ storage ? formatBytes(storage.cacheBytes) : "计算中…" }}</b>
+            <v-btn size="small" variant="outlined" :disabled="!storage" :loading="busy" @click="$emit('clearStorage', 'cache')">清除缓存</v-btn>
+          </div>
+          <div>
+            <i class="mdi mdi-folder-clock-outline"></i>
+            <span><strong>临时文件</strong><small>旧版或异常退出后遗留的 Edge 临时文件</small></span>
+            <b>{{ storage ? formatBytes(storage.tempBytes) : "计算中…" }}</b>
+            <v-btn size="small" variant="outlined" color="error" :disabled="!storage" :loading="busy" @click="$emit('clearStorage', 'temp')">清理临时文件</v-btn>
+          </div>
+        </div>
+        <p class="settings-help">正在检查、登录或加载规则预览时不能清理。新任务的临时目录会在任务结束后自动删除。</p>
+      </div>
       <div class="content-card project-card">
         <div>
           <span class="project-kicker">关于职迹</span>
@@ -130,6 +165,15 @@ const recognitionModes: Array<{ title: string; value: RecognitionMode }> = [
 .mapping-summary strong, .mapping-summary span { display: block; }
 .mapping-summary strong { font-size: 12px; }
 .mapping-summary span { margin-top: 3px; color: #718078; font-size: 10px; line-height: 1.5; }
+.browser-storage-card { grid-column: 1 / -1; }
+.storage-items { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.storage-items > div { display: grid; grid-template-columns: auto 1fr auto auto; gap: 11px; align-items: center; padding: 14px; border: 1px solid #e4ded3; border-radius: 9px; background: #fbf8f1; }
+.storage-items > div > i { color: #477363; font-size: 24px; }
+.storage-items span { min-width: 0; }
+.storage-items strong, .storage-items small { display: block; }
+.storage-items strong { color: #30453d; font-size: 12px; }
+.storage-items small { margin-top: 3px; color: #7a837f; font-size: 9px; }
+.storage-items b { color: #50645c; font-size: 11px; white-space: nowrap; }
 .project-card { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 22px; padding-top: 21px; padding-bottom: 21px; }
 .project-card > div { min-width: 0; }
 .project-card > div strong, .project-card > div small { display: block; }
@@ -145,6 +189,10 @@ const recognitionModes: Array<{ title: string; value: RecognitionMode }> = [
 @media (max-width: 850px) {
   .settings-grid { grid-template-columns: 1fr; }
   .settings-grid .content-card:first-child { grid-row: auto; }
+  .browser-storage-card { grid-column: auto; }
+  .storage-items { grid-template-columns: 1fr; }
+  .storage-items > div { grid-template-columns: auto 1fr auto; }
+  .storage-items > div .v-btn { grid-column: 1 / -1; }
   .project-card { grid-column: auto; align-items: stretch; flex-direction: column; }
   .project-card a { width: 100%; }
 }

@@ -30,6 +30,8 @@ async function setup(): Promise<{ folder: string; context: DbContext; config: Co
     dataPath: folder,
     databasePath: path.join(folder, "test.sqlite"),
     screenshotsPath,
+    browserCachePath: path.join(folder, "browser", "cache"),
+    tempPath: path.join(folder, "tmp"),
     runtimeSettingsPath: path.join(folder, "runtime-settings.json"),
     appBaseUrl: "http://127.0.0.1",
     runnerUrl: "http://runner",
@@ -134,6 +136,33 @@ describe("screenshot retention", () => {
 });
 
 describe("runtime settings and POST action routes", () => {
+  it("reports and clears browser storage only while no task is active", async () => {
+    const { context, config } = await setup();
+    await mkdir(path.join(config.browserCachePath, "Cache"), { recursive: true });
+    await mkdir(config.tempPath, { recursive: true });
+    await writeFile(path.join(config.browserCachePath, "Cache", "asset.js"), "12345");
+    await writeFile(path.join(config.tempPath, "edge.tmp"), "1234");
+    const app = Fastify();
+    await registerRoutes(app, { context, config, runnerHeartbeat: { at: Date.now() } });
+
+    const usage = await app.inject({ method: "GET", url: "/settings/browser-storage" });
+    expect(usage.statusCode, usage.body).toBe(200);
+    expect(usage.json()).toEqual({ cacheBytes: 5, tempBytes: 4 });
+
+    const cleared = await app.inject({ method: "POST", url: "/settings/browser-storage/cache/clear" });
+    expect(cleared.statusCode, cleared.body).toBe(200);
+    expect(cleared.json()).toMatchObject({ kind: "cache", beforeBytes: 5, afterBytes: 0, freedBytes: 5, failed: 0 });
+
+    expect(await queueRun(context, "11111111-1111-4111-8111-111111111111", "manual")).toBeTruthy();
+    const blocked = await app.inject({ method: "POST", url: "/settings/browser-storage/temp/clear" });
+    expect(blocked.statusCode).toBe(409);
+    expect(await stat(path.join(config.tempPath, "edge.tmp"))).toBeTruthy();
+
+    await app.close();
+    await context.db.destroy();
+    context.raw.close();
+  });
+
   it("persists browser and encrypted AI settings to the local runtime file", async () => {
     const { folder, context, config } = await setup();
     const app = Fastify();
@@ -543,11 +572,17 @@ describe("task management routes", () => {
     await registerRoutes(disabledApp, {
       context: disabled.context,
       config: disabled.config,
+      recognitionPreviewStore: new RecognitionPreviewStore(),
       runnerHeartbeat: { at: Date.now() },
     });
     expect((await disabledApp.inject({ method: "GET", url: "/debug/status" })).json()).toEqual({ enabled: false });
     expect((await disabledApp.inject({ method: "GET", url: "/debug/ai-traces" })).statusCode).toBe(404);
-    expect((await disabledApp.inject({ method: "GET", url: "/debug/parser-rules" })).statusCode).toBe(404);
+    expect((await disabledApp.inject({ method: "GET", url: "/parser-rules" })).json()).toEqual([]);
+    expect((await disabledApp.inject({
+      method: "POST",
+      url: "/recognition-previews",
+      payload: { applicationId: "11111111-1111-4111-8111-111111111111" },
+    })).statusCode).toBe(200);
     await disabledApp.close();
     await disabled.context.db.destroy();
     disabled.context.raw.close();
@@ -580,7 +615,7 @@ describe("task management routes", () => {
     const detail = await enabledApp.inject({ method: "GET", url: `/debug/ai-traces/${traceId}` });
     expect(detail.json().sanitizedRequest).toContain("[image omitted: 3 bytes]");
     expect((await enabledApp.inject({ method: "POST", url: "/debug/ai-traces/clear" })).json()).toEqual({ deleted: 1 });
-    expect((await enabledApp.inject({ method: "GET", url: "/debug/parser-rules" })).json()).toEqual([]);
+    expect((await enabledApp.inject({ method: "GET", url: "/parser-rules" })).json()).toEqual([]);
     const ruleCandidate = await enabledApp.inject({
       method: "POST",
       url: "/applications",
@@ -593,7 +628,7 @@ describe("task management routes", () => {
     expect(ruleCandidate.statusCode, ruleCandidate.body).toBe(201);
     const checkGroups = await enabledApp.inject({
       method: "GET",
-      url: "/debug/parser-rules/check-groups?q=%E6%B1%87%E5%B7%9D&limit=10",
+      url: "/parser-rules/check-groups?q=%E6%B1%87%E5%B7%9D&limit=10",
     });
     expect(checkGroups.statusCode, checkGroups.body).toBe(200);
     expect(checkGroups.json()).toMatchObject([
@@ -601,7 +636,7 @@ describe("task management routes", () => {
     ]);
     const createdRule = await enabledApp.inject({
       method: "POST",
-      url: "/debug/parser-rules",
+      url: "/parser-rules",
       payload: {
         name: "调试规则",
         enabled: true,
@@ -626,6 +661,15 @@ describe("task management routes", () => {
     });
     expect(createdRule.statusCode, createdRule.body).toBe(200);
     expect(createdRule.json()).toMatchObject({ name: "调试规则", version: 1 });
+    const singleExport = await enabledApp.inject({
+      method: "GET",
+      url: `/parser-rules/${createdRule.json().id as string}/export`,
+    });
+    expect(singleExport.statusCode, singleExport.body).toBe(200);
+    expect(singleExport.json()).toMatchObject({
+      schemaVersion: 1,
+      rules: [{ id: createdRule.json().id, name: "调试规则" }],
+    });
     await enabledApp.close();
     await enabled.context.db.destroy();
     enabled.context.raw.close();

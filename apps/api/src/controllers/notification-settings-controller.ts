@@ -54,6 +54,7 @@ import {
   normalizeCustomStatusMappings,
   parseStatusMappings,
 } from "@application-checker/status-mapping";
+import { clearDirectoryContents, directorySize } from "../storage-maintenance.js";
 import type {
   BrowserStateEnvelope,
   FastifyInstance,
@@ -71,7 +72,7 @@ export async function registerNotificationSettingsController(
   deps: RouteDeps,
 
 ): Promise<void> {
-  const { context, config, recognizer: injectedRecognizer, runnerHeartbeat } = deps;
+  const { context, config, recognizer: injectedRecognizer, recognitionPreviewStore, runnerHeartbeat } = deps;
 
   app.get("/notifications", async (request) => {
     const query = request.query as { scope?: string; limit?: string; offset?: string };
@@ -166,6 +167,26 @@ export async function registerNotificationSettingsController(
       runnerHealthy: Date.now() - runnerHeartbeat.at < 20_000,
       loginPresentation: config.desktopMode ? "external-window" : "vnc",
     };
+  });
+
+  app.get("/settings/browser-storage", async () => {
+    const [cacheBytes, tempBytes] = await Promise.all([
+      directorySize(config.browserCachePath),
+      directorySize(config.tempPath),
+    ]);
+    return { cacheBytes, tempBytes };
+  });
+
+  app.post("/settings/browser-storage/:kind/clear", async (request) => {
+    const kind = (request.params as { kind: string }).kind;
+    if (kind !== "cache" && kind !== "temp") throw httpError(404, "存储类型不存在");
+    const activeRun = await context.db.selectFrom("runs").select("id")
+      .where("status", "in", [...activeRunStatuses]).executeTakeFirst();
+    const previewBusy = recognitionPreviewStore?.list()
+      .some((preview) => preview.status === "queued" || preview.status === "running");
+    if (activeRun || previewBusy) throw httpError(409, "有检查、登录或预览任务正在进行，请结束后再清理");
+    const result = await clearDirectoryContents(kind === "cache" ? config.browserCachePath : config.tempPath);
+    return { kind, ...result };
   });
 
   app.post("/settings/update", { schema: { body: SettingsUpdateSchema } }, async (request) => {

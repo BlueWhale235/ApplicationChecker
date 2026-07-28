@@ -8,6 +8,7 @@ import { collectBrowserState, installBrowserState } from "./browser-state.js";
 import { classifyPage } from "./detection.js";
 import { captureFullPage } from "./full-page-capture.js";
 import { captureLocalPageSnapshot } from "./dom-snapshot.js";
+import { withNavigationRetry } from "./page-stability.js";
 
 const apiBase = (process.env.APP_INTERNAL_URL ?? "http://127.0.0.1:8080/api").replace(/\/$/, "");
 const token = process.env.RUNNER_INTERNAL_TOKEN ?? "development-runner-token-change-me-123456";
@@ -30,12 +31,19 @@ function findBrowserBin(): string {
 
 const browserBin = findBrowserBin();
 const browserDataPath = path.resolve(process.env.BROWSER_DATA_PATH ?? "./data/browser");
+const browserCachePath = path.resolve(process.env.BROWSER_CACHE_PATH ?? path.join(browserDataPath, "cache"));
+const browserCacheSize = 512 * 1024 * 1024;
 
 async function freshBrowserProfile(kind: string, id: string): Promise<string> {
   const folder = path.join(browserDataPath, `${kind}-${id}`);
   await rm(folder, { recursive: true, force: true });
-  await mkdir(folder, { recursive: true });
+  await mkdir(path.join(folder, "tmp"), { recursive: true });
   return folder;
+}
+
+function browserEnvironment(profilePath: string): NodeJS.ProcessEnv {
+  const taskTempPath = path.join(profilePath, "tmp");
+  return { ...process.env, TEMP: taskTempPath, TMP: taskTempPath, TMPDIR: taskTempPath };
 }
 
 async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -59,6 +67,8 @@ function launchArgs(proxyUrl: string | null): string[] {
     "--disable-background-networking",
     "--disable-features=Translate,MediaRouter",
     "--window-size=1440,900",
+    `--disk-cache-dir=${browserCachePath}`,
+    `--disk-cache-size=${browserCacheSize}`,
     ...(proxyUrl ? [`--proxy-server=${proxyUrl}`] : []),
   ];
 }
@@ -79,6 +89,20 @@ async function signals(page: Page, status: number | null) {
   return { url: page.url(), status, ...values };
 }
 
+async function captureStablePage(page: Page, status: number | null, includeSnapshot: boolean) {
+  return withNavigationRetry(page, async () => {
+    const startUrl = page.url();
+    const observed = await signals(page, status);
+    const detection = classifyPage(observed);
+    const image = await captureFullPage(page);
+    const snapshot = includeSnapshot ? await captureLocalPageSnapshot(page) : null;
+    if (page.url() !== startUrl) {
+      throw new Error("Page navigated during capture");
+    }
+    return { observed, detection, image, snapshot };
+  });
+}
+
 async function capture(job: RunnerJob): Promise<void> {
   let browser: Browser | null = null;
   let profilePath: string | null = null;
@@ -89,6 +113,7 @@ async function capture(job: RunnerJob): Promise<void> {
     browser = await puppeteer.launch({
       executablePath: browserBin,
       userDataDir: profilePath,
+      env: browserEnvironment(profilePath),
       headless: true,
       args: launchArgs(job.proxyUrl),
     });
@@ -109,9 +134,11 @@ async function capture(job: RunnerJob): Promise<void> {
     await installBrowserState(page, job.browserState);
     const response = await page.goto(job.url, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await settle(page);
-    const observed = await signals(page, response?.status() ?? null);
-    const detection = classifyPage(observed);
-    const image = await captureFullPage(page);
+    const { observed, detection, image, snapshot: pageSnapshot } = await captureStablePage(
+      page,
+      response?.status() ?? null,
+      job.recognitionMode !== "ai_only",
+    );
     if (detection.requiresLogin) {
       await api(`/internal/runs/${job.runId}/needs-login`, {
         method: "POST",
@@ -124,8 +151,7 @@ async function capture(job: RunnerJob): Promise<void> {
       });
       return;
     }
-    const pageSnapshot = job.recognitionMode === "ai_only" ? null : await captureLocalPageSnapshot(page);
-    const state = await collectBrowserState(browser, page, job.site);
+    const state = await withNavigationRetry(page, () => collectBrowserState(browser!, page, job.site));
     await api(`/internal/runs/${job.runId}/complete`, {
       method: "POST",
       body: JSON.stringify({
@@ -160,6 +186,7 @@ async function login(job: RunnerLoginJob): Promise<void> {
     browser = await puppeteer.launch({
       executablePath: browserBin,
       userDataDir: profilePath,
+      env: browserEnvironment(profilePath),
       headless: false,
       defaultViewport: null,
       args: [...launchArgs(job.proxyUrl), "--start-maximized"],
@@ -202,6 +229,7 @@ async function recognitionPreview(job: RunnerRecognitionPreviewJob): Promise<voi
     browser = await puppeteer.launch({
       executablePath: browserBin,
       userDataDir: profilePath,
+      env: browserEnvironment(profilePath),
       headless: true,
       args: launchArgs(job.proxyUrl),
     });
@@ -211,12 +239,8 @@ async function recognitionPreview(job: RunnerRecognitionPreviewJob): Promise<voi
     await installBrowserState(page, job.browserState);
     const response = await page.goto(job.url, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await settle(page);
-    const observed = await signals(page, response?.status() ?? null);
-    const detection = classifyPage(observed);
-    const [snapshot, image] = await Promise.all([
-      captureLocalPageSnapshot(page),
-      captureFullPage(page),
-    ]);
+    const { detection, image, snapshot } = await captureStablePage(page, response?.status() ?? null, true);
+    if (!snapshot) throw new Error("Recognition preview snapshot was not captured");
     await api(`/internal/recognition-previews/${job.previewId}/complete`, {
       method: "POST",
       body: JSON.stringify({

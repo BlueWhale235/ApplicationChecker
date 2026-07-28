@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import type {
-  AiSettingsUpdate, AppSettings, ApplicationDetail, ApplicationSummary, BrowserProfileSummary,
+  AiSettingsUpdate, AppSettings, ApplicationDetail, ApplicationSummary, BrowserProfileSummary, BrowserStorageUsage,
   CheckPlanUpdate, CreateApplication, NotificationPage, NotificationSummary, ProgressStatus, RecognitionMode, RunSummary, ScheduleMode, StatusMappings, TaskRunPage, TaskRunSummary,
 } from "@application-checker/contracts";
 import { DEFAULT_USER_AGENT, progressLabels } from "@application-checker/contracts";
@@ -31,6 +31,7 @@ const active = computed<AppPage>(() => (route.meta.page as AppPage | undefined) 
 const applications = ref<ApplicationSummary[]>([]);
 const detail = ref<ApplicationDetail | null>(null);
 const profiles = ref<BrowserProfileSummary[]>([]);
+const browserStorage = ref<BrowserStorageUsage | null>(null);
 const settings = ref<AppSettings>({
   globalCron: null,
   timezone: "Asia/Shanghai",
@@ -168,7 +169,7 @@ async function refresh(silent = false) {
     profiles.value = browserProfiles;
     unreadNotificationCount.value = notificationCount.unreadCount;
     debugEnabled.value = debugStatus.enabled;
-    if (["debug", "rule_studio"].includes(active.value) && !debugStatus.enabled) void router.replace(pagePaths.settings);
+    if (active.value === "debug" && !debugStatus.enabled) void router.replace(pagePaths.settings);
     if (!silent) {
       settingsForm.globalCron = appSettings.globalCron ?? "";
       settingsForm.timezone = appSettings.timezone;
@@ -229,7 +230,7 @@ watch(taskHistoryPageCount, (count) => {
 });
 watch([query, statusFilter, scheduleFilter], () => { applicationPage.value = 1; });
 watch([active, debugEnabled], ([page, enabled]) => {
-  if (["debug", "rule_studio"].includes(page) && !loading.value && !enabled) void router.replace(pagePaths.settings);
+  if (page === "debug" && !loading.value && !enabled) void router.replace(pagePaths.settings);
 });
 watch(applicationPageCount, (count) => {
   if (applicationPage.value > count) applicationPage.value = count;
@@ -532,6 +533,32 @@ async function saveSettings() {
     flash(cleaned ? `设置已保存，并清理了 ${cleaned} 张过期截图` : "设置已保存");
   });
 }
+async function refreshBrowserStorage() {
+  try {
+    browserStorage.value = await api.browserStorage();
+  } catch (value) {
+    error.value = value instanceof Error ? value.message : "无法读取浏览器存储占用";
+  }
+}
+async function clearBrowserStorage(kind: "cache" | "temp") {
+  const cache = kind === "cache";
+  if (!await askConfirm({
+    title: cache ? "清除浏览器缓存" : "清理临时文件",
+    message: cache
+      ? "将删除自动检查浏览器缓存的 JS、CSS、字体、图片等资源。登录状态不会被删除，后续检查可能需要重新下载页面资源。"
+      : "将删除 data/tmp 中旧版或异常退出后遗留的临时文件。登录状态、岗位、任务和截图不会被删除。",
+    confirmLabel: cache ? "清除缓存" : "清理临时文件",
+    danger: true,
+  })) return;
+  await action(async () => {
+    const result = await api.clearBrowserStorage(kind);
+    await refreshBrowserStorage();
+    const freed = result.freedBytes < 1024 ** 2
+      ? `${Math.round(result.freedBytes / 1024)} KB`
+      : `${(result.freedBytes / 1024 ** 2).toFixed(1)} MB`;
+    flash(`${cache ? "浏览器缓存" : "临时文件"}已清理，释放 ${freed}${result.failed ? `，${result.failed} 项因占用未能删除` : ""}`);
+  });
+}
 async function saveAiSettings(value: AiSettingsUpdate) {
   await action(async () => {
     await api.updateAiSettings(value);
@@ -735,8 +762,11 @@ async function deleteProfile(site: string) {
           v-else-if="active === 'settings'"
           :settings="settings"
           :form="settingsForm"
+          :storage="browserStorage"
           :busy="busy"
           @save="saveSettings"
+          @refresh-storage="refreshBrowserStorage"
+          @clear-storage="clearBrowserStorage"
           @configure-ai="aiSettingsOpen = true"
           @configure-status-mappings="statusMappingsOpen = true"
           @recognition-mode="saveRecognitionMode"
@@ -750,7 +780,7 @@ async function deleteProfile(site: string) {
           @notice="flash"
         />
         <RuleStudioPage
-          v-else-if="active === 'rule_studio' && debugEnabled"
+          v-else-if="active === 'rule_studio'"
           :busy="busy"
           :key="debugRefreshToken"
           @delete="deleteParserRule"

@@ -173,8 +173,8 @@ export interface LocalRecognitionResultItem {
 }
 
 export interface LocalRecognitionResult {
-  adapterId: string;
-  adapterVersion: string;
+  adapterId: string | null;
+  adapterVersion: string | null;
   route: ParserRouteRule | null;
   pageType: "status" | "official_homepage" | "login" | "blank" | "unknown";
   pageEvidence: string | null;
@@ -496,6 +496,19 @@ export interface AppSettings {
   builtinStatusMappings: StatusMappings;
   runnerHealthy: boolean;
   loginPresentation: "vnc" | "external-window";
+}
+
+export interface BrowserStorageUsage {
+  cacheBytes: number;
+  tempBytes: number;
+}
+
+export interface BrowserStorageCleanupResult {
+  kind: "cache" | "temp";
+  beforeBytes: number;
+  afterBytes: number;
+  freedBytes: number;
+  failed: number;
 }
 
 export interface BrowserCookie {

@@ -93,6 +93,7 @@ public partial class MainWindow : Window
             ["APP_INTERNAL_URL"] = $"{baseUrl}/api",
             ["BROWSER_BIN"] = edgePath,
             ["BROWSER_DATA_PATH"] = _paths.Browser,
+            ["BROWSER_CACHE_PATH"] = Path.Combine(_paths.Browser, "cache"),
             ["TEMP"] = _paths.Temp,
             ["TMP"] = _paths.Temp,
         };

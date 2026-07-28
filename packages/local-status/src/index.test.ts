@@ -29,12 +29,19 @@ function node(id: number, text: string, y: number, parentId: number | null = nul
 
 describe("path registry", () => {
   it.each([
-    ["https://app.zhiye.com/personal/delivery?foo=1#x", "zhiye"],
+    ["https://app.zhiye.com/personal/delivery?foo=1#x", "beisen"],
     ["https://jobs.feishu.cn/campus/applications", "feishu"],
     ["https://candidate.mokahr.com/applications/123", "mokahr"],
-    ["https://example.com/jobs", "generic"],
   ])("routes %s to %s without query/hash participation", (url, expected) => {
-    expect(resolveParserAdapter(snapshot(url, [])).adapter.id).toBe(expected);
+    expect(resolveParserAdapter(snapshot(url, [])).adapter?.id).toBe(expected);
+  });
+
+  it("returns no adapter for unsupported websites", () => {
+    expect(resolveParserAdapter(snapshot("https://example.com/jobs", []))).toEqual({
+      adapter: null,
+      route: null,
+      matchedBy: null,
+    });
   });
 
   it("rejects exact conflicts at the same priority", () => {
@@ -63,7 +70,7 @@ describe("local recognition", () => {
   });
 
   it("uses user-defined mapping pills", () => {
-    const result = recognizeLocalPage(snapshot("https://example.com/jobs", [
+    const result = recognizeLocalPage(snapshot("https://candidate.mokahr.com/applications", [
       node(1, "Backend Engineer", 10),
       node(2, "HR Approved", 50, null, ["current"]),
     ]), [{ id: "job-1", jobTitle: "Backend Engineer" }], {
@@ -79,7 +86,7 @@ describe("local recognition", () => {
   });
 
   it("does not guess when duplicate titles are ambiguous", () => {
-    const result = recognizeLocalPage(snapshot("https://example.com/jobs", [
+    const result = recognizeLocalPage(snapshot("https://candidate.mokahr.com/applications", [
       node(1, "产品经理", 10), node(2, "初筛", 40),
       node(3, "产品经理", 400), node(4, "待面试", 440),
     ]), [{ id: "job-1", jobTitle: "产品经理" }]);
@@ -90,6 +97,20 @@ describe("local recognition", () => {
     const result = recognizeLocalPage(snapshot("https://app.zhiye.com/", [], " "), [{ id: "job-1", jobTitle: "产品经理" }]);
     expect(result).toMatchObject({ pageType: "blank" });
     expect(result.results[0]).toMatchObject({ matched: true, status: "unset" });
+  });
+
+  it("does not guess on an unsupported website", () => {
+    const result = recognizeLocalPage(snapshot("https://example.com/jobs", [
+      node(1, "产品经理", 10),
+      node(2, "初筛", 40),
+    ], "产品经理\n初筛\n投递记录"), [{ id: "job-1", jobTitle: "产品经理" }]);
+    expect(result).toMatchObject({
+      adapterId: null,
+      adapterVersion: null,
+      pageType: "unknown",
+      fallbackReason: "未命中支持的本地适配器，需要 AI 回退",
+    });
+    expect(result.results[0]).toMatchObject({ matched: false, status: null });
   });
 
   it("normalizes Unicode, case, whitespace and punctuation", () => {

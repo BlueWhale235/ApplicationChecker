@@ -10,6 +10,8 @@ import type {
   ApplicationDetail,
   ApplicationSummary,
   BrowserProfileSummary,
+  BrowserStorageCleanupResult,
+  BrowserStorageUsage,
   CheckGroupSummary,
   CheckPlanUpdate,
   CreateApplication,
@@ -90,39 +92,44 @@ export const api = {
   aiDebugTraces: (limit = 50) => request<AiDebugTraceSummary[]>(`/debug/recognition-traces?limit=${limit}`),
   aiDebugTrace: (id: string) => request<AiDebugTraceDetail>(`/debug/recognition-traces/${id}`),
   clearAiDebugTraces: () => request<{ deleted: number }>("/debug/recognition-traces/clear", { method: "POST" }),
-  recognitionPreviews: () => request<RecognitionPreviewDetail[]>("/debug/recognition-previews"),
-  createRecognitionPreview: (applicationId: string) => request<RecognitionPreviewDetail>("/debug/recognition-previews", {
+  recognitionPreviews: () => request<RecognitionPreviewDetail[]>("/recognition-previews"),
+  createRecognitionPreview: (applicationId: string) => request<RecognitionPreviewDetail>("/recognition-previews", {
     method: "POST", body: JSON.stringify({ applicationId }),
   }),
-  recognitionPreview: (id: string) => request<RecognitionPreviewDetail>(`/debug/recognition-previews/${id}`),
-  recognitionPreviewSnapshot: (id: string) => request<RecognitionPreviewSnapshot>(`/debug/recognition-previews/${id}/snapshot`),
-  recognitionPreviewScreenshotUrl: (id: string) => `/api/debug/recognition-previews/${id}/screenshot`,
-  parserRules: () => request<AssistedParserRule[]>("/debug/parser-rules"),
+  recognitionPreview: (id: string) => request<RecognitionPreviewDetail>(`/recognition-previews/${id}`),
+  recognitionPreviewSnapshot: (id: string) => request<RecognitionPreviewSnapshot>(`/recognition-previews/${id}/snapshot`),
+  recognitionPreviewScreenshotUrl: (id: string) => `/api/recognition-previews/${id}/screenshot`,
+  parserRules: () => request<AssistedParserRule[]>("/parser-rules"),
   parserRuleCheckGroups: (q = "", limit = 30) =>
-    request<RuleStudioCheckGroupOption[]>(`/debug/parser-rules/check-groups?q=${encodeURIComponent(q)}&limit=${limit}`),
+    request<RuleStudioCheckGroupOption[]>(`/parser-rules/check-groups?q=${encodeURIComponent(q)}&limit=${limit}`),
   generateParserRule: (previewId: string, selection: AssistedRuleSelection) =>
-    request<{ definition: AssistedParserRuleDefinition; errors: string[] }>("/debug/parser-rules/generate", {
+    request<{ definition: AssistedParserRuleDefinition; errors: string[] }>("/parser-rules/generate", {
       method: "POST", body: JSON.stringify({ previewId, selection }),
     }),
   testParserRule: (previewId: string, rule: AssistedParserRule) =>
-    request<AssistedRuleTestResult>("/debug/parser-rules/test", {
+    request<AssistedRuleTestResult>("/parser-rules/test", {
       method: "POST", body: JSON.stringify({ previewId, rule }),
     }),
   createParserRule: (body: {
     name: string; enabled: boolean; priority: number; definition: AssistedParserRuleDefinition; tested?: boolean;
-  }) => request<AssistedParserRule>("/debug/parser-rules", { method: "POST", body: JSON.stringify(body) }),
+  }) => request<AssistedParserRule>("/parser-rules", { method: "POST", body: JSON.stringify(body) }),
   updateParserRule: (id: string, body: {
     name: string; enabled: boolean; priority: number; definition: AssistedParserRuleDefinition; tested?: boolean;
-  }) => request<AssistedParserRule>(`/debug/parser-rules/${id}`, { method: "PUT", body: JSON.stringify(body) }),
-  deleteParserRule: (id: string) => request<{ deleted: number }>(`/debug/parser-rules/${id}/delete`, { method: "POST" }),
-  exportParserRules: () => request<{ schemaVersion: 1; exportedAt: string; rules: AssistedParserRule[] }>("/debug/parser-rules/export"),
+  }) => request<AssistedParserRule>(`/parser-rules/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteParserRule: (id: string) => request<{ deleted: number }>(`/parser-rules/${id}/delete`, { method: "POST" }),
+  exportParserRules: () => request<{ schemaVersion: 1; exportedAt: string; rules: AssistedParserRule[] }>("/parser-rules/export"),
+  exportParserRule: (id: string) =>
+    request<{ schemaVersion: 1; exportedAt: string; rules: AssistedParserRule[] }>(`/parser-rules/${id}/export`),
   importParserRules: (body: { schemaVersion: number; rules: AssistedParserRule[]; confirm: boolean }) =>
-    request<{ added: number; skipped: number; conflicts: string[] }>("/debug/parser-rules/import", {
+    request<{ added: number; skipped: number; conflicts: string[] }>("/parser-rules/import", {
       method: "POST", body: JSON.stringify(body),
     }),
   profiles: () => request<BrowserProfileSummary[]>("/browser-profiles"),
   deleteProfile: (site: string) => request<void>(`/browser-profiles/${encodeURIComponent(site)}/delete`, { method: "POST" }),
   settings: () => request<AppSettings>("/settings"),
+  browserStorage: () => request<BrowserStorageUsage>("/settings/browser-storage"),
+  clearBrowserStorage: (kind: "cache" | "temp") =>
+    request<BrowserStorageCleanupResult>(`/settings/browser-storage/${kind}/clear`, { method: "POST" }),
   updateSettings: (body: SettingsUpdate) => request<{
     ok: true;
     screenshotCleanup: { deleted: number; missing: number; failed: number };

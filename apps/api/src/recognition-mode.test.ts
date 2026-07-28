@@ -16,7 +16,7 @@ afterEach(async () => {
 });
 
 const pageSnapshot: LocalPageSnapshot = {
-  url: "https://example.com/status",
+  url: "https://candidate.mokahr.com/applications/123",
   title: "申请进度",
   language: "zh-CN",
   visibleText: "产品经理\n业务筛选",
@@ -46,6 +46,8 @@ async function setup(mode: RecognitionMode) {
     dataPath: folder,
     databasePath: path.join(folder, "test.sqlite"),
     screenshotsPath: path.join(folder, "screenshots"),
+    browserCachePath: path.join(folder, "browser", "cache"),
+    tempPath: path.join(folder, "tmp"),
     runtimeSettingsPath: path.join(folder, "runtime-settings.json"),
     appBaseUrl: "http://127.0.0.1",
     runnerUrl: "http://runner",
@@ -172,5 +174,17 @@ describe("recognition modes", () => {
     expect(recognizeGroup).toHaveBeenCalledTimes(1);
     expect(recognizeGroup.mock.calls[0]?.[0].applications).toHaveLength(1);
     expect(detail.application).toMatchObject({ progressStatus: "interviewed", progressSource: "ai" });
+  });
+
+  it("local_first falls back to AI when no built-in or user adapter matches", async () => {
+    const unsupported = {
+      ...pageSnapshot,
+      url: "https://example.com/status",
+    };
+    const { recognizeGroup, detail } = await exercise("local_first", unsupported);
+    expect(recognizeGroup).toHaveBeenCalledTimes(1);
+    expect(recognizeGroup.mock.calls[0]?.[0].applications).toHaveLength(1);
+    expect(detail.application).toMatchObject({ progressStatus: "interviewed", progressSource: "ai" });
+    expect(detail.runs[0]).toMatchObject({ recognitionSource: "ai" });
   });
 });

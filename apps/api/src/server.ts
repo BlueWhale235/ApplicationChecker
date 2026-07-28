@@ -18,7 +18,7 @@ const context = createDb(config.databasePath);
 await initializeRuntimeSettings(context, config);
 const runnerHeartbeat = { at: 0 };
 const aiDebugStore = config.debugTools ? new AiDebugStore() : undefined;
-const recognitionPreviewStore = config.debugTools ? new RecognitionPreviewStore() : undefined;
+const recognitionPreviewStore = new RecognitionPreviewStore();
 const app = Fastify({
   logger: true,
   bodyLimit: 35 * 1024 * 1024,
@@ -37,7 +37,7 @@ await app.register(async (api) => {
     config,
     runnerHeartbeat,
     ...(aiDebugStore ? { aiDebugStore } : {}),
-    ...(recognitionPreviewStore ? { recognitionPreviewStore } : {}),
+    recognitionPreviewStore,
   });
 }, { prefix: "/api" });
 

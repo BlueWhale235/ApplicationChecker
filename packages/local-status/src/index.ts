@@ -38,7 +38,7 @@ export interface ParserAdapter {
 
 const adapters: ParserAdapter[] = [
   {
-    id: "zhiye",
+    id: "beisen",
     version: LOCAL_PARSER_VERSION,
     priority: 100,
     routes: [
@@ -69,13 +69,6 @@ const adapters: ParserAdapter[] = [
     ],
     domFeatures: ["mokahr", "moka", "Moka"],
     containerHints: ["application", "delivery", "process", "progress", "resume"],
-  },
-  {
-    id: "generic",
-    version: LOCAL_PARSER_VERSION,
-    priority: 0,
-    routes: [],
-    containerHints: ["application", "job", "position", "resume", "process", "progress"],
   },
 ];
 
@@ -381,9 +374,9 @@ export function validateParserAdapters(items: ParserAdapter[] = adapters): void 
 }
 
 export function resolveParserAdapter(snapshot: LocalPageSnapshot): {
-  adapter: ParserAdapter;
+  adapter: ParserAdapter | null;
   route: ParserRouteRule | null;
-  matchedBy: "path" | "dom" | "generic";
+  matchedBy: "path" | "dom" | null;
 } {
   validateParserAdapters();
   const url = new URL(snapshot.url);
@@ -410,11 +403,11 @@ export function resolveParserAdapter(snapshot: LocalPageSnapshot): {
     ...snapshot.nodes.slice(0, 500).flatMap((node) => [node.classes.join(" "), node.dataStatus ?? ""]),
   ].join(" "));
   for (const adapter of ordered) {
-    if (adapter.id !== "generic" && adapter.domFeatures?.some((feature) => fingerprint.includes(normalizeRecognitionText(feature)))) {
+    if (adapter.domFeatures?.some((feature) => fingerprint.includes(normalizeRecognitionText(feature)))) {
       return { adapter, route: null, matchedBy: "dom" };
     }
   }
-  return { adapter: adapters.find((adapter) => adapter.id === "generic")!, route: null, matchedBy: "generic" };
+  return { adapter: null, route: null, matchedBy: null };
 }
 
 function classifySnapshot(snapshot: LocalPageSnapshot, candidates: LocalRecognitionCandidate[]) {
@@ -522,7 +515,7 @@ function parseCandidate(
     && Math.abs(existing.node.y - candidateNode.node.y) <= 5
     && Math.abs(existing.node.x - candidateNode.node.x) <= 12));
   const exact = titleNodes.filter(({ normalized }) => normalized === target);
-  const topZhiyeExact = adapter.id === "zhiye" && exact.length > 1
+  const topZhiyeExact = adapter.id === "beisen" && exact.length > 1
     ? [...exact].sort((left, right) => left.node.y - right.node.y)[0]
     : null;
   const chosen = exact.length === 1 ? exact[0]
@@ -595,10 +588,31 @@ export function recognizeLocalPage(
   }
   const resolved = resolveParserAdapter(snapshot);
   const classification = classifySnapshot(snapshot, candidates);
+  if (!resolved.adapter) {
+    return {
+      adapterId: null,
+      adapterVersion: null,
+      route: null,
+      pageType: classification.type === "status" ? "unknown" : classification.type,
+      pageEvidence: classification.evidence,
+      results: candidates.map((candidate) => ({
+        applicationId: candidate.id,
+        matched: false,
+        rawStatus: null,
+        status: null,
+        confidence: 0,
+        evidence: "当前页面未命中北森、Moka、飞书或已启用的用户规则",
+        titleMatch: "none",
+        statusRule: null,
+      })),
+      fallbackReason: "未命中支持的本地适配器，需要 AI 回退",
+    };
+  }
+  const adapter = resolved.adapter;
   if (classification.type !== "status") {
     return {
-      adapterId: resolved.adapter.id,
-      adapterVersion: resolved.adapter.version,
+      adapterId: adapter.id,
+      adapterVersion: adapter.version,
       route: resolved.route,
       pageType: classification.type,
       pageEvidence: classification.evidence,
@@ -615,16 +629,16 @@ export function recognizeLocalPage(
       fallbackReason: null,
     };
   }
-  const results = candidates.map((candidate) => parseCandidate(snapshot, resolved.adapter, candidate, statusRules));
+  const results = candidates.map((candidate) => parseCandidate(snapshot, adapter, candidate, statusRules));
   return {
-    adapterId: resolved.adapter.id,
-    adapterVersion: resolved.adapter.version,
+    adapterId: adapter.id,
+    adapterVersion: adapter.version,
     route: resolved.route,
     pageType: "status",
     pageEvidence: null,
     results,
     fallbackReason: results.every((result) => !result.matched)
-      ? `适配器 ${resolved.adapter.id} 未可靠匹配任何岗位`
+      ? `适配器 ${adapter.id} 未可靠匹配任何岗位`
       : results.some((result) => !result.matched) ? "部分岗位需要 AI 回退" : null,
   };
 }

@@ -355,9 +355,9 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
               : aiMembers.length && !recognizer.configured ? (localResult ? "partial" : "skipped")
                 : "succeeded";
     const recognitionProvider = recognitionSource === "mixed"
-      ? `local:${localResult?.adapterId ?? "generic"} + ai:${aiProvider ?? "unknown"}`
+      ? `local:${localResult?.adapterId ?? "none"} + ai:${aiProvider ?? "unknown"}`
       : recognitionSource === "local"
-        ? `local:${localResult?.adapterId ?? "generic"}`
+        ? `local:${localResult?.adapterId ?? "none"}`
         : recognitionSource === "ai" ? aiProvider : localResult ? `local:${localResult.adapterId}` : null;
     if (recognitionSource === "mixed") aiDebugStore?.markMixed(id, aiProvider);
     const stillRunning = await context.db.selectFrom("runs").select("status").where("id", "=", id).executeTakeFirst();
@@ -504,7 +504,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
   });
 
   app.post("/internal/recognition-previews/:id/complete", async (request) => {
-    if (!config.debugTools || !recognitionPreviewStore) throw httpError(404, "识别预览功能未启用");
+    if (!recognitionPreviewStore) throw httpError(503, "规则预览服务未启用");
     const id = (request.params as { id: string }).id;
     const body = request.body as {
       snapshot: LocalPageSnapshot;
@@ -529,7 +529,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
   });
 
   app.post("/internal/recognition-previews/:id/fail", async (request) => {
-    if (!config.debugTools || !recognitionPreviewStore) throw httpError(404, "识别预览功能未启用");
+    if (!recognitionPreviewStore) throw httpError(503, "规则预览服务未启用");
     const id = (request.params as { id: string }).id;
     recognitionPreviewStore.fail(id, (request.body as { message?: string }).message ?? "Preview failed");
     return { ok: true };

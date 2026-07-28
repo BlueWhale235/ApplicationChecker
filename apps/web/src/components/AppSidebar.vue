@@ -30,7 +30,7 @@ defineEmits<{ change: [value: Page] }>();
       <button v-if="debugEnabled" :class="{ active: active === 'debug' }" @click="$emit('change', 'debug')">
         <i class="mdi mdi-bug-outline"></i><span>识别调试</span>
       </button>
-      <button v-if="debugEnabled" :class="{ active: active === 'rule_studio' }" @click="$emit('change', 'rule_studio')">
+      <button :class="{ active: active === 'rule_studio' }" @click="$emit('change', 'rule_studio')">
         <i class="mdi mdi-vector-square"></i><span>规则工作台</span>
       </button>
     </nav>

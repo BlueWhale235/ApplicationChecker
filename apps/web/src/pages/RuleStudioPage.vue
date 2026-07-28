@@ -26,6 +26,7 @@ const emit = defineEmits<{
 }>();
 
 const rules = ref<AssistedParserRule[]>([]);
+const ruleQuery = ref("");
 const selectedApplicationId = ref("");
 const checkGroupOptions = ref<RuleStudioCheckGroupOption[]>([]);
 const checkGroupSearch = ref("");
@@ -38,7 +39,6 @@ const selectedStatusNodeId = ref<number | null>(null);
 const picking = ref<"title" | "status">("title");
 const hoveredNodeId = ref<number | null>(null);
 const testResult = ref<AssistedRuleTestResult | null>(null);
-const editingId = ref<string | null>(null);
 const draftDefinition = ref<AssistedParserRuleDefinition | null>(null);
 const draftErrors = ref<string[]>([]);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -57,6 +57,12 @@ const applicationItems = computed(() => checkGroupOptions.value.map((item) => ({
   title: `${item.company} · ${item.jobTitle}${item.memberCount > 1 ? ` · ${item.memberCount} 个岗位` : ""} · ${item.site}`,
   value: item.applicationId,
 })));
+const filteredRules = computed(() => {
+  const query = ruleQuery.value.trim().toLocaleLowerCase();
+  if (!query) return rules.value;
+  return rules.value.filter((rule) =>
+    `${rule.name} ${rule.definition.hostname} ${rule.definition.pathname}`.toLocaleLowerCase().includes(query));
+});
 const selectedNodes = computed(() => new Set([
   selectedTitleNodeId.value,
   selectedStatusNodeId.value,
@@ -143,7 +149,6 @@ async function loadCheckGroups(query = ""): Promise<void> {
 }
 
 function resetEditor(): void {
-  editingId.value = null;
   selectedTitleNodeId.value = null;
   selectedStatusNodeId.value = null;
   picking.value = "title";
@@ -214,18 +219,17 @@ async function generateRule(): Promise<void> {
 
 function currentRule(): AssistedParserRule | null {
   if (!draftDefinition.value) return null;
-  const existing = editingId.value ? rules.value.find((rule) => rule.id === editingId.value) : null;
   const now = new Date().toISOString();
   return {
-    id: existing?.id ?? "draft",
+    id: "draft",
     name: editor.name,
     enabled: editor.enabled,
     priority: editor.priority,
-    version: existing?.version ?? 1,
+    version: 1,
     definition: { ...draftDefinition.value, hostname: editor.hostname, pathname: editor.pathname, layout: editor.layout },
-    createdAt: existing?.createdAt ?? now,
+    createdAt: now,
     updatedAt: now,
-    lastTestedAt: existing?.lastTestedAt ?? null,
+    lastTestedAt: null,
   };
 }
 
@@ -254,29 +258,13 @@ async function saveRule(): Promise<void> {
       definition: rule.definition,
       tested: true,
     };
-    if (editingId.value) await api.updateParserRule(editingId.value, body);
-    else await api.createParserRule(body);
+    await api.createParserRule(body);
     await loadRules();
     resetEditor();
     emit("notice", "解析规则已保存");
   } catch (value) {
     emit("failure", value instanceof Error ? value.message : "保存规则失败");
   }
-}
-
-function editRule(rule: AssistedParserRule, duplicate = false): void {
-  editingId.value = duplicate ? null : rule.id;
-  draftDefinition.value = structuredClone(rule.definition);
-  draftErrors.value = [];
-  testResult.value = null;
-  Object.assign(editor, {
-    name: duplicate ? `${rule.name} 副本` : rule.name,
-    layout: rule.definition.layout,
-    hostname: rule.definition.hostname,
-    pathname: rule.definition.pathname,
-    priority: duplicate ? rule.priority - 1 : rule.priority,
-    enabled: rule.enabled,
-  });
 }
 
 async function toggleRule(rule: AssistedParserRule): Promise<void> {
@@ -296,12 +284,26 @@ async function toggleRule(rule: AssistedParserRule): Promise<void> {
 async function exportRules(): Promise<void> {
   try {
     const data = await api.exportParserRules();
-    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `application-checker-parser-rules-${new Date().toISOString().slice(0, 10)}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    downloadRules(data, `application-checker-parser-rules-${new Date().toISOString().slice(0, 10)}.json`);
+  } catch (value) {
+    emit("failure", value instanceof Error ? value.message : "导出规则失败");
+  }
+}
+
+function downloadRules(data: { schemaVersion: 1; exportedAt: string; rules: AssistedParserRule[] }, filename: string): void {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+async function exportRule(rule: AssistedParserRule): Promise<void> {
+  try {
+    const data = await api.exportParserRule(rule.id);
+    const safeName = rule.name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").slice(0, 80) || "parser-rule";
+    downloadRules(data, `${safeName}.json`);
   } catch (value) {
     emit("failure", value instanceof Error ? value.message : "导出规则失败");
   }
@@ -351,7 +353,7 @@ onBeforeUnmount(() => {
     <div class="page-heading">
       <div>
         <h1>规则工作台</h1>
-        <p>在脱敏截图上标记岗位和状态，生成无需 AI 的本地解析规则。</p>
+        <p>内置支持北森、Moka 和飞书；其他网站可在脱敏截图上生成无需 AI 的本地解析规则。</p>
       </div>
       <div class="heading-actions">
         <input ref="fileInput" type="file" accept="application/json" hidden @change="importRules">
@@ -368,18 +370,30 @@ onBeforeUnmount(() => {
     <div class="studio-layout">
       <aside class="rule-list">
         <div class="panel-title"><strong>本地规则</strong><span>{{ rules.length }}</span></div>
-        <article v-for="rule in rules" :key="rule.id" :class="{ disabled: !rule.enabled }">
-          <header><strong>{{ rule.name }}</strong><span>v{{ rule.version }}</span></header>
-          <p>{{ rule.definition.hostname }}{{ rule.definition.pathname }}</p>
-          <small>{{ rule.definition.layout === "list" ? "岗位列表" : "进度条" }} · 优先级 {{ rule.priority }}</small>
-          <div class="rule-actions">
-            <button @click="editRule(rule)">编辑</button>
-            <button @click="editRule(rule, true)">复制</button>
-            <button @click="toggleRule(rule)">{{ rule.enabled ? "停用" : "启用" }}</button>
-            <button class="danger" @click="emit('delete', rule)">删除</button>
-          </div>
-        </article>
-        <div v-if="!rules.length" class="empty-small">还没有用户辅助规则</div>
+        <v-text-field
+          v-model="ruleQuery"
+          class="rule-search"
+          placeholder="搜索规则或网址"
+          prepend-inner-icon="mdi-magnify"
+          density="compact"
+          variant="outlined"
+          hide-details
+          clearable
+        />
+        <div class="rule-items">
+          <article v-for="rule in filteredRules" :key="rule.id" :class="{ disabled: !rule.enabled }">
+            <header><strong>{{ rule.name }}</strong></header>
+            <p>{{ rule.definition.hostname }}{{ rule.definition.pathname }}</p>
+            <small>{{ rule.definition.layout === "list" ? "岗位列表" : "进度条" }} · 优先级 {{ rule.priority }}</small>
+            <div class="rule-actions">
+              <button @click="exportRule(rule)">导出</button>
+              <button @click="toggleRule(rule)">{{ rule.enabled ? "停用" : "启用" }}</button>
+              <button class="danger" @click="emit('delete', rule)">删除</button>
+            </div>
+          </article>
+          <div v-if="!rules.length" class="empty-small">还没有用户辅助规则</div>
+          <div v-else-if="!filteredRules.length" class="empty-small">没有匹配的规则或网址</div>
+        </div>
       </aside>
 
       <main class="editor">
@@ -494,6 +508,11 @@ onBeforeUnmount(() => {
 .rule-list { padding: 16px; border-right: 1px solid #e4ddcf; background: #f7f3ea; overflow-y: auto; }
 .panel-title { justify-content: space-between; margin-bottom: 12px; color: #173f37; }
 .panel-title span { padding: 2px 8px; border-radius: 999px; background: #dfece6; }
+.rule-search { margin-bottom: 12px; }
+.rule-items { max-height: calc(100vh - 300px); padding-right: 4px; overflow-y: auto; scrollbar-gutter: stable; }
+.rule-items::-webkit-scrollbar { width: 7px; }
+.rule-items::-webkit-scrollbar-thumb { border-radius: 999px; background: #b8c7c0; }
+.rule-items::-webkit-scrollbar-track { background: transparent; }
 .rule-list article { margin-bottom: 10px; padding: 12px; border: 1px solid #ded6c8; border-radius: 10px; background: #fff; }
 .rule-list article.disabled { opacity: .58; }
 .rule-list article header { justify-content: space-between; }
@@ -538,5 +557,12 @@ onBeforeUnmount(() => {
   .authoring-grid { grid-template-columns: 1fr; }
   .rule-editor { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .selection-card, .errors, .editor-actions, .test-results { grid-column: 1 / -1; }
+}
+@media (max-width: 900px) {
+  .studio-layout { grid-template-columns: 1fr; }
+  .rule-list { border-right: 0; border-bottom: 1px solid #e4ddcf; }
+  .rule-items { max-height: 320px; }
+  .preview-toolbar { flex-wrap: wrap; }
+  .preview-toolbar .v-input { max-width: none; }
 }
 </style>

@@ -16,21 +16,19 @@ import {
 import { httpError } from "./shared.js";
 import type { FastifyInstance, RouteDeps } from "./shared.js";
 
-function requireDebug(deps: RouteDeps) {
-  if (!deps.config.debugTools || !deps.recognitionPreviewStore) throw httpError(404, "规则工作台未启用");
+function requirePreviewStore(deps: RouteDeps) {
+  if (!deps.recognitionPreviewStore) throw httpError(503, "规则预览服务未启用");
   return deps.recognitionPreviewStore;
 }
 
 export async function registerParserRuleController(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   const { context } = deps;
 
-  app.get("/debug/parser-rules", async () => {
-    requireDebug(deps);
+  app.get("/parser-rules", async () => {
     return listParserRules(context);
   });
 
-  app.get("/debug/parser-rules/check-groups", async (request) => {
-    requireDebug(deps);
+  app.get("/parser-rules/check-groups", async (request) => {
     const query = (request.query as { q?: string; limit?: string }).q?.trim().slice(0, 100) ?? "";
     const limit = Math.min(50, Math.max(1, Number((request.query as { limit?: string }).limit) || 30));
     const like = `%${query}%`;
@@ -80,8 +78,8 @@ export async function registerParserRuleController(app: FastifyInstance, deps: R
     }));
   });
 
-  app.post("/debug/parser-rules/generate", async (request) => {
-    const store = requireDebug(deps);
+  app.post("/parser-rules/generate", async (request) => {
+    const store = requirePreviewStore(deps);
     const body = request.body as { previewId?: string; selection?: AssistedRuleSelection };
     if (!body.previewId || !body.selection) throw httpError(400, "previewId 和 selection 不能为空");
     const preview = store.snapshot(body.previewId);
@@ -89,8 +87,8 @@ export async function registerParserRuleController(app: FastifyInstance, deps: R
     return generateAssistedRule(preview.snapshot, body.selection);
   });
 
-  app.post("/debug/parser-rules/test", async (request) => {
-    const store = requireDebug(deps);
+  app.post("/parser-rules/test", async (request) => {
+    const store = requirePreviewStore(deps);
     const body = request.body as { previewId?: string; rule?: AssistedParserRule };
     if (!body.previewId || !body.rule) throw httpError(400, "previewId 和 rule 不能为空");
     const preview = store.snapshot(body.previewId);
@@ -105,8 +103,7 @@ export async function registerParserRuleController(app: FastifyInstance, deps: R
     );
   });
 
-  app.post("/debug/parser-rules", async (request) => {
-    requireDebug(deps);
+  app.post("/parser-rules", async (request) => {
     const body = request.body as {
       name?: string;
       enabled?: boolean;
@@ -128,8 +125,7 @@ export async function registerParserRuleController(app: FastifyInstance, deps: R
     }
   });
 
-  app.put("/debug/parser-rules/:id", async (request) => {
-    requireDebug(deps);
+  app.put("/parser-rules/:id", async (request) => {
     const id = (request.params as { id: string }).id;
     const body = request.body as {
       name?: string;
@@ -153,20 +149,24 @@ export async function registerParserRuleController(app: FastifyInstance, deps: R
     }
   });
 
-  app.post("/debug/parser-rules/:id/delete", async (request) => {
-    requireDebug(deps);
+  app.post("/parser-rules/:id/delete", async (request) => {
     const deleted = await deleteParserRule(context, (request.params as { id: string }).id);
     if (!deleted) throw httpError(404, "规则不存在");
     return { deleted: 1 };
   });
 
-  app.get("/debug/parser-rules/export", async () => {
-    requireDebug(deps);
+  app.get("/parser-rules/export", async () => {
     return { schemaVersion: 1, exportedAt: new Date().toISOString(), rules: await listParserRules(context) };
   });
 
-  app.post("/debug/parser-rules/import", async (request) => {
-    requireDebug(deps);
+  app.get("/parser-rules/:id/export", async (request) => {
+    const id = (request.params as { id: string }).id;
+    const rule = (await listParserRules(context)).find((item) => item.id === id);
+    if (!rule) throw httpError(404, "规则不存在");
+    return { schemaVersion: 1, exportedAt: new Date().toISOString(), rules: [rule] };
+  });
+
+  app.post("/parser-rules/import", async (request) => {
     const body = request.body as { schemaVersion?: number; rules?: AssistedParserRule[]; confirm?: boolean };
     if (body.schemaVersion !== 1 || !Array.isArray(body.rules)) throw httpError(400, "规则文件格式不正确");
     const existing = await listParserRules(context);

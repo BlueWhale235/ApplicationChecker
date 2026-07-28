@@ -60,6 +60,10 @@ import type {
 
 export async function registerCoreController(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   const { context, config, aiDebugStore, recognitionPreviewStore, runnerHeartbeat } = deps;
+  const previewStore = () => {
+    if (!recognitionPreviewStore) throw httpError(503, "规则预览服务未启用");
+    return recognitionPreviewStore;
+  };
 
   app.addHook("preHandler", async (request) => {
 
@@ -113,8 +117,8 @@ export async function registerCoreController(app: FastifyInstance, deps: RouteDe
     return { deleted: aiDebugStore.clear() };
   });
 
-  app.post("/debug/recognition-previews", async (request) => {
-    if (!config.debugTools || !recognitionPreviewStore) throw httpError(404, "识别预览功能未启用");
+  app.post("/recognition-previews", async (request) => {
+    const store = previewStore();
     const applicationId = (request.body as { applicationId?: string }).applicationId;
     if (!applicationId) throw httpError(400, "applicationId is required");
     const application = await context.db.selectFrom("applications")
@@ -135,7 +139,7 @@ export async function registerCoreController(app: FastifyInstance, deps: RouteDe
       .select(["id", "job_title", "applied_at", "location"])
       .where("check_group_id", "=", groupId).orderBy("created_at").execute();
     const settings = await appSettings(context);
-    return recognitionPreviewStore.enqueue({
+    return store.enqueue({
       groupId,
       applicationId,
       url,
@@ -153,28 +157,24 @@ export async function registerCoreController(app: FastifyInstance, deps: RouteDe
     });
   });
 
-  app.get("/debug/recognition-previews", async () => {
-    if (!config.debugTools || !recognitionPreviewStore) throw httpError(404, "识别预览功能未启用");
-    return recognitionPreviewStore.list();
+  app.get("/recognition-previews", async () => {
+    return previewStore().list();
   });
 
-  app.get("/debug/recognition-previews/:id", async (request) => {
-    if (!config.debugTools || !recognitionPreviewStore) throw httpError(404, "识别预览功能未启用");
-    const preview = recognitionPreviewStore.get((request.params as { id: string }).id);
+  app.get("/recognition-previews/:id", async (request) => {
+    const preview = previewStore().get((request.params as { id: string }).id);
     if (!preview) throw httpError(404, "识别预览不存在");
     return preview;
   });
 
-  app.get("/debug/recognition-previews/:id/screenshot", async (request, reply) => {
-    if (!config.debugTools || !recognitionPreviewStore) throw httpError(404, "识别预览功能未启用");
-    const image = recognitionPreviewStore.screenshot((request.params as { id: string }).id);
+  app.get("/recognition-previews/:id/screenshot", async (request, reply) => {
+    const image = previewStore().screenshot((request.params as { id: string }).id);
     if (!image) throw httpError(404, "预览截图不存在");
     return reply.header("content-type", "image/png").send(image);
   });
 
-  app.get("/debug/recognition-previews/:id/snapshot", async (request) => {
-    if (!config.debugTools || !recognitionPreviewStore) throw httpError(404, "识别预览功能未启用");
-    const snapshot = recognitionPreviewStore.snapshot((request.params as { id: string }).id);
+  app.get("/recognition-previews/:id/snapshot", async (request) => {
+    const snapshot = previewStore().snapshot((request.params as { id: string }).id);
     if (!snapshot) throw httpError(404, "预览快照不存在");
     return snapshot;
   });
