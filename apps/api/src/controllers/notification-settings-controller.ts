@@ -4,6 +4,8 @@ import {
   CheckPlanUpdateSchema,
   CreateApplicationSchema,
   SetProgressSchema,
+  RecognitionSettingsUpdateSchema,
+  StatusMappingsUpdateSchema,
   SettingsUpdateSchema,
   UpdateApplicationSchema,
   activeRunStatuses,
@@ -46,6 +48,12 @@ import {
   syncRuntimeSettingsFile,
   updateAiSettings,
 } from "./shared.js";
+import {
+  assertUnambiguousStatusMappings,
+  BUILTIN_STATUS_MAPPINGS,
+  normalizeCustomStatusMappings,
+  parseStatusMappings,
+} from "@application-checker/status-mapping";
 import type {
   BrowserStateEnvelope,
   FastifyInstance,
@@ -152,6 +160,9 @@ export async function registerNotificationSettingsController(
       aiApiKeySet: Boolean(settings.ai_api_key_encrypted) || Boolean(injectedRecognizer?.configured),
       aiConfidenceThreshold: settings.ai_confidence_threshold,
       aiDeepThinking: Boolean(settings.ai_deep_thinking),
+      recognitionMode: settings.recognition_mode,
+      statusMappings: parseStatusMappings(settings.status_mappings),
+      builtinStatusMappings: BUILTIN_STATUS_MAPPINGS,
       runnerHealthy: Date.now() - runnerHeartbeat.at < 20_000,
       loginPresentation: config.desktopMode ? "external-window" : "vnc",
     };
@@ -192,5 +203,32 @@ export async function registerNotificationSettingsController(
       aiApiKeySet: Boolean(settings.ai_api_key_encrypted),
       aiDeepThinking: Boolean(settings.ai_deep_thinking),
     };
+  });
+
+  app.post("/settings/recognition/update", { schema: { body: RecognitionSettingsUpdateSchema } }, async (request) => {
+    const body = request.body as typeof RecognitionSettingsUpdateSchema.static;
+    await context.db.updateTable("app_settings").set({
+      recognition_mode: body.recognitionMode,
+      updated_at: nowIso(),
+    }).where("id", "=", 1).execute();
+    await syncRuntimeSettingsFile(await appSettings(context), config);
+    return { ok: true, recognitionMode: body.recognitionMode };
+  });
+
+  app.post("/settings/status-mappings/update", { schema: { body: StatusMappingsUpdateSchema } }, async (request) => {
+    const mappings = normalizeCustomStatusMappings(
+      (request.body as typeof StatusMappingsUpdateSchema.static).statusMappings,
+    );
+    try {
+      assertUnambiguousStatusMappings(mappings);
+    } catch (error) {
+      throw httpError(400, error instanceof Error ? error.message : "状态映射存在冲突");
+    }
+    await context.db.updateTable("app_settings").set({
+      status_mappings: JSON.stringify(mappings),
+      updated_at: nowIso(),
+    }).where("id", "=", 1).execute();
+    await syncRuntimeSettingsFile(await appSettings(context), config);
+    return { ok: true, statusMappings: mappings };
   });
 }

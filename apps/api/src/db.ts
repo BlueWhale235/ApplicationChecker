@@ -5,7 +5,7 @@ import DatabaseDriver from "better-sqlite3";
 import { Generated, Kysely, SqliteDialect } from "kysely";
 import {
   DEFAULT_USER_AGENT, normalizeCheckUrl, normalizeCompany,
-  type ProgressStatus, type RunStatus, type ScheduleMode,
+  type ProgressStatus, type RecognitionMode, type RecognitionSource, type RunStatus, type ScheduleMode,
 } from "@application-checker/contracts";
 
 export interface ApplicationsTable {
@@ -23,6 +23,7 @@ export interface ApplicationsTable {
   progress_status: string;
   progress_status_v2: ProgressStatus | null;
   progress_source: "manual" | "ai" | null;
+  recognition_source: Generated<Exclude<RecognitionSource, "mixed"> | null>;
   manual_locked: number;
   automation_paused: number;
   automation_pause_reason: "rejected" | null;
@@ -53,6 +54,13 @@ export interface RunsTable {
   ai_confidence: number | null;
   ai_evidence: string | null;
   ai_provider: string | null;
+  recognition_mode: Generated<RecognitionMode>;
+  recognition_status: Generated<"skipped" | "pending" | "succeeded" | "partial" | "failed">;
+  recognition_source: Generated<RecognitionSource | null>;
+  recognition_suggested_status_v2: Generated<ProgressStatus | null>;
+  recognition_confidence: Generated<number | null>;
+  recognition_evidence: Generated<string | null>;
+  recognition_provider: Generated<string | null>;
   error_code: string | null;
   error_message: string | null;
   created_at: string;
@@ -88,6 +96,9 @@ export interface RunApplicationResultsTable {
   applied: number;
   not_applied_reason: "manual_locked" | "low_confidence" | "unmatched" | "ai_failed" | null;
   automation_paused: number;
+  recognition_source: Generated<Exclude<RecognitionSource, "mixed"> | null>;
+  adapter_id: Generated<string | null>;
+  rule_version: Generated<string | null>;
   created_at: string;
 }
 
@@ -98,6 +109,7 @@ export interface StatusEventsTable {
   from_status: ProgressStatus;
   to_status: ProgressStatus;
   source: "manual" | "ai";
+  recognition_source: Generated<"manual" | Exclude<RecognitionSource, "mixed">>;
   confidence: number | null;
   evidence: string | null;
   note: string | null;
@@ -154,6 +166,8 @@ export interface AppSettingsTable {
   ai_api_key_encrypted: string | null;
   ai_confidence_threshold: number;
   ai_deep_thinking: number;
+  recognition_mode: Generated<RecognitionMode>;
+  status_mappings: Generated<string>;
   updated_at: string;
 }
 
@@ -190,6 +204,7 @@ CREATE TABLE IF NOT EXISTS applications (
   progress_status TEXT NOT NULL DEFAULT 'unset' CHECK(progress_status IN ('unset','screening','interview_pending','interview_result_pending','signing_pending','offer','rejected')),
   progress_status_v2 TEXT CHECK(progress_status_v2 IN ('unset','screening','screening_passed','interview_pending','interviewed','signing_pending','offer','rejected')),
   progress_source TEXT CHECK(progress_source IN ('manual','ai')),
+  recognition_source TEXT CHECK(recognition_source IN ('local','ai')),
   manual_locked INTEGER NOT NULL DEFAULT 0,
   automation_paused INTEGER NOT NULL DEFAULT 0,
   automation_pause_reason TEXT CHECK(automation_pause_reason IN ('rejected')),
@@ -219,6 +234,13 @@ CREATE TABLE IF NOT EXISTS runs (
   ai_confidence REAL,
   ai_evidence TEXT,
   ai_provider TEXT,
+  recognition_mode TEXT NOT NULL DEFAULT 'local_first' CHECK(recognition_mode IN ('local_first','local_only','ai_only')),
+  recognition_status TEXT NOT NULL DEFAULT 'skipped' CHECK(recognition_status IN ('skipped','pending','succeeded','partial','failed')),
+  recognition_source TEXT CHECK(recognition_source IN ('local','ai','mixed')),
+  recognition_suggested_status_v2 TEXT CHECK(recognition_suggested_status_v2 IN ('unset','screening','screening_passed','interview_pending','interviewed','signing_pending','offer','rejected')),
+  recognition_confidence REAL,
+  recognition_evidence TEXT,
+  recognition_provider TEXT,
   error_code TEXT,
   error_message TEXT,
   created_at TEXT NOT NULL,
@@ -256,6 +278,9 @@ CREATE TABLE IF NOT EXISTS run_application_results (
   applied INTEGER NOT NULL DEFAULT 0,
   not_applied_reason TEXT CHECK(not_applied_reason IN ('manual_locked','low_confidence','unmatched','ai_failed')),
   automation_paused INTEGER NOT NULL DEFAULT 0,
+  recognition_source TEXT CHECK(recognition_source IN ('local','ai')),
+  adapter_id TEXT,
+  rule_version TEXT,
   created_at TEXT NOT NULL,
   UNIQUE(run_id, application_id)
 );
@@ -267,6 +292,7 @@ CREATE TABLE IF NOT EXISTS status_events (
   from_status TEXT NOT NULL,
   to_status TEXT NOT NULL,
   source TEXT NOT NULL CHECK(source IN ('manual','ai')),
+  recognition_source TEXT NOT NULL DEFAULT 'manual' CHECK(recognition_source IN ('manual','local','ai')),
   confidence REAL,
   evidence TEXT,
   note TEXT,
@@ -324,6 +350,8 @@ CREATE TABLE IF NOT EXISTS app_settings (
   ai_api_key_encrypted TEXT,
   ai_confidence_threshold REAL NOT NULL DEFAULT 0.75 CHECK(ai_confidence_threshold BETWEEN 0 AND 1),
   ai_deep_thinking INTEGER NOT NULL DEFAULT 0 CHECK(ai_deep_thinking IN (0,1)),
+  recognition_mode TEXT NOT NULL DEFAULT 'local_first' CHECK(recognition_mode IN ('local_first','local_only','ai_only')),
+  status_mappings TEXT NOT NULL DEFAULT '{}',
   updated_at TEXT NOT NULL
 );
 `;
@@ -357,6 +385,12 @@ export function createDb(filename: string): DbContext {
   if (!settingsColumns.some((column) => column.name === "ai_deep_thinking")) {
     raw.exec("ALTER TABLE app_settings ADD COLUMN ai_deep_thinking INTEGER NOT NULL DEFAULT 0 CHECK(ai_deep_thinking IN (0,1))");
   }
+  if (!settingsColumns.some((column) => column.name === "recognition_mode")) {
+    raw.exec("ALTER TABLE app_settings ADD COLUMN recognition_mode TEXT NOT NULL DEFAULT 'local_first' CHECK(recognition_mode IN ('local_first','local_only','ai_only'))");
+  }
+  if (!settingsColumns.some((column) => column.name === "status_mappings")) {
+    raw.exec("ALTER TABLE app_settings ADD COLUMN status_mappings TEXT NOT NULL DEFAULT '{}'");
+  }
   const applicationColumns = raw.prepare("PRAGMA table_info(applications)").all() as Array<{ name: string }>;
   if (!applicationColumns.some((column) => column.name === "check_group_id")) {
     raw.exec("ALTER TABLE applications ADD COLUMN check_group_id TEXT");
@@ -373,6 +407,10 @@ export function createDb(filename: string): DbContext {
   if (!applicationColumns.some((column) => column.name === "automation_paused_at")) {
     raw.exec("ALTER TABLE applications ADD COLUMN automation_paused_at TEXT");
   }
+  if (!applicationColumns.some((column) => column.name === "recognition_source")) {
+    raw.exec("ALTER TABLE applications ADD COLUMN recognition_source TEXT CHECK(recognition_source IN ('local','ai'))");
+    raw.exec("UPDATE applications SET recognition_source = progress_source WHERE progress_source = 'ai'");
+  }
   const runColumns = raw.prepare("PRAGMA table_info(runs)").all() as Array<{ name: string }>;
   if (!runColumns.some((column) => column.name === "check_group_id")) {
     raw.exec("ALTER TABLE runs ADD COLUMN check_group_id TEXT");
@@ -380,13 +418,47 @@ export function createDb(filename: string): DbContext {
   if (!runColumns.some((column) => column.name === "ai_suggested_status_v2")) {
     raw.exec("ALTER TABLE runs ADD COLUMN ai_suggested_status_v2 TEXT");
   }
+  const runRecognitionColumns = [
+    ["recognition_mode", "TEXT NOT NULL DEFAULT 'local_first' CHECK(recognition_mode IN ('local_first','local_only','ai_only'))"],
+    ["recognition_status", "TEXT NOT NULL DEFAULT 'skipped' CHECK(recognition_status IN ('skipped','pending','succeeded','partial','failed'))"],
+    ["recognition_source", "TEXT CHECK(recognition_source IN ('local','ai','mixed'))"],
+    ["recognition_suggested_status_v2", "TEXT"],
+    ["recognition_confidence", "REAL"],
+    ["recognition_evidence", "TEXT"],
+    ["recognition_provider", "TEXT"],
+  ] as const;
+  for (const [column, definition] of runRecognitionColumns) {
+    if (!runColumns.some((item) => item.name === column)) raw.exec(`ALTER TABLE runs ADD COLUMN ${column} ${definition}`);
+  }
+  raw.exec(`UPDATE runs SET
+    recognition_status = CASE WHEN recognition_status = 'skipped' THEN ai_status ELSE recognition_status END,
+    recognition_source = CASE WHEN recognition_source IS NULL AND ai_status = 'succeeded' THEN 'ai' ELSE recognition_source END,
+    recognition_suggested_status_v2 = COALESCE(recognition_suggested_status_v2, ai_suggested_status_v2),
+    recognition_confidence = COALESCE(recognition_confidence, ai_confidence),
+    recognition_evidence = COALESCE(recognition_evidence, ai_evidence),
+    recognition_provider = COALESCE(recognition_provider, ai_provider)
+  `);
   const runResultColumns = raw.prepare("PRAGMA table_info(run_application_results)").all() as Array<{ name: string }>;
   if (!runResultColumns.some((column) => column.name === "automation_paused")) {
     raw.exec("ALTER TABLE run_application_results ADD COLUMN automation_paused INTEGER NOT NULL DEFAULT 0");
   }
+  if (!runResultColumns.some((column) => column.name === "recognition_source")) {
+    raw.exec("ALTER TABLE run_application_results ADD COLUMN recognition_source TEXT CHECK(recognition_source IN ('local','ai'))");
+    raw.exec("UPDATE run_application_results SET recognition_source = 'ai' WHERE suggested_status IS NOT NULL OR not_applied_reason = 'ai_failed'");
+  }
+  if (!runResultColumns.some((column) => column.name === "adapter_id")) {
+    raw.exec("ALTER TABLE run_application_results ADD COLUMN adapter_id TEXT");
+  }
+  if (!runResultColumns.some((column) => column.name === "rule_version")) {
+    raw.exec("ALTER TABLE run_application_results ADD COLUMN rule_version TEXT");
+  }
   const statusEventColumns = raw.prepare("PRAGMA table_info(status_events)").all() as Array<{ name: string }>;
   if (!statusEventColumns.some((column) => column.name === "event_type")) {
     raw.exec("ALTER TABLE status_events ADD COLUMN event_type TEXT NOT NULL DEFAULT 'progress' CHECK(event_type IN ('progress','applied'))");
+  }
+  if (!statusEventColumns.some((column) => column.name === "recognition_source")) {
+    raw.exec("ALTER TABLE status_events ADD COLUMN recognition_source TEXT NOT NULL DEFAULT 'manual' CHECK(recognition_source IN ('manual','local','ai'))");
+    raw.exec("UPDATE status_events SET recognition_source = source");
   }
   raw.exec("CREATE UNIQUE INDEX IF NOT EXISTS status_events_one_applied ON status_events(application_id) WHERE event_type = 'applied'");
   raw.exec(`
@@ -516,8 +588,8 @@ export function createDb(filename: string): DbContext {
   raw.prepare(`
     INSERT OR IGNORE INTO app_settings(
       id,global_cron,timezone,screenshot_retention_days,default_user_agent,
-      ai_base_url,ai_model,ai_api_key_encrypted,ai_confidence_threshold,ai_deep_thinking,updated_at
-    ) VALUES(1,NULL,'Asia/Shanghai',30,?,NULL,NULL,NULL,0.75,0,?)
+      ai_base_url,ai_model,ai_api_key_encrypted,ai_confidence_threshold,ai_deep_thinking,recognition_mode,updated_at
+    ) VALUES(1,NULL,'Asia/Shanghai',30,?,NULL,NULL,NULL,0.75,0,'local_first',?)
   `).run(DEFAULT_USER_AGENT, new Date().toISOString());
   return { db: new Kysely<Database>({ dialect: new SqliteDialect({ database: raw }) }), raw };
 }

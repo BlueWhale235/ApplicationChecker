@@ -4,7 +4,8 @@
     "paths": {
       "@application-checker/contracts": ["packages/contracts/src/index.ts"],
       "@application-checker/cookie-state": ["packages/cookie-state/src/index.ts"],
-      "@application-checker/ai-status": ["packages/ai-status/src/index.ts"]
+      "@application-checker/ai-status": ["packages/ai-status/src/index.ts"],
+      "@application-checker/status-mapping": ["packages/status-mapping/src/index.ts"]
     },
     "target": "ES2023",
     "module": "NodeNext",

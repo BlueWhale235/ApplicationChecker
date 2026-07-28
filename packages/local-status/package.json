@@ -1,28 +1,22 @@
 {
-  "name": "@application-checker/runner",
+  "name": "@application-checker/local-status",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "dist/runner.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "dev": "tsx watch src/runner.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/runner.js",
-    "dry-run:local": "node dist/local-parser-dry-run.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run src",
     "lint": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@application-checker/contracts": "workspace:*",
-    "@application-checker/cookie-state": "workspace:*",
-    "@application-checker/local-status": "workspace:*",
-    "dotenv": "^17.4.2",
-    "puppeteer-core": "^25.3.0"
+    "@application-checker/status-mapping": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
-    "tsx": "^4.23.1",
     "vitest": "^4.1.10"
   }
 }

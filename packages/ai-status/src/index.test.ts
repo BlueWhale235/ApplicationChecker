@@ -38,17 +38,54 @@ describe("recognizer configuration", () => {
       { applicationId: "a", status: "screening" },
       { applicationId: "b", status: "screening_passed" },
     ]);
-    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain("业务筛选-进行中=screening_passed");
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain("业务筛选-进行中");
     const sent = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
       messages: Array<{ role: string; content: unknown }>;
     };
     expect(sent.messages).toHaveLength(2);
     expect(sent.messages[0]).toMatchObject({ role: "system" });
-    expect(String(sent.messages[0]?.content)).toContain("业务筛选=screening_passed");
-    expect(String(sent.messages[0]?.content)).toContain("简历筛选=screening");
-    expect(String(sent.messages[0]?.content)).toContain("待评估=screening");
+    expect(String(sent.messages[0]?.content)).toMatch(/业务筛选[^；]*=screening_passed/);
+    expect(String(sent.messages[0]?.content)).toMatch(/简历筛选[^；]*=screening/);
+    expect(String(sent.messages[0]?.content)).toMatch(/待评估[^；]*=screening/);
     expect(sent.messages[1]).toMatchObject({ role: "user" });
     expect(sent).not.toHaveProperty("previous_response_id");
+  });
+
+  it("uses the shared custom mapping in the prompt and to normalize raw AI output", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({ results: [{
+        applicationId: "a",
+        matched: true,
+        rawStatus: "HR Approved",
+        status: null,
+        confidence: 0.96,
+        evidence: "status badge",
+      }] }) } }],
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const recognizer = new OpenAiCompatibleRecognizer({
+      baseUrl: "https://api.example/v1",
+      apiKey: "x",
+      model: "vision",
+      statusMappings: {
+        screening: [],
+        screening_passed: ["HR Approved"],
+        interview_pending: [],
+        interviewed: [],
+        signing_pending: [],
+        offer: [],
+        rejected: [],
+      },
+    });
+    const result = await recognizer.recognizeGroup({
+      screenshot: Buffer.from("png"),
+      company: "Example",
+      applications: [{ id: "a", jobTitle: "Engineer", appliedAt: null, location: null }],
+      pageTitle: "Applications",
+      finalUrl: "https://example.com/status",
+    });
+    expect(result.results[0]?.status).toBe("screening_passed");
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain("HR Approved");
   });
 
   it("reports sanitized lifecycle events to the optional debug observer", async () => {

@@ -59,7 +59,7 @@ import type {
 } from "./shared.js";
 
 export async function registerCoreController(app: FastifyInstance, deps: RouteDeps): Promise<void> {
-  const { config, aiDebugStore, runnerHeartbeat } = deps;
+  const { context, config, aiDebugStore, recognitionPreviewStore, runnerHeartbeat } = deps;
 
   app.addHook("preHandler", async (request) => {
 
@@ -83,6 +83,12 @@ export async function registerCoreController(app: FastifyInstance, deps: RouteDe
     return aiDebugStore.list(limit);
   });
 
+  app.get("/debug/recognition-traces", async (request) => {
+    if (!config.debugTools || !aiDebugStore) throw httpError(404, "识别调试功能未启用");
+    const limit = Math.min(50, Math.max(1, Number((request.query as { limit?: string }).limit) || 50));
+    return aiDebugStore.list(limit);
+  });
+
   app.get("/debug/ai-traces/:id", async (request) => {
     if (!config.debugTools || !aiDebugStore) throw httpError(404, "AI 调试功能未启用");
     const trace = aiDebugStore.get((request.params as { id: string }).id);
@@ -90,8 +96,79 @@ export async function registerCoreController(app: FastifyInstance, deps: RouteDe
     return trace;
   });
 
+  app.get("/debug/recognition-traces/:id", async (request) => {
+    if (!config.debugTools || !aiDebugStore) throw httpError(404, "识别调试功能未启用");
+    const trace = aiDebugStore.get((request.params as { id: string }).id);
+    if (!trace) throw httpError(404, "识别调试记录不存在或已被清理");
+    return trace;
+  });
+
   app.post("/debug/ai-traces/clear", async () => {
     if (!config.debugTools || !aiDebugStore) throw httpError(404, "AI 调试功能未启用");
     return { deleted: aiDebugStore.clear() };
+  });
+
+  app.post("/debug/recognition-traces/clear", async () => {
+    if (!config.debugTools || !aiDebugStore) throw httpError(404, "识别调试功能未启用");
+    return { deleted: aiDebugStore.clear() };
+  });
+
+  app.post("/debug/recognition-previews", async (request) => {
+    if (!config.debugTools || !recognitionPreviewStore) throw httpError(404, "识别预览功能未启用");
+    const applicationId = (request.body as { applicationId?: string }).applicationId;
+    if (!applicationId) throw httpError(400, "applicationId is required");
+    const application = await context.db.selectFrom("applications")
+      .leftJoin("check_groups", "check_groups.id", "applications.check_group_id")
+      .select([
+        "applications.id", "applications.check_group_id", "applications.company", "applications.site",
+        "applications.check_url", "applications.resolved_url",
+        "check_groups.check_url as group_check_url", "check_groups.resolved_url as group_resolved_url",
+        "check_groups.company as group_company",
+      ])
+      .where("applications.id", "=", applicationId).executeTakeFirst();
+    if (!application) throw httpError(404, "岗位不存在");
+    const url = application.group_resolved_url ?? application.resolved_url
+      ?? application.group_check_url ?? application.check_url;
+    if (!url) throw httpError(400, "岗位未设置检查链接");
+    const groupId = application.check_group_id ?? application.id;
+    const members = await context.db.selectFrom("applications")
+      .select(["id", "job_title", "applied_at", "location"])
+      .where("check_group_id", "=", groupId).orderBy("created_at").execute();
+    const settings = await appSettings(context);
+    return recognitionPreviewStore.enqueue({
+      groupId,
+      applicationId,
+      url,
+      company: application.group_company ?? application.company,
+      applications: members.map((member) => ({
+        id: member.id,
+        jobTitle: member.job_title,
+        appliedAt: member.applied_at,
+        location: member.location,
+      })),
+      site: application.site,
+      browserState: await loadBrowserState(context, config, application.site),
+      proxyUrl: config.upstreamProxyUrl,
+      userAgent: settings.default_user_agent,
+    });
+  });
+
+  app.get("/debug/recognition-previews", async () => {
+    if (!config.debugTools || !recognitionPreviewStore) throw httpError(404, "识别预览功能未启用");
+    return recognitionPreviewStore.list();
+  });
+
+  app.get("/debug/recognition-previews/:id", async (request) => {
+    if (!config.debugTools || !recognitionPreviewStore) throw httpError(404, "识别预览功能未启用");
+    const preview = recognitionPreviewStore.get((request.params as { id: string }).id);
+    if (!preview) throw httpError(404, "识别预览不存在");
+    return preview;
+  });
+
+  app.get("/debug/recognition-previews/:id/screenshot", async (request, reply) => {
+    if (!config.debugTools || !recognitionPreviewStore) throw httpError(404, "识别预览功能未启用");
+    const image = recognitionPreviewStore.screenshot((request.params as { id: string }).id);
+    if (!image) throw httpError(404, "预览截图不存在");
+    return reply.header("content-type", "image/png").send(image);
   });
 }

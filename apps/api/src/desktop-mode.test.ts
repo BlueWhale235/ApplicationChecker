@@ -50,7 +50,44 @@ describe("desktop mode", () => {
       headers: { cookie: `ac_desktop=${desktopToken}` },
     });
     expect(settings.statusCode).toBe(200);
-    expect(settings.json()).toMatchObject({ loginPresentation: "external-window" });
+    expect(settings.json()).toMatchObject({
+      loginPresentation: "external-window",
+      statusMappings: {
+        screening: expect.arrayContaining(["简历筛选", "under review"]),
+        screening_passed: expect.arrayContaining(["业务筛选", "shortlisted"]),
+        rejected: expect.arrayContaining(["淘汰", "rejected"]),
+      },
+    });
+
+    const customMappings = {
+      screening: ["HR Review"],
+      screening_passed: ["HR Approved"],
+      interview_pending: [],
+      interviewed: [],
+      signing_pending: [],
+      offer: [],
+      rejected: ["Position Closed"],
+    };
+    const updateMappings = await app.inject({
+      method: "POST",
+      url: "/api/settings/status-mappings/update",
+      headers: { cookie: `ac_desktop=${desktopToken}` },
+      payload: { statusMappings: customMappings },
+    });
+    expect(updateMappings.statusCode).toBe(200);
+    expect(updateMappings.json()).toMatchObject({ statusMappings: customMappings });
+    const storedMappings = context.raw.prepare("SELECT status_mappings FROM app_settings WHERE id = 1").get() as {
+      status_mappings: string;
+    };
+    expect(JSON.parse(storedMappings.status_mappings)).toMatchObject(customMappings);
+
+    const conflictingMappings = await app.inject({
+      method: "POST",
+      url: "/api/settings/status-mappings/update",
+      headers: { cookie: `ac_desktop=${desktopToken}` },
+      payload: { statusMappings: { ...customMappings, screening: ["Position Closed"] } },
+    });
+    expect(conflictingMappings.statusCode).toBe(400);
 
     expect((await app.inject({ method: "POST", url: "/api/internal/heartbeat" })).statusCode).toBe(401);
     expect((await app.inject({

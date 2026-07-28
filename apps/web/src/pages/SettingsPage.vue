@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import type { AppSettings } from "@application-checker/contracts";
+import type {
+  AppSettings,
+  RecognitionMode,
+} from "@application-checker/contracts";
 
 const appVersion = __APP_VERSION__;
 const githubUrl = "https://github.com/BlueWhale235/ApplicationChecker";
@@ -14,12 +17,23 @@ defineProps<{
   };
   busy: boolean;
 }>();
-defineEmits<{ save: []; configureAi: [] }>();
+defineEmits<{
+  save: [];
+  configureAi: [];
+  configureStatusMappings: [];
+  recognitionMode: [value: RecognitionMode];
+}>();
+
+const recognitionModes: Array<{ title: string; value: RecognitionMode }> = [
+  { title: "本地优先（推荐）", value: "local_first" },
+  { title: "仅本地解析", value: "local_only" },
+  { title: "仅 AI 识别", value: "ai_only" },
+];
 </script>
 
 <template>
   <section class="page-content narrow-page">
-    <div class="page-heading"><div><h1>设置</h1><p>配置自动检查时间和可选的 AI 状态识别。</p></div></div>
+    <div class="page-heading"><div><h1>设置</h1><p>配置自动检查时间、本地解析策略和可选的 AI 回退。</p></div></div>
     <div class="settings-grid">
       <v-form class="content-card" @submit.prevent="$emit('save')">
         <div class="card-title"><div><h2>自动检查</h2><p>岗位选择“继承全局计划”时使用此处设置。</p></div><i class="mdi mdi-calendar-clock"></i></div>
@@ -30,7 +44,22 @@ defineEmits<{ save: []; configureAi: [] }>();
         <v-btn class="settings-save" color="secondary" variant="flat" type="submit" :loading="busy">保存设置</v-btn>
       </v-form>
       <div class="content-card">
-        <div class="card-title"><div><h2>AI 状态识别</h2><p>截图成功后调用兼容的视觉模型。</p></div><i class="mdi mdi-auto-fix"></i></div>
+        <div class="card-title"><div><h2>识别策略</h2><p>决定本地 DOM 解析器与 AI 的调用顺序。</p></div><i class="mdi mdi-source-branch"></i></div>
+        <v-select
+          :model-value="settings.recognitionMode"
+          :items="recognitionModes"
+          label="识别模式"
+          variant="outlined"
+          density="comfortable"
+          hide-details
+          @update:model-value="$emit('recognitionMode', $event)"
+        />
+        <p class="settings-help">
+          本地优先会直接采用置信度不低于 90% 的本地结果，只把未匹配岗位交给 AI；仅本地模式不会产生 AI 请求。
+        </p>
+      </div>
+      <div class="content-card">
+        <div class="card-title"><div><h2>AI 回退识别</h2><p>本地解析无法可靠判断时，可调用兼容的视觉模型。</p></div><i class="mdi mdi-auto-fix"></i></div>
         <div class="service-state" :class="{ ok: settings.aiConfigured }">
           <i :class="settings.aiConfigured ? 'mdi mdi-check-circle' : 'mdi mdi-minus-circle-outline'"></i>
           <div><strong>{{ settings.aiConfigured ? "已配置" : "未配置" }}</strong><span>{{ settings.aiModel || "核心检查功能不受影响" }}</span></div>
@@ -44,6 +73,22 @@ defineEmits<{ save: []; configureAi: [] }>();
           <i :class="settings.runnerHealthy ? 'mdi mdi-check-circle' : 'mdi mdi-alert-circle-outline'"></i>
           <div><strong>{{ settings.runnerHealthy ? "运行正常" : "未连接" }}</strong><span>{{ settings.runnerHealthy ? "可以执行截图任务" : "请检查 Runner 容器" }}</span></div>
         </div>
+      </div>
+      <div class="content-card mapping-card">
+        <div class="card-title">
+          <div><h2>状态映射</h2><p>补充招聘网站或 HR 使用的特殊中英文状态词条。</p></div>
+          <i class="mdi mdi-tag-multiple-outline"></i>
+        </div>
+        <div class="mapping-summary">
+          <i class="mdi mdi-shape-outline"></i>
+          <div>
+            <strong>{{ Object.values(settings.statusMappings).reduce((total, terms) => total + terms.length, 0) }} 条状态关键词</strong>
+            <span>包含内置和自定义词条；目前仅支持部分网站，按页面关键词匹配。</span>
+          </div>
+        </div>
+        <v-btn variant="outlined" color="primary" prepend-icon="mdi-tune-variant" @click="$emit('configureStatusMappings')">
+          配置状态映射
+        </v-btn>
       </div>
       <div class="content-card project-card">
         <div>
@@ -80,6 +125,11 @@ defineEmits<{ save: []; configureAi: [] }>();
 .service-state strong { font-size: 12px; }
 .service-state span { margin-top: 3px; font-size: 10px; opacity: .75; }
 .settings-help { color: #7d8782; font-size: 10px; line-height: 1.8; }
+.mapping-summary { margin-bottom: 18px; padding: 14px; display: flex; gap: 12px; align-items: center; border-radius: 9px; color: #426a5b; background: #edf4ef; }
+.mapping-summary > i { font-size: 24px; }
+.mapping-summary strong, .mapping-summary span { display: block; }
+.mapping-summary strong { font-size: 12px; }
+.mapping-summary span { margin-top: 3px; color: #718078; font-size: 10px; line-height: 1.5; }
 .project-card { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 22px; padding-top: 21px; padding-bottom: 21px; }
 .project-card > div { min-width: 0; }
 .project-card > div strong, .project-card > div small { display: block; }

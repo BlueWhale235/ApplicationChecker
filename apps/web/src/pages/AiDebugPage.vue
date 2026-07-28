@@ -76,6 +76,18 @@ async function copy(value: string, label: string): Promise<void> {
   }
 }
 
+function exportTrace(): void {
+  if (!detail.value) return;
+  const blob = new Blob([JSON.stringify(detail.value, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `recognition-trace-${detail.value.id}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+  emit("notice", "脱敏识别记录已导出");
+}
+
 watch(() => props.refreshToken, () => void refresh());
 onMounted(() => {
   void refresh();
@@ -90,11 +102,12 @@ onBeforeUnmount(() => {
   <section class="page-content ai-debug-page">
     <div class="page-heading">
       <div>
-        <h1>AI 调试</h1>
-        <p>查看发送给视觉模型的脱敏输入、原始响应和解析过程。记录仅保存在内存中。</p>
+        <h1>识别调试</h1>
+        <p>查看本地解析器命中规则、脱敏 DOM 摘要，以及 AI 回退的输入、响应和解析过程。记录仅保存在内存中。</p>
       </div>
       <div class="heading-actions">
         <v-btn variant="outlined" color="primary" prepend-icon="mdi-refresh" :loading="loading" @click="refresh()">刷新</v-btn>
+        <v-btn variant="outlined" color="primary" prepend-icon="mdi-download-outline" :disabled="!detail" @click="exportTrace">导出当前 JSON</v-btn>
         <v-btn variant="outlined" color="error" prepend-icon="mdi-delete-sweep-outline" :disabled="busy || !traces.length" @click="emit('clear')">
           清空记录
         </v-btn>
@@ -103,7 +116,7 @@ onBeforeUnmount(() => {
 
     <div class="debug-security-note">
       <i class="mdi mdi-shield-lock-outline"></i>
-      API Key、Authorization、Cookie 和图片 base64 不会显示；每 2 秒自动刷新，最多保留最近 50 次调用。
+      API Key、Authorization、Cookie、输入框值、完整 DOM 和图片 base64 不会显示；每 2 秒自动刷新，最多保留最近 50 条记录。
     </div>
 
     <div v-if="traces.length" class="debug-layout">
@@ -119,7 +132,7 @@ onBeforeUnmount(() => {
             <strong>{{ trace.company }}</strong>
             <i :data-status="trace.status"></i>
           </span>
-          <span>{{ trace.applicationCount }} 个岗位 · {{ trace.model }}</span>
+          <span>{{ trace.applicationCount }} 个岗位 · {{ trace.recognitionSource === "local" ? "本地" : "AI" }} · {{ trace.model }}</span>
           <small>{{ date(trace.createdAt) }} · {{ duration(trace.durationMs) }}</small>
           <small>HTTP {{ trace.httpStatus ?? "—" }} · {{ trace.status }}</small>
         </button>
@@ -135,7 +148,7 @@ onBeforeUnmount(() => {
           <span class="status-chip" :data-status="detail.status">{{ detail.status }}</span>
         </header>
 
-        <nav class="debug-tabs" aria-label="AI 调试详情">
+        <nav class="debug-tabs" aria-label="识别调试详情">
           <button :class="{ active: activeTab === 'input' }" @click="activeTab = 'input'">输入</button>
           <button :class="{ active: activeTab === 'raw' }" @click="activeTab = 'raw'">原始输出</button>
           <button :class="{ active: activeTab === 'parsed' }" @click="activeTab = 'parsed'">解析结果</button>
@@ -148,8 +161,11 @@ onBeforeUnmount(() => {
             <div><small>截图大小</small><strong>{{ detail.screenshotBytes.toLocaleString() }} bytes</strong></div>
             <div><small>最终地址</small><strong>{{ detail.finalUrl || "未知" }}</strong></div>
             <div><small>截图状态</small><strong>{{ detail.screenshotTruncated ? "已截断" : "完整" }}</strong></div>
+            <div v-if="detail.adapterId"><small>Path 适配器</small><strong>{{ detail.adapterId }} · {{ detail.adapterVersion }}</strong></div>
+            <div v-if="detail.route"><small>命中规则</small><strong>{{ detail.route.hostname }}{{ detail.route.pathname }}</strong></div>
+            <div v-if="detail.localSnapshotSummary"><small>DOM 摘要</small><strong>{{ detail.localSnapshotSummary.nodeCount }} 节点 · {{ detail.localSnapshotSummary.textCharacters }} 字符{{ detail.localSnapshotSummary.truncated ? " · 已截断" : "" }}</strong></div>
           </div>
-          <div v-if="detail.runId" class="screenshot-card">
+          <div v-if="detail.runId && detail.recognitionSource !== 'local'" class="screenshot-card">
             <div class="section-title"><strong>发送给 AI 的截图</strong><span>image/png</span></div>
             <img
               v-if="!screenshotUnavailable"
@@ -214,8 +230,8 @@ onBeforeUnmount(() => {
 
     <div v-else class="debug-empty">
       <i class="mdi mdi-flask-empty-outline"></i>
-      <h2>还没有 AI 调试记录</h2>
-      <p>运行一次配置了 AI 的岗位检查后，输入和输出会显示在这里。</p>
+      <h2>还没有识别调试记录</h2>
+      <p>运行一次本地解析或 AI 识别后，脱敏的规则与结果会显示在这里。</p>
     </div>
   </section>
 </template>

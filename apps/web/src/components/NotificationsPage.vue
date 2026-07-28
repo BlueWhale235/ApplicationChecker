@@ -118,7 +118,7 @@ function date(value: string): string {
     <div v-else class="notification-empty">
       <i class="mdi mdi-bell-check-outline"></i>
       <strong>{{ scope === "unread" ? "没有未读消息" : "还没有进展消息" }}</strong>
-      <span>{{ scope === "unread" ? "新的 AI 识别结果会出现在这里。" : "AI 自动更新岗位状态后会生成一条消息。" }}</span>
+      <span>{{ scope === "unread" ? "新的自动识别结果会出现在这里。" : "本地解析或 AI 自动更新岗位状态后会生成一条消息。" }}</span>
     </div>
 
     <div v-if="page.total > perPage" class="notification-pagination">

@@ -28,7 +28,7 @@ defineEmits<{ change: [value: Page] }>();
         <i class="mdi mdi-cog-outline"></i><span>设置</span>
       </button>
       <button v-if="debugEnabled" :class="{ active: active === 'debug' }" @click="$emit('change', 'debug')">
-        <i class="mdi mdi-bug-outline"></i><span>AI 调试</span>
+        <i class="mdi mdi-bug-outline"></i><span>识别调试</span>
       </button>
     </nav>
     <div class="leaf-mark" aria-hidden="true">❧</div>

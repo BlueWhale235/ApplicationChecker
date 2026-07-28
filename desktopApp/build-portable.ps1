@@ -142,15 +142,64 @@ try {
         }
     }
 
-    $nodeArchive = Join-Path $cacheRoot "node-$NodeVersion-win-x64.zip"
-    if (-not (Test-Path -LiteralPath $nodeArchive)) {
-        $nodeUrl = "https://nodejs.org/dist/$NodeVersion/node-$NodeVersion-win-x64.zip"
-        Write-Host "Downloading Node.js $NodeVersion..."
-        Invoke-WebRequest -Uri $nodeUrl -OutFile $nodeArchive
+    $nodeDistributionName = "node-$NodeVersion-win-x64"
+    $nodeCache = Join-Path $cacheRoot $nodeDistributionName
+    $legacyNodeArchive = Join-Path $cacheRoot "$nodeDistributionName.zip"
+    $cachedNodeExecutable = Join-Path $nodeCache "node.exe"
+    $cachedNodeLicense = Join-Path $nodeCache "LICENSE"
+    $hasExtractedNodeCache = (
+        (Test-Path -LiteralPath $cachedNodeExecutable -PathType Leaf) -and
+        (Test-Path -LiteralPath $cachedNodeLicense -PathType Leaf) -and
+        (Test-WindowsPortableExecutable $cachedNodeExecutable)
+    )
+
+    if (-not $hasExtractedNodeCache) {
+        if (Test-Path -LiteralPath $nodeCache) {
+            Write-Host "Removing incomplete Node.js extracted cache..."
+            Remove-BuildDirectory $nodeCache
+        }
+
+        $temporarySuffix = [System.Guid]::NewGuid().ToString("N")
+        $nodeArchive = Join-Path $cacheRoot "$nodeDistributionName-$temporarySuffix.zip"
+        $nodeExtract = Join-Path $cacheRoot "$nodeDistributionName-extract-$temporarySuffix"
+        try {
+            if (Test-Path -LiteralPath $legacyNodeArchive -PathType Leaf) {
+                Write-Host "Migrating the existing Node.js archive to an extracted cache..."
+                Move-Item -LiteralPath $legacyNodeArchive -Destination $nodeArchive
+            } else {
+                $nodeUrl = "https://nodejs.org/dist/$NodeVersion/$nodeDistributionName.zip"
+                Write-Host "Downloading Node.js $NodeVersion..."
+                Invoke-WebRequest -Uri $nodeUrl -OutFile $nodeArchive
+            }
+
+            Expand-Archive -LiteralPath $nodeArchive -DestinationPath $nodeExtract
+            $extractedNodeSource = Join-Path $nodeExtract $nodeDistributionName
+            $extractedNodeExecutable = Join-Path $extractedNodeSource "node.exe"
+            $extractedNodeLicense = Join-Path $extractedNodeSource "LICENSE"
+            if (-not (Test-Path -LiteralPath $extractedNodeExecutable -PathType Leaf) -or
+                -not (Test-Path -LiteralPath $extractedNodeLicense -PathType Leaf) -or
+                -not (Test-WindowsPortableExecutable $extractedNodeExecutable)) {
+                throw "The downloaded Node.js package does not contain a valid Windows x64 runtime."
+            }
+
+            Move-Item -LiteralPath $extractedNodeSource -Destination $nodeCache
+            Write-Host "Cached the extracted Node.js runtime at $nodeCache"
+        } finally {
+            if (Test-Path -LiteralPath $nodeArchive) {
+                Remove-Item -LiteralPath $nodeArchive -Force
+            }
+            if (Test-Path -LiteralPath $nodeExtract) {
+                Remove-BuildDirectory $nodeExtract
+            }
+        }
+    } else {
+        Write-Host "Using the extracted Node.js cache at $nodeCache"
+        if (Test-Path -LiteralPath $legacyNodeArchive -PathType Leaf) {
+            Remove-Item -LiteralPath $legacyNodeArchive -Force
+        }
     }
-    $nodeExtract = Join-Path $stageRoot "node-extract"
-    Expand-Archive -LiteralPath $nodeArchive -DestinationPath $nodeExtract -Force
-    $nodeSource = Join-Path $nodeExtract "node-$NodeVersion-win-x64"
+
+    $nodeSource = $nodeCache
     $nodeTarget = Join-Path $publishRoot "internal/node"
     New-Item -ItemType Directory -Force -Path $nodeTarget | Out-Null
     Copy-Item -LiteralPath (Join-Path $nodeSource "node.exe") -Destination $nodeTarget -Force

@@ -1,4 +1,13 @@
-import { progressLabels, type ProgressStatus } from "@application-checker/contracts";
+import {
+  progressLabels,
+  type ProgressStatus,
+  type StatusMappings,
+} from "@application-checker/contracts";
+import {
+  formatStatusMappingPrompt,
+  matchStatusMapping,
+  normalizeCustomStatusMappings,
+} from "@application-checker/status-mapping";
 
 export interface RecognitionInput {
   screenshot: Buffer;
@@ -100,15 +109,17 @@ const resetPageLabels: Record<string, string> = {
 };
 const deepThinkingUnsupported = new Set<string>();
 
-const systemPrompt = [
+function createSystemPrompt(statusMappings?: StatusMappings | null): string {
+  return [
   "你是招聘网站投递状态识别器。请根据截图，为每个候选岗位识别当前投递状态。",
   "先判断整个页面类型：application_status=个人投递状态页；official_homepage=公司官网首页、招聘首页或职位列表且没有个人投递记录；login=登录、注册或验证页面；blank=空白、持续加载、错误页或没有有效内容；other=其他页面。",
   "页面类型规则优先级最高：若为 official_homepage、login 或 blank，所有候选岗位必须返回 matched=true、status=unset，不能因为缺少岗位状态而推测为淘汰或其他进度。",
-  "状态映射：简历筛选=screening；简历初筛=screening；简历投递=screening；待评估=screening；业务筛选=screening_passed；业务筛选-进行中=screening_passed；待面试/面试邀约/已安排面试=interview_pending；到面/面试完成/已参加面试=interviewed；待签约=signing_pending；录用/OFFER=offer；不合适/不匹配/流程终止=rejected。",
+  `状态映射：${formatStatusMappingPrompt(statusMappings)}。`,
   "只返回 JSON 对象，格式为：",
   '{"pageType":"application_status|official_homepage|login|blank|other","pageEvidence":"不超过20字的页面类型证据","results":[{"applicationId":"候选岗位UUID","matched":true,"rawStatus":"页面原文","status":"unset|screening|screening_passed|interview_pending|interviewed|signing_pending|offer|rejected|null","confidence":0到1,"evidence":"不超过20字的截图证据"}]}。',
   "必须为每个候选岗位返回一项；无法可靠区分或没有找到时 matched=false、status=null。",
-].join("\n");
+  ].join("\n");
+}
 
 function jsonObject(text: string): Record<string, unknown> {
   const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text)?.[1] ?? text;
@@ -145,6 +156,7 @@ export class OpenAiCompatibleRecognizer implements StatusRecognizer {
       model?: string;
       deepThinking?: boolean;
       debugObserver?: AiDebugObserver;
+      statusMappings?: StatusMappings;
     },
   ) {
     this.configured = Boolean(options.baseUrl && options.apiKey && options.model);
@@ -174,6 +186,10 @@ export class OpenAiCompatibleRecognizer implements StatusRecognizer {
       throw new Error("AI recognizer is not configured");
     }
     const endpoint = `${this.options.baseUrl.replace(/\/$/, "")}/chat/completions`;
+    const statusMappings = this.options.statusMappings
+      ? normalizeCustomStatusMappings(this.options.statusMappings)
+      : undefined;
+    const systemPrompt = createSystemPrompt(statusMappings);
     const userPrompt = [
       `公司：${input.company}`,
       `页面标题：${input.pageTitle ?? "未知"}`,
@@ -293,14 +309,18 @@ export class OpenAiCompatibleRecognizer implements StatusRecognizer {
           const result = item as Record<string, unknown>;
           const applicationId = typeof result.applicationId === "string" ? result.applicationId : "";
           if (!applicationId) return null;
-          const rawStatusValue = result.status;
-          const status = typeof rawStatusValue === "string" && allowed.has(rawStatusValue as ProgressStatus)
-            ? rawStatusValue as ProgressStatus
-            : null;
+          const rawStatus = typeof result.rawStatus === "string" ? result.rawStatus.slice(0, 500) : null;
+          const mappedStatus = rawStatus ? matchStatusMapping(rawStatus, statusMappings)?.rule.status ?? null : null;
+          const returnedStatus = result.status;
+          const status = mappedStatus ?? (
+            typeof returnedStatus === "string" && allowed.has(returnedStatus as ProgressStatus)
+              ? returnedStatus as ProgressStatus
+              : null
+          );
           return {
             applicationId,
             matched: result.matched === true,
-            rawStatus: typeof result.rawStatus === "string" ? result.rawStatus.slice(0, 500) : null,
+            rawStatus,
             status,
             confidence: Math.min(1, Math.max(0, Number(result.confidence ?? 0))),
             evidence: String(result.evidence ?? "").trim().slice(0, 500),

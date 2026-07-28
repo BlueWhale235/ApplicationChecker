@@ -12,7 +12,9 @@ import type {
   LoginSessionSummary,
   NotificationPage,
   ProgressStatus,
+  RecognitionMode,
   SettingsUpdate,
+  StatusMappings,
   TaskRunPage,
   UpdateApplication,
 } from "@application-checker/contracts";
@@ -78,9 +80,9 @@ export const api = {
     screenshotsFailed: number;
   }>("/runs/history/delete-all", { method: "POST" }),
   debugStatus: () => request<{ enabled: boolean }>("/debug/status"),
-  aiDebugTraces: (limit = 50) => request<AiDebugTraceSummary[]>(`/debug/ai-traces?limit=${limit}`),
-  aiDebugTrace: (id: string) => request<AiDebugTraceDetail>(`/debug/ai-traces/${id}`),
-  clearAiDebugTraces: () => request<{ deleted: number }>("/debug/ai-traces/clear", { method: "POST" }),
+  aiDebugTraces: (limit = 50) => request<AiDebugTraceSummary[]>(`/debug/recognition-traces?limit=${limit}`),
+  aiDebugTrace: (id: string) => request<AiDebugTraceDetail>(`/debug/recognition-traces/${id}`),
+  clearAiDebugTraces: () => request<{ deleted: number }>("/debug/recognition-traces/clear", { method: "POST" }),
   profiles: () => request<BrowserProfileSummary[]>("/browser-profiles"),
   deleteProfile: (site: string) => request<void>(`/browser-profiles/${encodeURIComponent(site)}/delete`, { method: "POST" }),
   settings: () => request<AppSettings>("/settings"),
@@ -95,6 +97,14 @@ export const api = {
     aiApiKeySet: boolean;
     aiDeepThinking: boolean;
   }>("/settings/ai/update", { method: "POST", body: JSON.stringify(body) }),
+  updateRecognitionMode: (recognitionMode: RecognitionMode) => request<{ ok: true; recognitionMode: RecognitionMode }>(
+    "/settings/recognition/update",
+    { method: "POST", body: JSON.stringify({ recognitionMode }) },
+  ),
+  updateStatusMappings: (statusMappings: StatusMappings) => request<{ ok: true; statusMappings: StatusMappings }>(
+    "/settings/status-mappings/update",
+    { method: "POST", body: JSON.stringify({ statusMappings }) },
+  ),
   createLogin: (runId: string) => request<{ session: LoginSessionSummary; accessUrl: string | null }>("/login-sessions", {
     method: "POST", body: JSON.stringify({ runId }),
   }),

@@ -51,6 +51,7 @@ const resultReasonLabels = {
   ai_failed: "识别失败",
   automation_paused: "淘汰后暂停，仅保留建议",
 } as const;
+const sourceLabels = { local: "本地", ai: "AI" } as const;
 </script>
 
 <template>
@@ -97,7 +98,7 @@ const resultReasonLabels = {
     </div>
     <div v-if="page.items.length" class="table-shell task-table-shell">
       <table class="task-table">
-        <thead><tr><th>公司 / 岗位</th><th>状态</th><th>来源</th><th>创建 / 开始</th><th>耗时</th><th>截图</th><th>AI 结果</th><th>操作</th></tr></thead>
+        <thead><tr><th>公司 / 岗位</th><th>状态</th><th>来源</th><th>创建 / 开始</th><th>耗时</th><th>截图</th><th>识别结果</th><th>操作</th></tr></thead>
         <tbody>
           <template v-for="run in page.items" :key="run.id">
           <tr>
@@ -121,8 +122,8 @@ const resultReasonLabels = {
                   <i :class="expanded.has(run.id) ? 'mdi mdi-chevron-up' : 'mdi mdi-chevron-down'"></i>
                 </button>
               </template>
-              <template v-else-if="run.aiSuggestedStatus"><span>{{ progressLabels[run.aiSuggestedStatus] }}</span><small>{{ Math.round((run.aiConfidence || 0) * 100) }}%</small></template>
-              <span v-else>{{ run.aiStatus === "failed" ? "识别失败" : "—" }}</span>
+              <template v-else-if="run.recognitionSuggestedStatus"><span>{{ progressLabels[run.recognitionSuggestedStatus] }}</span><small>{{ Math.round((run.recognitionConfidence || 0) * 100) }}%</small></template>
+              <span v-else>{{ run.recognitionStatus === "failed" ? "识别失败" : "—" }}</span>
             </td>
             <td>
               <div class="task-row-actions">
@@ -138,7 +139,7 @@ const resultReasonLabels = {
                 <div class="task-result-heading">
                   <div>
                     <i class="mdi mdi-auto-fix"></i>
-                    <strong>AI 识别明细</strong>
+                    <strong>识别明细</strong>
                   </div>
                   <span>{{ run.recognitionResults.length }} 个岗位</span>
                 </div>
@@ -147,6 +148,7 @@ const resultReasonLabels = {
                     <div class="result-title">
                       <strong>{{ result.jobTitle }}</strong>
                       <span v-if="result.rawStatus">{{ result.rawStatus }}</span>
+                      <small v-if="result.source">{{ sourceLabels[result.source] }}{{ result.adapterId ? ` · ${result.adapterId} ${result.ruleVersion || ""}` : "" }}</small>
                     </div>
                     <span v-if="result.suggestedStatus" class="status-chip" :data-status="result.suggestedStatus">{{ progressLabels[result.suggestedStatus] }}</span>
                     <span v-else class="result-unmatched">未匹配</span>

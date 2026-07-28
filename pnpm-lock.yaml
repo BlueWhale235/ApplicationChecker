@@ -35,6 +35,12 @@ importers:
       '@application-checker/cookie-state':
         specifier: workspace:*
         version: link:../../packages/cookie-state
+      '@application-checker/local-status':
+        specifier: workspace:*
+        version: link:../../packages/local-status
+      '@application-checker/status-mapping':
+        specifier: workspace:*
+        version: link:../../packages/status-mapping
       '@fastify/cookie':
         specifier: ^11.1.1
         version: 11.1.2
@@ -84,6 +90,12 @@ importers:
       '@application-checker/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@application-checker/cookie-state':
+        specifier: workspace:*
+        version: link:../../packages/cookie-state
+      '@application-checker/local-status':
+        specifier: workspace:*
+        version: link:../../packages/local-status
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
@@ -137,6 +149,9 @@ importers:
       '@application-checker/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@application-checker/status-mapping':
+        specifier: workspace:*
+        version: link:../status-mapping
 
   packages/contracts:
     dependencies:
@@ -152,6 +167,32 @@ importers:
       '@application-checker/contracts':
         specifier: workspace:*
         version: link:../contracts
+
+  packages/local-status:
+    dependencies:
+      '@application-checker/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@application-checker/status-mapping':
+        specifier: workspace:*
+        version: link:../status-mapping
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.3
+        version: 24.13.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@types/node@24.13.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(tsx@4.23.1))
+
+  packages/status-mapping:
+    dependencies:
+      '@application-checker/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@types/node@26.1.1)(vite@8.1.5(@types/node@26.1.1)(esbuild@0.28.1)(tsx@4.23.1))
 
 packages:
 

@@ -198,7 +198,7 @@ function date(value: string | null): string {
         <div v-if="detail.statusEvents.length" class="timeline">
           <div v-for="event in detail.statusEvents.slice(0, 3)" :key="event.id">
             <i></i><strong>{{ event.eventType === "applied" ? "投递" : progressLabels[event.toStatus] }}</strong><span>{{ date(event.createdAt) }}</span>
-            <small>{{ event.eventType === "applied" ? "投递记录" : event.source === "manual" ? "手动设置" : `AI 识别${event.confidence ? ` · ${Math.round(event.confidence * 100)}%` : ""}` }}</small>
+            <small>{{ event.eventType === "applied" ? "投递记录" : event.source === "manual" ? "手动设置" : `${event.source === "local" ? "本地解析" : "AI 识别"}${event.confidence ? ` · ${Math.round(event.confidence * 100)}%` : ""}` }}</small>
           </div>
         </div>
         <p v-else class="quiet-empty">还没有状态变化。</p>
@@ -225,7 +225,7 @@ function date(value: string | null): string {
           <article v-for="run in detail.runs.slice(0, runsExpanded ? detail.runs.length : 3)" :key="run.id">
             <i class="run-dot" :data-run="run.status"></i>
             <div><strong>{{ runLabels[run.status] }}</strong><span>{{ date(run.createdAt) }}</span>
-              <small v-if="run.aiSuggestedStatus">AI：{{ progressLabels[run.aiSuggestedStatus] }} · {{ Math.round((run.aiConfidence || 0) * 100) }}%</small>
+              <small v-if="run.recognitionSuggestedStatus">识别：{{ progressLabels[run.recognitionSuggestedStatus] }} · {{ Math.round((run.recognitionConfidence || 0) * 100) }}%</small>
               <small v-else-if="run.errorMessage">{{ run.errorMessage }}</small>
               <small v-if="run.groupMemberCount > 1">共享检查 · {{ run.groupMemberCount }} 个岗位</small>
             </div>

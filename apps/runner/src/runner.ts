@@ -3,10 +3,11 @@ import puppeteer, { type Browser, type Page } from "puppeteer-core";
 import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
-import type { RunnerJob, RunnerLoginJob } from "@application-checker/contracts";
+import type { RunnerJob, RunnerLoginJob, RunnerRecognitionPreviewJob } from "@application-checker/contracts";
 import { collectBrowserState, installBrowserState } from "./browser-state.js";
 import { classifyPage } from "./detection.js";
 import { captureFullPage } from "./full-page-capture.js";
+import { captureLocalPageSnapshot } from "./dom-snapshot.js";
 
 const apiBase = (process.env.APP_INTERNAL_URL ?? "http://127.0.0.1:8080/api").replace(/\/$/, "");
 const token = process.env.RUNNER_INTERNAL_TOKEN ?? "development-runner-token-change-me-123456";
@@ -123,6 +124,7 @@ async function capture(job: RunnerJob): Promise<void> {
       });
       return;
     }
+    const pageSnapshot = job.recognitionMode === "ai_only" ? null : await captureLocalPageSnapshot(page);
     const state = await collectBrowserState(browser, page, job.site);
     await api(`/internal/runs/${job.runId}/complete`, {
       method: "POST",
@@ -132,6 +134,7 @@ async function capture(job: RunnerJob): Promise<void> {
         screenshotBase64: image.data.toString("base64"),
         truncated: image.truncated,
         browserState: state,
+        pageSnapshot,
       }),
     });
   } catch (error) {
@@ -191,6 +194,49 @@ async function login(job: RunnerLoginJob): Promise<void> {
   }
 }
 
+async function recognitionPreview(job: RunnerRecognitionPreviewJob): Promise<void> {
+  let browser: Browser | null = null;
+  let profilePath: string | null = null;
+  try {
+    profilePath = await freshBrowserProfile("recognition-preview", job.previewId);
+    browser = await puppeteer.launch({
+      executablePath: browserBin,
+      userDataDir: profilePath,
+      headless: true,
+      args: launchArgs(job.proxyUrl),
+    });
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+    await page.setUserAgent(job.userAgent);
+    await installBrowserState(page, job.browserState);
+    const response = await page.goto(job.url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await settle(page);
+    const observed = await signals(page, response?.status() ?? null);
+    const detection = classifyPage(observed);
+    const [snapshot, image] = await Promise.all([
+      captureLocalPageSnapshot(page),
+      captureFullPage(page),
+    ]);
+    await api(`/internal/recognition-previews/${job.previewId}/complete`, {
+      method: "POST",
+      body: JSON.stringify({
+        snapshot,
+        screenshotBase64: image.data.toString("base64"),
+        needsLogin: detection.requiresLogin,
+        loginReason: detection.requiresLogin ? detection.reason : null,
+      }),
+    });
+  } catch (error) {
+    await api(`/internal/recognition-previews/${job.previewId}/fail`, {
+      method: "POST",
+      body: JSON.stringify({ message: error instanceof Error ? error.message : "Unknown preview error" }),
+    }).catch(() => {});
+  } finally {
+    await browser?.close().catch(() => {});
+    if (profilePath) await rm(profilePath, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 let stopping = false;
 process.on("SIGINT", () => { stopping = true; });
 process.on("SIGTERM", () => { stopping = true; });
@@ -203,9 +249,10 @@ heartbeat.unref();
 while (!stopping) {
   try {
     await api("/internal/heartbeat", { method: "POST", body: "{}" });
-    const job = await api<RunnerJob | RunnerLoginJob | { kind: "idle" }>("/internal/claim", { method: "POST", body: "{}" });
+    const job = await api<RunnerJob | RunnerLoginJob | RunnerRecognitionPreviewJob | { kind: "idle" }>("/internal/claim", { method: "POST", body: "{}" });
     if (job.kind === "capture") await capture(job);
     else if (job.kind === "login") await login(job);
+    else if (job.kind === "recognition_preview") await recognitionPreview(job);
     else await new Promise((resolve) => setTimeout(resolve, 1500));
   } catch (error) {
     console.error(error);

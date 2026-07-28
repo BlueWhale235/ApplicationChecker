@@ -11,12 +11,14 @@ import { authorizeVncRequest, exchangeRemoteLogin, registerRoutes } from "./rout
 import { initializeRuntimeSettings } from "./runtime-settings.js";
 import { startScheduler } from "./scheduler.js";
 import { AiDebugStore } from "./ai-debug.js";
+import { RecognitionPreviewStore } from "./recognition-preview.js";
 
 const config = loadConfig();
 const context = createDb(config.databasePath);
 await initializeRuntimeSettings(context, config);
 const runnerHeartbeat = { at: 0 };
 const aiDebugStore = config.debugTools ? new AiDebugStore() : undefined;
+const recognitionPreviewStore = config.debugTools ? new RecognitionPreviewStore() : undefined;
 const app = Fastify({
   logger: true,
   bodyLimit: 35 * 1024 * 1024,
@@ -30,7 +32,13 @@ app.setErrorHandler((error, _request, reply) => {
 });
 
 await app.register(async (api) => {
-  await registerRoutes(api, { context, config, runnerHeartbeat, ...(aiDebugStore ? { aiDebugStore } : {}) });
+  await registerRoutes(api, {
+    context,
+    config,
+    runnerHeartbeat,
+    ...(aiDebugStore ? { aiDebugStore } : {}),
+    ...(recognitionPreviewStore ? { recognitionPreviewStore } : {}),
+  });
 }, { prefix: "/api" });
 
 if (!config.desktopMode) {

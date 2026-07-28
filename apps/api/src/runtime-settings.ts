@@ -4,6 +4,7 @@ import path from "node:path";
 import type { Selectable } from "kysely";
 import { OpenAiCompatibleRecognizer, type AiDebugObserver } from "@application-checker/ai-status";
 import type { AiSettingsUpdate } from "@application-checker/contracts";
+import { parseStatusMappings } from "@application-checker/status-mapping";
 import type { Config } from "./config.js";
 import type { AppSettingsTable, DbContext } from "./db.js";
 import { appSettings } from "./service.js";
@@ -46,6 +47,10 @@ export async function syncRuntimeSettingsFile(settings: RuntimeSettingsRow, conf
     version: 1,
     updatedAt: settings.updated_at,
     browser: { defaultUserAgent: settings.default_user_agent },
+    recognition: {
+      mode: settings.recognition_mode,
+      statusMappings: parseStatusMappings(settings.status_mappings),
+    },
     ai: {
       baseUrl: settings.ai_base_url,
       model: settings.ai_model,
@@ -110,6 +115,7 @@ export function recognizerFromSettings(
     ...(settings.ai_model ? { model: settings.ai_model } : {}),
     ...(apiKey ? { apiKey } : {}),
     deepThinking: Boolean(settings.ai_deep_thinking),
+    statusMappings: parseStatusMappings(settings.status_mappings),
     ...(debugObserver ? { debugObserver } : {}),
   });
 }

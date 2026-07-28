@@ -16,6 +16,8 @@
     "@application-checker/ai-status": "workspace:*",
     "@application-checker/contracts": "workspace:*",
     "@application-checker/cookie-state": "workspace:*",
+    "@application-checker/local-status": "workspace:*",
+    "@application-checker/status-mapping": "workspace:*",
     "@fastify/cookie": "^11.1.1",
     "@fastify/http-proxy": "^11.5.0",
     "@fastify/static": "^10.1.0",

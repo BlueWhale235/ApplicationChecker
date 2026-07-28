@@ -4,12 +4,13 @@ import type {
 import type {
   ApplicationsTable, BrowserProfilesTable, LoginSessionsTable, RunApplicationResultsTable, RunsTable, StatusEventsTable,
 } from "./db.js";
+import type { Selectable } from "kysely";
 
 export const mapApplication = (
-  row: ApplicationsTable & {
+  row: Selectable<ApplicationsTable> & {
     browser_profile_updated_at?: string | null;
     group_member_count?: number | null;
-    group_schedule_mode?: ApplicationsTable["schedule_mode"] | null;
+    group_schedule_mode?: Selectable<ApplicationsTable>["schedule_mode"] | null;
     group_cron_expression?: string | null;
     group_next_run_at?: string | null;
     group_resolved_url?: string | null;
@@ -28,7 +29,7 @@ export const mapApplication = (
   checkGroupId: row.check_group_id ?? row.id,
   checkGroupMemberCount: Number(row.group_member_count ?? 1),
   progressStatus: row.progress_status_v2 ?? "unset",
-  progressSource: row.progress_source,
+  progressSource: row.recognition_source ?? row.progress_source,
   manualLocked: Boolean(row.manual_locked),
   automationPaused: Boolean(row.automation_paused),
   automationPauseReason: row.automation_pause_reason,
@@ -49,7 +50,7 @@ export const mapApplication = (
 });
 
 export const mapRun = (
-  row: RunsTable,
+  row: Selectable<RunsTable>,
   recognitionResults: ApplicationRecognitionResult[] = [],
   groupMemberCount = recognitionResults.length || 1,
 ): RunSummary => ({
@@ -67,6 +68,13 @@ export const mapRun = (
   aiSuggestedStatus: row.ai_suggested_status_v2,
   aiConfidence: row.ai_confidence,
   aiEvidence: row.ai_evidence,
+  recognitionMode: row.recognition_mode,
+  recognitionStatus: row.recognition_status,
+  recognitionSource: row.recognition_source,
+  recognitionSuggestedStatus: row.recognition_suggested_status_v2,
+  recognitionConfidence: row.recognition_confidence,
+  recognitionEvidence: row.recognition_evidence,
+  recognitionProvider: row.recognition_provider,
   errorCode: row.error_code,
   errorMessage: row.error_message,
   createdAt: row.created_at,
@@ -75,7 +83,7 @@ export const mapRun = (
   recognitionResults,
 });
 
-export const mapRecognitionResult = (row: RunApplicationResultsTable): ApplicationRecognitionResult => ({
+export const mapRecognitionResult = (row: Selectable<RunApplicationResultsTable>): ApplicationRecognitionResult => ({
   applicationId: row.application_id,
   jobTitle: row.job_title_snapshot,
   matched: Boolean(row.matched),
@@ -85,15 +93,18 @@ export const mapRecognitionResult = (row: RunApplicationResultsTable): Applicati
   evidence: row.evidence,
   applied: Boolean(row.applied),
   notAppliedReason: row.automation_paused ? "automation_paused" : row.not_applied_reason,
+  source: row.recognition_source,
+  adapterId: row.adapter_id,
+  ruleVersion: row.rule_version,
 });
 
-export const mapEvent = (row: StatusEventsTable): StatusEvent => ({
+export const mapEvent = (row: Selectable<StatusEventsTable>): StatusEvent => ({
   id: row.id,
   applicationId: row.application_id,
   runId: row.run_id,
   fromStatus: row.from_status,
   toStatus: row.to_status,
-  source: row.source,
+  source: row.recognition_source,
   confidence: row.confidence,
   evidence: row.evidence,
   note: row.note,

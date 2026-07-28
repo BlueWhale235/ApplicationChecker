@@ -30,6 +30,95 @@ export const ScheduleModeSchema = Type.Union([
 ]);
 export type ScheduleMode = Static<typeof ScheduleModeSchema>;
 
+export const RecognitionModeSchema = Type.Union([
+  Type.Literal("local_first"),
+  Type.Literal("local_only"),
+  Type.Literal("ai_only"),
+]);
+export type RecognitionMode = Static<typeof RecognitionModeSchema>;
+
+export const StatusMappingKeySchema = Type.Union([
+  Type.Literal("screening"),
+  Type.Literal("screening_passed"),
+  Type.Literal("interview_pending"),
+  Type.Literal("interviewed"),
+  Type.Literal("signing_pending"),
+  Type.Literal("offer"),
+  Type.Literal("rejected"),
+]);
+export type StatusMappingKey = Static<typeof StatusMappingKeySchema>;
+
+const StatusMappingTermsSchema = Type.Array(
+  Type.String({ minLength: 1, maxLength: 120 }),
+  { maxItems: 100 },
+);
+export const StatusMappingsSchema = Type.Object({
+  screening: StatusMappingTermsSchema,
+  screening_passed: StatusMappingTermsSchema,
+  interview_pending: StatusMappingTermsSchema,
+  interviewed: StatusMappingTermsSchema,
+  signing_pending: StatusMappingTermsSchema,
+  offer: StatusMappingTermsSchema,
+  rejected: StatusMappingTermsSchema,
+}, { additionalProperties: false });
+export type StatusMappings = Static<typeof StatusMappingsSchema>;
+
+export type RecognitionSource = "local" | "ai" | "mixed";
+
+export interface LocalDomNode {
+  id: number;
+  parentId: number | null;
+  tag: string;
+  role: string | null;
+  classes: string[];
+  dataStatus: string | null;
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface LocalPageSnapshot {
+  url: string;
+  title: string;
+  language: string | null;
+  visibleText: string;
+  nodes: LocalDomNode[];
+  truncated: boolean;
+  nodeLimitReached: boolean;
+  textLimitReached: boolean;
+}
+
+export interface ParserRouteRule {
+  adapterId: string;
+  version: string;
+  priority: number;
+  hostname: string;
+  pathname: string;
+}
+
+export interface LocalRecognitionResultItem {
+  applicationId: string;
+  matched: boolean;
+  rawStatus: string | null;
+  status: ProgressStatus | null;
+  confidence: number;
+  evidence: string;
+  titleMatch: "exact" | "contains" | "none";
+  statusRule: string | null;
+}
+
+export interface LocalRecognitionResult {
+  adapterId: string;
+  adapterVersion: string;
+  route: ParserRouteRule | null;
+  pageType: "status" | "official_homepage" | "login" | "blank" | "unknown";
+  pageEvidence: string | null;
+  results: LocalRecognitionResultItem[];
+  fallbackReason: string | null;
+}
+
 export const CheckPlanUpdateSchema = Type.Object({
   scheduleMode: ScheduleModeSchema,
   cronExpression: Type.Optional(Type.Union([Type.String({ maxLength: 120 }), Type.Null()])),
@@ -80,6 +169,16 @@ export const AiSettingsUpdateSchema = Type.Object({
 });
 export type AiSettingsUpdate = Static<typeof AiSettingsUpdateSchema>;
 
+export const RecognitionSettingsUpdateSchema = Type.Object({
+  recognitionMode: RecognitionModeSchema,
+});
+export type RecognitionSettingsUpdate = Static<typeof RecognitionSettingsUpdateSchema>;
+
+export const StatusMappingsUpdateSchema = Type.Object({
+  statusMappings: StatusMappingsSchema,
+});
+export type StatusMappingsUpdate = Static<typeof StatusMappingsUpdateSchema>;
+
 export interface ApplicationSummary {
   id: string;
   company: string;
@@ -94,7 +193,7 @@ export interface ApplicationSummary {
   checkGroupMemberCount: number;
   site: string;
   progressStatus: ProgressStatus;
-  progressSource: "manual" | "ai" | null;
+  progressSource: "manual" | "local" | "ai" | null;
   manualLocked: boolean;
   automationPaused: boolean;
   automationPauseReason: "rejected" | null;
@@ -125,6 +224,13 @@ export interface RunSummary {
   aiSuggestedStatus: ProgressStatus | null;
   aiConfidence: number | null;
   aiEvidence: string | null;
+  recognitionMode: RecognitionMode;
+  recognitionStatus: "skipped" | "pending" | "succeeded" | "partial" | "failed";
+  recognitionSource: RecognitionSource | null;
+  recognitionSuggestedStatus: ProgressStatus | null;
+  recognitionConfidence: number | null;
+  recognitionEvidence: string | null;
+  recognitionProvider: string | null;
   errorCode: string | null;
   errorMessage: string | null;
   createdAt: string;
@@ -150,6 +256,9 @@ export interface ApplicationRecognitionResult {
   evidence: string | null;
   applied: boolean;
   notAppliedReason: "manual_locked" | "low_confidence" | "unmatched" | "ai_failed" | "automation_paused" | null;
+  source: Exclude<RecognitionSource, "mixed"> | null;
+  adapterId: string | null;
+  ruleVersion: string | null;
 }
 
 export interface CheckGroupMember {
@@ -216,6 +325,8 @@ export interface AiDebugTraceSummary {
   status: "pending" | "succeeded" | "failed";
   durationMs: number | null;
   httpStatus: number | null;
+  recognitionSource?: RecognitionSource;
+  adapterId?: string | null;
 }
 
 export interface AiDebugTraceAttempt {
@@ -257,6 +368,15 @@ export interface AiDebugTraceDetail extends AiDebugTraceSummary {
     }>;
   } | null;
   error: string | null;
+  adapterVersion?: string | null;
+  route?: ParserRouteRule | null;
+  localSnapshotSummary?: {
+    nodeCount: number;
+    textCharacters: number;
+    truncated: boolean;
+    nodeLimitReached: boolean;
+    textLimitReached: boolean;
+  } | null;
 }
 
 export interface StatusEvent {
@@ -265,7 +385,7 @@ export interface StatusEvent {
   runId: string | null;
   fromStatus: ProgressStatus;
   toStatus: ProgressStatus;
-  source: "manual" | "ai";
+  source: "manual" | "local" | "ai";
   confidence: number | null;
   evidence: string | null;
   note: string | null;
@@ -308,6 +428,9 @@ export interface AppSettings {
   aiApiKeySet: boolean;
   aiConfidenceThreshold: number;
   aiDeepThinking: boolean;
+  recognitionMode: RecognitionMode;
+  statusMappings: StatusMappings;
+  builtinStatusMappings: StatusMappings;
   runnerHealthy: boolean;
   loginPresentation: "vnc" | "external-window";
 }
@@ -352,6 +475,7 @@ export interface RunnerJob {
   browserState: BrowserStateEnvelope | null;
   proxyUrl: string | null;
   userAgent: string;
+  recognitionMode: RecognitionMode;
 }
 
 export interface RunnerLoginJob {
@@ -366,6 +490,57 @@ export interface RunnerLoginJob {
   expiresAt: string;
   proxyUrl: string | null;
   userAgent: string;
+}
+
+export interface RunnerRecognitionPreviewJob {
+  kind: "recognition_preview";
+  previewId: string;
+  groupId: string;
+  applicationId: string;
+  url: string;
+  company: string;
+  applications: Array<{
+    id: string;
+    jobTitle: string;
+    appliedAt: string | null;
+    location: string | null;
+  }>;
+  site: string;
+  browserState: BrowserStateEnvelope | null;
+  proxyUrl: string | null;
+  userAgent: string;
+}
+
+export interface RecognitionPreviewSummary {
+  id: string;
+  applicationId: string;
+  company: string;
+  site: string;
+  status: "queued" | "running" | "succeeded" | "needs_login" | "failed";
+  createdAt: string;
+  completedAt: string | null;
+  adapterId: string | null;
+  matchedCount: number;
+  applicationCount: number;
+  error: string | null;
+}
+
+export interface RecognitionPreviewDetail extends RecognitionPreviewSummary {
+  finalUrl: string | null;
+  pageTitle: string | null;
+  route: ParserRouteRule | null;
+  adapterVersion: string | null;
+  pageType: LocalRecognitionResult["pageType"] | null;
+  pageEvidence: string | null;
+  snapshotSummary: {
+    nodeCount: number;
+    textCharacters: number;
+    truncated: boolean;
+    nodeLimitReached: boolean;
+    textLimitReached: boolean;
+  } | null;
+  results: LocalRecognitionResultItem[];
+  screenshotAvailable: boolean;
 }
 
 export const DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";

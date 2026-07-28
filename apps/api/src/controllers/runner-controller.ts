@@ -57,9 +57,12 @@ import type {
   RunnerLoginJob,
   RunsTable,
 } from "./shared.js";
+import type { LocalPageSnapshot, RecognitionSource, RunnerRecognitionPreviewJob } from "@application-checker/contracts";
+import { LOCAL_AUTO_APPLY_THRESHOLD, recognizeLocalPage } from "@application-checker/local-status";
+import { parseStatusMappings } from "@application-checker/status-mapping";
 
 export async function registerRunnerController(app: FastifyInstance, deps: RouteDeps): Promise<void> {
-  const { context, config, recognizer: injectedRecognizer, aiDebugStore, runnerHeartbeat } = deps;
+  const { context, config, recognizer: injectedRecognizer, aiDebugStore, recognitionPreviewStore, runnerHeartbeat } = deps;
 
   // Runner-only endpoints.
   app.addHook("preHandler", async (request) => {
@@ -80,7 +83,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     return { status: row.status };
   });
 
-  app.post("/internal/claim", async (): Promise<RunnerLoginJob | RunnerJob | { kind: "idle" }> => {
+  app.post("/internal/claim", async (): Promise<RunnerLoginJob | RunnerJob | RunnerRecognitionPreviewJob | { kind: "idle" }> => {
     const login = await context.db.selectFrom("login_sessions")
       .innerJoin("applications", "applications.id", "login_sessions.application_id")
       .leftJoin("check_groups", "check_groups.id", "applications.check_group_id")
@@ -107,6 +110,8 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         userAgent: (await appSettings(context)).default_user_agent,
       };
     }
+    const preview = recognitionPreviewStore?.claim();
+    if (preview) return preview;
     const run = await context.db.selectFrom("runs")
       .innerJoin("applications", "applications.id", "runs.application_id")
       .leftJoin("check_groups", "check_groups.id", "runs.check_group_id")
@@ -118,7 +123,15 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       .where("runs.status", "=", "queued").orderBy("runs.created_at").executeTakeFirst();
     if (!run) return { kind: "idle" };
     const started = nowIso();
-    const updated = await context.db.updateTable("runs").set({ status: "running", started_at: started, error_code: null, error_message: null })
+    const settings = await appSettings(context);
+    const updated = await context.db.updateTable("runs").set({
+      status: "running",
+      started_at: started,
+      error_code: null,
+      error_message: null,
+      recognition_mode: settings.recognition_mode,
+      recognition_status: "pending",
+    })
       .where("id", "=", run.id).where("status", "=", "queued").executeTakeFirst();
     if (!Number(updated.numUpdatedRows)) return { kind: "idle" };
     const groupId = run.check_group_id ?? run.application_id;
@@ -142,7 +155,8 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       site: run.site,
       browserState: await loadBrowserState(context, config, run.site),
       proxyUrl: config.upstreamProxyUrl,
-      userAgent: (await appSettings(context)).default_user_agent,
+      userAgent: settings.default_user_agent,
+      recognitionMode: settings.recognition_mode,
     };
   });
 
@@ -162,6 +176,8 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       ...(screenshot ? { screenshot_path: screenshot } : {}),
       error_code: "LOGIN_REQUIRED",
       error_message: body.reason?.slice(0, 500) ?? "需要登录后继续",
+      recognition_status: "skipped",
+      recognition_evidence: "Runner 在本地识别前检测到需要登录",
       completed_at: completed,
     }).where("id", "=", id).where("status", "=", "running").executeTakeFirst();
     if (!Number(updated.numUpdatedRows)) {
@@ -177,7 +193,12 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     const id = (request.params as { id: string }).id;
     const body = request.body as {
 
-      finalUrl: string; pageTitle: string | null; screenshotBase64: string; truncated: boolean; browserState: BrowserStateEnvelope;
+      finalUrl: string;
+      pageTitle: string | null;
+      screenshotBase64: string;
+      truncated: boolean;
+      browserState: BrowserStateEnvelope;
+      pageSnapshot?: LocalPageSnapshot | null;
     };
     const run = await context.db.selectFrom("runs").innerJoin("applications", "applications.id", "runs.application_id")
       .select([
@@ -196,48 +217,118 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     const screenshotPath = await persistScreenshot(config, groupId, id, body.screenshotBase64);
     await saveBrowserState(context, config, run.site, body.browserState);
     let aiStatus: RunsTable["ai_status"] = "skipped";
-    let provider: string | null = null;
+    let aiProvider: string | null = null;
     let aiError: string | null = null;
-    let groupResults: Array<{
-      applicationId: string; matched: boolean; rawStatus: string | null; status: ProgressStatus | null;
-      confidence: number; evidence: string;
-    }> = [];
+    type MergedResult = {
+      applicationId: string;
+      matched: boolean;
+      rawStatus: string | null;
+      status: ProgressStatus | null;
+      confidence: number;
+      evidence: string;
+      source: "local" | "ai";
+      adapterId: string | null;
+      ruleVersion: string | null;
+    };
+    let groupResults: MergedResult[] = [];
     const settings = await appSettings(context);
+    const recognitionMode = settings.recognition_mode;
+    const statusMappings = parseStatusMappings(settings.status_mappings);
+    const localResult = recognitionMode !== "ai_only" && body.pageSnapshot
+      ? recognizeLocalPage(body.pageSnapshot, members.map((member) => ({
+        id: member.id,
+        jobTitle: member.job_title,
+        location: member.location,
+      })), statusMappings)
+      : null;
+    const localDiagnosticResults: MergedResult[] = localResult ? localResult.results.map((result) => ({
+      applicationId: result.applicationId,
+      matched: result.matched,
+      rawStatus: result.rawStatus,
+      status: result.status,
+      confidence: result.confidence,
+      evidence: result.evidence,
+      source: "local",
+      adapterId: localResult.adapterId,
+      ruleVersion: localResult.adapterVersion,
+    })) : [];
+    if (localResult) {
+      aiDebugStore?.recordLocal({
+        runId: id,
+        company: run.company,
+        applications: members.map((member) => ({
+          id: member.id,
+          jobTitle: member.job_title,
+          appliedAt: member.applied_at,
+          location: member.location,
+        })),
+        snapshot: body.pageSnapshot!,
+        result: localResult,
+      });
+      groupResults = localResult.results
+        .filter((result) => result.matched && result.status && result.confidence >= LOCAL_AUTO_APPLY_THRESHOLD)
+        .map((result) => ({
+          applicationId: result.applicationId,
+          matched: result.matched,
+          rawStatus: result.rawStatus,
+          status: result.status,
+          confidence: result.confidence,
+          evidence: result.evidence,
+          source: "local",
+          adapterId: localResult.adapterId,
+          ruleVersion: localResult.adapterVersion,
+        }));
+    }
+    const locallyResolved = new Set(groupResults.map((result) => result.applicationId));
+    const aiMembers = recognitionMode === "local_only"
+      ? []
+      : recognitionMode === "local_first"
+        ? members.filter((member) => !locallyResolved.has(member.id))
+        : members;
     const recognizer = injectedRecognizer ?? recognizerFromSettings(settings, config, aiDebugStore);
-    if (recognizer.configured) {
+    if (aiMembers.length && recognizer.configured) {
       aiStatus = "pending";
       try {
         const input = {
           screenshot: Buffer.from(body.screenshotBase64, "base64"),
           company: run.company,
-          applications: members.map((member) => ({
+          applications: aiMembers.map((member) => ({
             id: member.id, jobTitle: member.job_title, appliedAt: member.applied_at, location: member.location,
           })),
           pageTitle: body.pageTitle,
           finalUrl: body.finalUrl,
-          debugContext: {
-            runId: id,
-            screenshotTruncated: body.truncated,
-          },
+          debugContext: { runId: id, screenshotTruncated: body.truncated },
         };
         if (!recognizer.recognizeGroup) {
-          if (members.length !== 1) throw new Error("AI 适配器不支持同页多岗位识别");
+          if (aiMembers.length !== 1) throw new Error("AI 适配器不支持同页多岗位识别");
           const single = await recognizer.recognize({
             screenshot: input.screenshot,
             company: input.company,
-            jobTitle: members[0]!.job_title,
+            jobTitle: aiMembers[0]!.job_title,
             pageTitle: input.pageTitle,
             finalUrl: input.finalUrl,
           });
-          groupResults = [{
-            applicationId: members[0]!.id, matched: Boolean(single.status), rawStatus: null,
-            status: single.status, confidence: single.confidence, evidence: single.evidence,
-          }];
-          provider = single.provider;
+          groupResults.push({
+            applicationId: aiMembers[0]!.id,
+            matched: Boolean(single.status),
+            rawStatus: null,
+            status: single.status,
+            confidence: single.confidence,
+            evidence: single.evidence,
+            source: "ai",
+            adapterId: null,
+            ruleVersion: null,
+          });
+          aiProvider = single.provider;
         } else {
           const result = await recognizer.recognizeGroup(input);
-          groupResults = result.results;
-          provider = result.provider;
+          groupResults.push(...result.results.map((item) => ({
+            ...item,
+            source: "ai" as const,
+            adapterId: null,
+            ruleVersion: null,
+          })));
+          aiProvider = result.provider;
         }
         aiStatus = "succeeded";
       } catch (error) {
@@ -245,6 +336,28 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         aiError = error instanceof Error ? error.message.slice(0, 500) : "AI recognition failed";
       }
     }
+    for (const diagnostic of localDiagnosticResults) {
+      if (!groupResults.some((result) => result.applicationId === diagnostic.applicationId)) {
+        groupResults.push(diagnostic);
+      }
+    }
+    const sources = new Set(groupResults.map((result) => result.source));
+    const recognitionSource: RecognitionSource | null = sources.size > 1
+      ? "mixed"
+      : sources.values().next().value ?? null;
+    const recognitionStatus: "skipped" | "pending" | "succeeded" | "partial" | "failed" =
+      recognitionMode === "local_only" ? "succeeded"
+        : aiError && groupResults.length ? "partial"
+          : aiError ? "failed"
+            : groupResults.length ? "succeeded"
+              : aiMembers.length && !recognizer.configured ? (localResult ? "partial" : "skipped")
+                : "succeeded";
+    const recognitionProvider = recognitionSource === "mixed"
+      ? `local:${localResult?.adapterId ?? "generic"} + ai:${aiProvider ?? "unknown"}`
+      : recognitionSource === "local"
+        ? `local:${localResult?.adapterId ?? "generic"}`
+        : recognitionSource === "ai" ? aiProvider : localResult ? `local:${localResult.adapterId}` : null;
+    if (recognitionSource === "mixed") aiDebugStore?.markMixed(id, aiProvider);
     const stillRunning = await context.db.selectFrom("runs").select("status").where("id", "=", id).executeTakeFirst();
     if (stillRunning?.status !== "running") {
       await rm(screenshotPath, { force: true });
@@ -259,19 +372,21 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     const firstSuggestion = groupResults.find((result) => result.status)?.status ?? null;
     const firstEvidence = aiError ?? groupResults.find((result) => result.evidence)?.evidence ?? null;
     const firstConfidence = groupResults.find((result) => result.status)?.confidence ?? null;
+    const firstAiResult = groupResults.find((result) => result.source === "ai" && result.status);
     let updated = { numUpdatedRows: 0n };
     let pausedByRejection = false;
     await context.db.transaction().execute(async (trx) => {
       for (const member of members) {
         const result = validResults.get(member.id);
-        const matched = aiStatus === "succeeded" && Boolean(result?.matched && result.status);
+        const matched = Boolean(result?.matched && result.status);
         const blockedByPause = Boolean(member.automation_paused);
-        const applied = matched && result!.confidence >= settings.ai_confidence_threshold && !member.manual_locked && !blockedByPause;
-        const notAppliedReason = aiStatus === "failed" ? "ai_failed"
+        const threshold = result?.source === "local" ? LOCAL_AUTO_APPLY_THRESHOLD : settings.ai_confidence_threshold;
+        const applied = matched && result!.confidence >= threshold && !member.manual_locked && !blockedByPause;
+        const notAppliedReason = !result && aiStatus === "failed" ? "ai_failed"
           : !matched ? "unmatched"
             : member.manual_locked ? "manual_locked"
               : blockedByPause ? null
-              : result!.confidence < settings.ai_confidence_threshold ? "low_confidence" : null;
+              : result!.confidence < threshold ? "low_confidence" : null;
         await trx.updateTable("run_application_results").set({
           matched: matched ? 1 : 0,
           raw_status: result?.rawStatus ?? null,
@@ -281,6 +396,9 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
           applied: applied ? 1 : 0,
           not_applied_reason: notAppliedReason,
           automation_paused: blockedByPause ? 1 : 0,
+          recognition_source: result?.source ?? null,
+          adapter_id: result?.adapterId ?? null,
+          rule_version: result?.ruleVersion ?? null,
         }).where("run_id", "=", id).where("application_id", "=", member.id).execute();
         if (applied && result?.status) {
           const previous = member.progress_status_v2 ?? "unset";
@@ -289,6 +407,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
             progress_status: legacyStatus(result.status),
             progress_status_v2: result.status,
             progress_source: "ai",
+            recognition_source: result.source,
             ...(rejected ? {
               automation_paused: 1,
               automation_pause_reason: "rejected" as const,
@@ -304,6 +423,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
             await trx.insertInto("status_events").values({
               id: statusEventId, application_id: member.id, run_id: id, from_status: previous,
               to_status: result.status, source: "ai", confidence: result.confidence,
+              recognition_source: result.source,
               evidence: result.evidence, note: result.rawStatus, event_type: "progress", created_at: completed,
             }).execute();
             await trx.insertInto("notifications").values({
@@ -330,11 +450,18 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         screenshot_path: screenshotPath,
         screenshot_truncated: body.truncated ? 1 : 0,
         ai_status: aiStatus,
-        ai_suggested_status: firstSuggestion ? legacyStatus(firstSuggestion) : null,
-        ai_suggested_status_v2: firstSuggestion,
-        ai_confidence: firstConfidence,
-        ai_evidence: firstEvidence,
-        ai_provider: provider,
+        ai_suggested_status: firstAiResult?.status ? legacyStatus(firstAiResult.status) : null,
+        ai_suggested_status_v2: firstAiResult?.status ?? null,
+        ai_confidence: firstAiResult?.confidence ?? null,
+        ai_evidence: aiError ?? firstAiResult?.evidence ?? null,
+        ai_provider: aiProvider,
+        recognition_mode: recognitionMode,
+        recognition_status: recognitionStatus,
+        recognition_source: recognitionSource,
+        recognition_suggested_status_v2: firstSuggestion,
+        recognition_confidence: firstConfidence,
+        recognition_evidence: firstEvidence,
+        recognition_provider: recognitionProvider,
         error_code: null,
         error_message: null,
 
@@ -363,12 +490,40 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       status: "failed",
       error_code: body.code?.slice(0, 100) ?? "CAPTURE_FAILED",
       error_message: body.message?.slice(0, 500) ?? "Capture failed",
+      recognition_status: "failed",
+      recognition_evidence: body.message?.slice(0, 500) ?? "Capture failed",
       completed_at: completed,
     }).where("id", "=", id).where("status", "=", "running").executeTakeFirst();
     if (!Number(updated.numUpdatedRows)) return { ok: true, discarded: true };
     await context.db.updateTable("applications").set({
       last_run_status: "failed", last_run_at: completed, updated_at: completed,
     }).where("check_group_id", "=", run.check_group_id ?? run.application_id).execute();
+    return { ok: true };
+  });
+
+  app.post("/internal/recognition-previews/:id/complete", async (request) => {
+    if (!config.debugTools || !recognitionPreviewStore) throw httpError(404, "识别预览功能未启用");
+    const id = (request.params as { id: string }).id;
+    const body = request.body as {
+      snapshot: LocalPageSnapshot;
+      screenshotBase64: string;
+      needsLogin?: boolean;
+      loginReason?: string | null;
+    };
+    const result = recognitionPreviewStore.complete(id, {
+      snapshot: body.snapshot,
+      screenshotBase64: body.screenshotBase64,
+      needsLogin: Boolean(body.needsLogin),
+      loginReason: body.loginReason ?? null,
+    }, parseStatusMappings((await appSettings(context)).status_mappings));
+    if (!result) throw httpError(404, "识别预览不存在或状态无效");
+    return result;
+  });
+
+  app.post("/internal/recognition-previews/:id/fail", async (request) => {
+    if (!config.debugTools || !recognitionPreviewStore) throw httpError(404, "识别预览功能未启用");
+    const id = (request.params as { id: string }).id;
+    recognitionPreviewStore.fail(id, (request.body as { message?: string }).message ?? "Preview failed");
     return { ok: true };
   });
 

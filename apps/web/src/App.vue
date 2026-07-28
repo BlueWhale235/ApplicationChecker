@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 import { RouterView, useRoute, useRouter } from "vue-router";
 import type {
   AiSettingsUpdate, AppSettings, ApplicationDetail, ApplicationSummary, BrowserProfileSummary,
-  CheckPlanUpdate, CreateApplication, NotificationPage, NotificationSummary, ProgressStatus, RunSummary, ScheduleMode, TaskRunPage, TaskRunSummary,
+  CheckPlanUpdate, CreateApplication, NotificationPage, NotificationSummary, ProgressStatus, RecognitionMode, RunSummary, ScheduleMode, StatusMappings, TaskRunPage, TaskRunSummary,
 } from "@application-checker/contracts";
 import { DEFAULT_USER_AGENT, progressLabels } from "@application-checker/contracts";
 import { api } from "./api";
@@ -14,6 +14,7 @@ import ScreenshotViewer from "./components/ScreenshotViewer.vue";
 import TaskManager from "./components/TaskManager.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
 import AiSettingsDialog from "./components/AiSettingsDialog.vue";
+import StatusMappingsDialog from "./components/StatusMappingsDialog.vue";
 import CheckPlanDialog from "./components/CheckPlanDialog.vue";
 import NotificationsPage from "./components/NotificationsPage.vue";
 import ProgressPage from "./pages/ProgressPage.vue";
@@ -39,6 +40,25 @@ const settings = ref<AppSettings>({
   aiApiKeySet: false,
   aiConfidenceThreshold: 0.75,
   aiDeepThinking: false,
+  recognitionMode: "local_first",
+  statusMappings: {
+    screening: [],
+    screening_passed: [],
+    interview_pending: [],
+    interviewed: [],
+    signing_pending: [],
+    offer: [],
+    rejected: [],
+  },
+  builtinStatusMappings: {
+    screening: [],
+    screening_passed: [],
+    interview_pending: [],
+    interviewed: [],
+    signing_pending: [],
+    offer: [],
+    rejected: [],
+  },
   runnerHealthy: false,
   loginPresentation: "vnc",
 });
@@ -79,6 +99,7 @@ const formEditItem = ref<ApplicationSummary | null>(null);
 const loginOpen = ref(false);
 const loginRunId = ref<string | null>(null);
 const aiSettingsOpen = ref(false);
+const statusMappingsOpen = ref(false);
 const checkPlanOpen = ref(false);
 const error = ref("");
 const notice = ref("");
@@ -496,6 +517,21 @@ async function saveAiSettings(value: AiSettingsUpdate) {
     flash("AI 配置已保存并同步到本地加密配置文件");
   });
 }
+async function saveRecognitionMode(value: RecognitionMode) {
+  await action(async () => {
+    await api.updateRecognitionMode(value);
+    settings.value = { ...settings.value, recognitionMode: value };
+    flash("识别模式已保存");
+  });
+}
+async function saveStatusMappings(statusMappings: StatusMappings) {
+  await action(async () => {
+    const result = await api.updateStatusMappings(statusMappings);
+    settings.value = { ...settings.value, statusMappings: result.statusMappings };
+    statusMappingsOpen.value = false;
+    flash("状态映射已保存，本地解析和 AI 识别会共同使用");
+  });
+}
 function viewScreenshot(run: RunSummary, company: string, jobTitle: string) {
   screenshotRun.value = run;
   screenshotCompany.value = company;
@@ -679,6 +715,8 @@ async function deleteProfile(site: string) {
           :busy="busy"
           @save="saveSettings"
           @configure-ai="aiSettingsOpen = true"
+          @configure-status-mappings="statusMappingsOpen = true"
+          @recognition-mode="saveRecognitionMode"
         />
         <AiDebugPage
           v-else-if="active === 'debug' && debugEnabled"
@@ -717,6 +755,14 @@ async function deleteProfile(site: string) {
       :busy="busy"
       @close="aiSettingsOpen = false"
       @save="saveAiSettings"
+    />
+    <StatusMappingsDialog
+      :open="statusMappingsOpen"
+      :mappings="settings.statusMappings"
+      :builtin-mappings="settings.builtinStatusMappings"
+      :busy="busy"
+      @close="statusMappingsOpen = false"
+      @save="saveStatusMappings"
     />
     <CheckPlanDialog
       :open="checkPlanOpen"

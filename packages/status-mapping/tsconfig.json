@@ -3,12 +3,9 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
+    "declaration": true,
     "composite": true
   },
   "include": ["src"],
-  "references": [
-    { "path": "../../packages/contracts" },
-    { "path": "../../packages/cookie-state" },
-    { "path": "../../packages/local-status" }
-  ]
+  "references": [{ "path": "../contracts" }]
 }
