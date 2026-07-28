@@ -1,4 +1,9 @@
 import type {
+  AssistedNodeLocator,
+  AssistedParserRule,
+  AssistedParserRuleDefinition,
+  AssistedRuleSelection,
+  AssistedRuleTestResult,
   LocalDomNode,
   LocalPageSnapshot,
   LocalRecognitionResult,
@@ -14,6 +19,7 @@ import {
 
 export const LOCAL_PARSER_VERSION = "1.0.0";
 export const LOCAL_AUTO_APPLY_THRESHOLD = 0.9;
+export const ASSISTED_RULE_SCHEMA_VERSION = 1;
 
 export interface LocalRecognitionCandidate {
   id: string;
@@ -77,6 +83,279 @@ export const STATUS_RULES = createStatusMappingRules();
 
 export function normalizeRecognitionText(value: string): string {
   return normalizeStatusMappingText(value);
+}
+
+function stableClasses(classes: string[]): string[] {
+  return classes.filter((token) =>
+    token.length <= 48
+    && !/^\d+$/.test(token)
+    && !/^[a-f\d]{8,}$/i.test(token)
+    && !/(?:^|[-_])(?:css|sc|jsx|hash)[-_]?[a-z\d]{5,}$/i.test(token))
+    .slice(0, 4);
+}
+
+function locatorFor(node: LocalDomNode, byId: Map<number, LocalDomNode>): AssistedNodeLocator {
+  const ancestorTags: string[] = [];
+  let current = node;
+  for (let depth = 0; depth < 4 && current.parentId !== null; depth += 1) {
+    const parent = byId.get(current.parentId);
+    if (!parent) break;
+    ancestorTags.unshift(parent.tag);
+    current = parent;
+  }
+  return {
+    tag: node.tag || null,
+    role: node.role,
+    classes: stableClasses(node.classes),
+    dataStatus: node.dataStatus,
+    ariaCurrent: node.ariaCurrent && node.ariaCurrent !== "false" ? node.ariaCurrent : null,
+    ariaSelected: node.ariaSelected && node.ariaSelected !== "false" ? node.ariaSelected : null,
+    ancestorTags,
+  };
+}
+
+function locatorMatches(node: LocalDomNode, locator: AssistedNodeLocator, byId: Map<number, LocalDomNode>): boolean {
+  if (locator.tag && node.tag !== locator.tag) return false;
+  if (locator.role && node.role !== locator.role) return false;
+  if (locator.dataStatus && node.dataStatus !== locator.dataStatus) return false;
+  if (locator.ariaCurrent && node.ariaCurrent !== locator.ariaCurrent) return false;
+  if (locator.ariaSelected && node.ariaSelected !== locator.ariaSelected) return false;
+  if (locator.classes.some((token) => !node.classes.includes(token))) return false;
+  if (locator.ancestorTags.length) {
+    const tags: string[] = [];
+    let current = node;
+    for (let depth = 0; depth < 4 && current.parentId !== null; depth += 1) {
+      const parent = byId.get(current.parentId);
+      if (!parent) break;
+      tags.unshift(parent.tag);
+      current = parent;
+    }
+    if (!tags.join("/").endsWith(locator.ancestorTags.join("/"))) return false;
+  }
+  return true;
+}
+
+function commonAncestor(left: LocalDomNode, right: LocalDomNode, byId: Map<number, LocalDomNode>): LocalDomNode | null {
+  const leftAncestors = ancestorIds(left, byId);
+  let current: LocalDomNode | undefined = right;
+  for (let depth = 0; current && depth < 8; depth += 1) {
+    if (leftAncestors.has(current.id)) return current;
+    current = current.parentId === null ? undefined : byId.get(current.parentId);
+  }
+  return null;
+}
+
+function hasActiveMarker(node: LocalDomNode): boolean {
+  return Boolean(
+    (node.ariaCurrent && node.ariaCurrent !== "false")
+    || (node.ariaSelected && node.ariaSelected !== "false")
+    || node.dataStatus
+    || node.classes.some((token) => /(active|current|selected|processing|success|finished|done)/i.test(token)),
+  );
+}
+
+function nearestActiveNode(node: LocalDomNode, byId: Map<number, LocalDomNode>): LocalDomNode | null {
+  let current: LocalDomNode | undefined = node;
+  for (let depth = 0; current && depth < 5; depth += 1) {
+    if (hasActiveMarker(current)) return current;
+    current = current.parentId === null ? undefined : byId.get(current.parentId);
+  }
+  return null;
+}
+
+function generalizedPathname(url: URL): string {
+  const parts = url.pathname.split("/").map((part) => {
+    if (!part) return part;
+    return /^\d{4,}$/.test(part)
+      || /^[0-9a-f]{8}-[0-9a-f-]{20,}$/i.test(part)
+      || /^[a-z\d_-]{20,}$/i.test(part)
+      ? "*"
+      : part;
+  });
+  return parts.join("/") || "/";
+}
+
+export function generateAssistedRule(
+  snapshot: LocalPageSnapshot,
+  selection: AssistedRuleSelection,
+): { definition: AssistedParserRuleDefinition; errors: string[] } {
+  const byId = new Map(snapshot.nodes.map((node) => [node.id, node]));
+  const title = byId.get(selection.titleNodeId);
+  const status = byId.get(selection.statusNodeId);
+  const errors: string[] = [];
+  if (!title) errors.push("所选岗位标题节点不存在");
+  if (!status) errors.push("所选状态节点不存在");
+  const url = new URL(snapshot.url);
+  if (!title || !status) {
+    const empty: AssistedNodeLocator = {
+      tag: null, role: null, classes: [], dataStatus: null, ariaCurrent: null, ariaSelected: null, ancestorTags: [],
+    };
+    return {
+      definition: {
+        schemaVersion: 1,
+        layout: selection.layout,
+        hostname: selection.hostname ?? url.hostname,
+        pathname: selection.pathname ?? generalizedPathname(url),
+        container: null,
+        title: empty,
+        status: empty,
+        active: null,
+      },
+      errors,
+    };
+  }
+  const container = commonAncestor(title, status, byId);
+  const activeNode = nearestActiveNode(status, byId);
+  const activeLocator = activeNode ? locatorFor(activeNode, byId) : null;
+  if (!title.text.trim()) errors.push("所选岗位标题节点没有可见文本");
+  if (!status.text.trim()) errors.push("所选状态节点没有可见文本");
+  if (selection.layout === "stepper" && !activeLocator) {
+    errors.push("当前步骤节点没有可识别的 active/current/selected 标记");
+  }
+  const definition: AssistedParserRuleDefinition = {
+    schemaVersion: 1,
+    layout: selection.layout,
+    hostname: selection.hostname ?? url.hostname,
+    pathname: selection.pathname ?? generalizedPathname(url),
+    container: container && container.id !== title.id && container.id !== status.id ? locatorFor(container, byId) : null,
+    title: locatorFor(title, byId),
+    status: locatorFor(status, byId),
+    active: selection.layout === "stepper" ? activeLocator : null,
+  };
+  try {
+    if (!urlPatternMatches(definition, url)) errors.push("规则范围与当前页面地址不匹配");
+  } catch {
+    errors.push("hostname 或 pathname 不是有效的 URLPattern");
+  }
+  return { definition, errors };
+}
+
+function descendantsOf(root: LocalDomNode, snapshot: LocalPageSnapshot): LocalDomNode[] {
+  const ids = new Set<number>([root.id]);
+  for (const node of snapshot.nodes) {
+    if (node.parentId !== null && ids.has(node.parentId)) ids.add(node.id);
+  }
+  return snapshot.nodes.filter((node) => ids.has(node.id));
+}
+
+function nodeOrAncestorMatches(
+  node: LocalDomNode,
+  locator: AssistedNodeLocator,
+  byId: Map<number, LocalDomNode>,
+): boolean {
+  let current: LocalDomNode | undefined = node;
+  for (let depth = 0; current && depth < 5; depth += 1) {
+    if (locatorMatches(current, locator, byId)) return true;
+    current = current.parentId === null ? undefined : byId.get(current.parentId);
+  }
+  return false;
+}
+
+function recognizeWithAssistedRule(
+  snapshot: LocalPageSnapshot,
+  candidates: LocalRecognitionCandidate[],
+  rule: AssistedParserRule,
+  statusRules: StatusMappingRule[],
+): { result: LocalRecognitionResult; matchedNodeIds: number[] } | null {
+  const url = new URL(snapshot.url);
+  if (!rule.enabled || !urlPatternMatches(rule.definition, url)) return null;
+  const byId = new Map(snapshot.nodes.map((node) => [node.id, node]));
+  const titleNodes = snapshot.nodes.filter((node) => locatorMatches(node, rule.definition.title, byId));
+  const matchedNodeIds: number[] = [];
+  const results = candidates.map((candidate): LocalRecognitionResultItem => {
+    const target = normalizeRecognitionText(candidate.jobTitle);
+    const matches = titleNodes.filter((node) => normalizeRecognitionText(node.text) === target);
+    if (matches.length !== 1) {
+      return {
+        applicationId: candidate.id, matched: false, rawStatus: null, status: null, confidence: 0,
+        evidence: matches.length ? "辅助规则匹配到多个同名岗位" : "辅助规则未匹配岗位标题",
+        titleMatch: "none", statusRule: null,
+      };
+    }
+    const titleNode = matches[0]!;
+    let scope = snapshot.nodes;
+    if (rule.definition.container) {
+      let current: LocalDomNode | undefined = titleNode;
+      for (let depth = 0; current && depth < 8; depth += 1) {
+        if (locatorMatches(current, rule.definition.container, byId)) {
+          scope = descendantsOf(current, snapshot);
+          break;
+        }
+        current = current.parentId === null ? undefined : byId.get(current.parentId);
+      }
+    } else {
+      scope = snapshot.nodes.filter((node) =>
+        node.y >= titleNode.y - 40 && node.y <= titleNode.y + 360
+        && node.x + node.width >= titleNode.x - 100 && node.x <= titleNode.x + Math.max(1000, titleNode.width * 5));
+    }
+    let statusNodes = scope.filter((node) => locatorMatches(node, rule.definition.status, byId));
+    if (rule.definition.layout === "stepper" && rule.definition.active) {
+      statusNodes = statusNodes.filter((node) => nodeOrAncestorMatches(node, rule.definition.active!, byId));
+    }
+    let mapped = statusMatches(statusNodes, statusRules);
+    if (mapped.length) {
+      const longest = Math.max(...mapped.map((item) => normalizeRecognitionText(item.term).length));
+      mapped = mapped.filter((item) => normalizeRecognitionText(item.term).length === longest);
+    }
+    const statuses = [...new Set(mapped.map((item) => item.rule.status))];
+    if (mapped.length !== 1 || statuses.length !== 1) {
+      return {
+        applicationId: candidate.id, matched: false, rawStatus: null, status: null, confidence: 0,
+        evidence: mapped.length ? "辅助规则提取到多个冲突状态" : "辅助规则未提取到可映射状态",
+        titleMatch: "exact", statusRule: null,
+      };
+    }
+    const selected = mapped[0]!;
+    matchedNodeIds.push(titleNode.id, selected.node.id);
+    return {
+      applicationId: candidate.id,
+      matched: true,
+      rawStatus: selected.term,
+      status: selected.rule.status,
+      confidence: 0.99,
+      evidence: `辅助规则“${rule.name}”完全匹配岗位与状态“${selected.term}”`,
+      titleMatch: "exact",
+      statusRule: selected.rule.id,
+    };
+  });
+  return {
+    result: {
+      adapterId: `assisted:${rule.id}`,
+      adapterVersion: String(rule.version),
+      route: {
+        adapterId: `assisted:${rule.id}`,
+        version: String(rule.version),
+        priority: rule.priority,
+        hostname: rule.definition.hostname,
+        pathname: rule.definition.pathname,
+      },
+      pageType: "status",
+      pageEvidence: `命中用户辅助规则“${rule.name}”`,
+      results,
+      fallbackReason: results.some((item) => !item.matched) ? "辅助规则未可靠匹配全部岗位" : null,
+    },
+    matchedNodeIds: [...new Set(matchedNodeIds)],
+  };
+}
+
+export function testAssistedRule(
+  snapshot: LocalPageSnapshot,
+  candidates: LocalRecognitionCandidate[],
+  rule: AssistedParserRule,
+  customStatusMappings?: StatusMappings | null,
+): AssistedRuleTestResult {
+  const errors: string[] = [];
+  let matched: ReturnType<typeof recognizeWithAssistedRule> = null;
+  try {
+    matched = recognizeWithAssistedRule(snapshot, candidates, rule, createStatusMappingRules(customStatusMappings));
+  } catch {
+    errors.push("规则 URLPattern 无效");
+  }
+  if (!matched) errors.push("规则未命中当前页面");
+  const fallback = recognizeLocalPage(snapshot, candidates, customStatusMappings, []);
+  const result = matched?.result ?? fallback;
+  if (result.results.every((item) => !item.matched)) errors.push("规则未可靠识别任何岗位");
+  return { valid: errors.length === 0, errors, result, matchedNodeIds: matched?.matchedNodeIds ?? [] };
 }
 
 function urlPatternMatches(rule: { hostname: string; pathname: string }, url: URL): boolean {
@@ -143,7 +422,7 @@ function classifySnapshot(snapshot: LocalPageSnapshot, candidates: LocalRecognit
   const normalized = normalizeRecognitionText(`${snapshot.title} ${text}`);
   if (text.length < 8) return { type: "blank" as const, evidence: "页面没有足够的可见文本" };
   const hasCandidate = candidates.some((candidate) => normalized.includes(normalizeRecognitionText(candidate.jobTitle)));
-  if (!hasCandidate && /(请登录|立即登录|账号登录|密码登录|扫码登录|验证码登录|sign\s?in|log\s?in)/i.test(`${snapshot.title} ${text.slice(0, 3000)}`)) {
+  if (!hasCandidate && /(登录|请登录|立即登录|账号登录|密码登录|扫码登录|验证码登录|sign\s?in|log\s?in)/i.test(`${snapshot.title} ${text.slice(0, 3000)}`)) {
     return { type: "login" as const, evidence: "页面包含登录或验证码提示" };
   }
   const path = new URL(snapshot.url).pathname.replace(/\/+$/, "") || "/";
@@ -211,8 +490,14 @@ function statusMatches(
   for (const node of nodes) {
     const text = normalizeRecognitionText(node.text);
     if (!text) continue;
-    const marker = normalizeRecognitionText(`${node.classes.join(" ")} ${node.dataStatus ?? ""} ${node.role ?? ""}`);
-    const active = /(active|current|selected|processing|success|finished|done|进行中|当前)/i.test(marker);
+    const marker = normalizeRecognitionText(
+      `${node.classes.join(" ")} ${node.dataStatus ?? ""} ${node.role ?? ""} ${node.ariaCurrent ?? ""} ${node.ariaSelected ?? ""}`,
+    );
+    const active = Boolean(
+      (node.ariaCurrent && node.ariaCurrent !== "false")
+      || (node.ariaSelected && node.ariaSelected !== "false")
+      || /(active|current|selected|processing|success|finished|done|进行中|当前)/i.test(marker),
+    );
     for (const rule of statusRules) {
       const term = rule.terms.find((candidate) => text.includes(normalizeRecognitionText(candidate)));
       if (term) matches.push({ rule, term, node, active });
@@ -290,10 +575,26 @@ export function recognizeLocalPage(
   snapshot: LocalPageSnapshot,
   candidates: LocalRecognitionCandidate[],
   customStatusMappings?: StatusMappings | null,
+  assistedRules: AssistedParserRule[] = [],
 ): LocalRecognitionResult {
+  const statusRules = createStatusMappingRules(customStatusMappings);
+  const orderedRules = assistedRules
+    .filter((rule) => rule.enabled)
+    .sort((left, right) => {
+      const specificity = (value: AssistedParserRule) =>
+        value.definition.hostname.replaceAll("*", "").length + value.definition.pathname.replaceAll("*", "").length;
+      return specificity(right) - specificity(left) || right.priority - left.priority;
+    });
+  for (const rule of orderedRules) {
+    try {
+      const assisted = recognizeWithAssistedRule(snapshot, candidates, rule, statusRules);
+      if (assisted && assisted.result.results.some((result) => result.matched)) return assisted.result;
+    } catch {
+      // Invalid or stale user rules safely fall through to built-in parsing.
+    }
+  }
   const resolved = resolveParserAdapter(snapshot);
   const classification = classifySnapshot(snapshot, candidates);
-  const statusRules = createStatusMappingRules(customStatusMappings);
   if (classification.type !== "status") {
     return {
       adapterId: resolved.adapter.id,

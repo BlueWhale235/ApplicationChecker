@@ -24,7 +24,7 @@ describe("full page capture", () => {
       fullPage: true,
       captureBeyondViewport: true,
     }));
-    expect(result).toEqual({ data: Buffer.from("png"), truncated: false });
+    expect(result).toEqual({ data: Buffer.from("png"), truncated: false, width: 1440, height: 4200 });
   });
 
   it("caps oversized pages at 20,000 pixels and marks them truncated", async () => {

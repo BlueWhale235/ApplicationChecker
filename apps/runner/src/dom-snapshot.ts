@@ -56,6 +56,8 @@ export async function captureLocalPageSnapshot(page: Page): Promise<LocalPageSna
         role: element.getAttribute("role")?.slice(0, 80) ?? null,
         classes,
         dataStatus,
+        ariaCurrent: element.getAttribute("aria-current")?.slice(0, 40) ?? null,
+        ariaSelected: element.getAttribute("aria-selected")?.slice(0, 40) ?? null,
         text,
         x: Math.round(rect.x),
         y: Math.round(rect.y + window.scrollY),

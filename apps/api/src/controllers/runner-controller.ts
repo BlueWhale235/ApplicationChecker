@@ -60,6 +60,7 @@ import type {
 import type { LocalPageSnapshot, RecognitionSource, RunnerRecognitionPreviewJob } from "@application-checker/contracts";
 import { LOCAL_AUTO_APPLY_THRESHOLD, recognizeLocalPage } from "@application-checker/local-status";
 import { parseStatusMappings } from "@application-checker/status-mapping";
+import { listParserRules } from "../parser-rules.js";
 
 export async function registerRunnerController(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   const { context, config, recognizer: injectedRecognizer, aiDebugStore, recognitionPreviewStore, runnerHeartbeat } = deps;
@@ -234,12 +235,13 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     const settings = await appSettings(context);
     const recognitionMode = settings.recognition_mode;
     const statusMappings = parseStatusMappings(settings.status_mappings);
+    const assistedRules = await listParserRules(context, true);
     const localResult = recognitionMode !== "ai_only" && body.pageSnapshot
       ? recognizeLocalPage(body.pageSnapshot, members.map((member) => ({
         id: member.id,
         jobTitle: member.job_title,
         location: member.location,
-      })), statusMappings)
+      })), statusMappings, assistedRules)
       : null;
     const localDiagnosticResults: MergedResult[] = localResult ? localResult.results.map((result) => ({
       applicationId: result.applicationId,
@@ -509,13 +511,19 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       screenshotBase64: string;
       needsLogin?: boolean;
       loginReason?: string | null;
+      screenshotWidth: number;
+      screenshotHeight: number;
+      screenshotTruncated?: boolean;
     };
     const result = recognitionPreviewStore.complete(id, {
       snapshot: body.snapshot,
       screenshotBase64: body.screenshotBase64,
       needsLogin: Boolean(body.needsLogin),
       loginReason: body.loginReason ?? null,
-    }, parseStatusMappings((await appSettings(context)).status_mappings));
+      screenshotWidth: body.screenshotWidth,
+      screenshotHeight: body.screenshotHeight,
+      screenshotTruncated: Boolean(body.screenshotTruncated),
+    }, parseStatusMappings((await appSettings(context)).status_mappings), await listParserRules(context, true));
     if (!result) throw httpError(404, "识别预览不存在或状态无效");
     return result;
   });

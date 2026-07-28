@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { LocalPageSnapshot } from "@application-checker/contracts";
+import type { AssistedParserRule, LocalPageSnapshot } from "@application-checker/contracts";
 import {
+  generateAssistedRule,
   normalizeRecognitionText,
   recognizeLocalPage,
   resolveParserAdapter,
+  testAssistedRule,
   validateParserAdapters,
   type ParserAdapter,
 } from "./index.js";
@@ -92,5 +94,91 @@ describe("local recognition", () => {
 
   it("normalizes Unicode, case, whitespace and punctuation", () => {
     expect(normalizeRecognitionText(" ＡI - Engineer ")).toBe("aiengineer");
+  });
+});
+
+describe("assisted parser rules", () => {
+  const assistedSnapshot = snapshot("https://careers.example.com/applications/12345678", [
+    node(1, "", 0, null, ["application-card"]),
+    node(2, "后端工程师", 10, 1, ["job-title"]),
+    node(3, "业务筛选", 50, 1, ["job-status", "current"]),
+    node(4, "", 200, null, ["application-card"]),
+    node(5, "产品经理", 210, 4, ["job-title"]),
+    node(6, "待面试", 250, 4, ["job-status", "current"]),
+  ]);
+
+  it("generates a reusable path rule and extracts repeated cards", () => {
+    const generated = generateAssistedRule(assistedSnapshot, {
+      layout: "list",
+      titleNodeId: 2,
+      statusNodeId: 3,
+    });
+    expect(generated.errors).toEqual([]);
+    expect(generated.definition.pathname).toBe("/applications/*");
+    const rule: AssistedParserRule = {
+      id: "rule-1",
+      name: "示例规则",
+      enabled: true,
+      priority: 100,
+      version: 1,
+      definition: generated.definition,
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+      lastTestedAt: null,
+    };
+    const tested = testAssistedRule(assistedSnapshot, [
+      { id: "job-1", jobTitle: "后端工程师" },
+      { id: "job-2", jobTitle: "产品经理" },
+    ], rule);
+    expect(tested.valid).toBe(true);
+    expect(tested.result.adapterId).toBe("assisted:rule-1");
+    expect(tested.result.results).toMatchObject([
+      { matched: true, status: "screening_passed" },
+      { matched: true, status: "interview_pending" },
+    ]);
+  });
+
+  it("requires an active marker for stepper rules", () => {
+    const page = snapshot("https://careers.example.com/progress", [
+      node(1, "后端工程师", 10),
+      node(2, "初筛", 50),
+    ]);
+    expect(generateAssistedRule(page, {
+      layout: "stepper",
+      titleNodeId: 1,
+      statusNodeId: 2,
+    }).errors).toContain("当前步骤节点没有可识别的 active/current/selected 标记");
+  });
+
+  it("uses aria-current to select the active step", () => {
+    const page = snapshot("https://careers.example.com/progress", [
+      node(1, "", 0, null, ["progress-card"]),
+      node(2, "后端工程师", 10, 1, ["job-title"]),
+      node(3, "", 50, 1, ["step"]),
+      node(4, "初筛", 50, 3, ["step-label"]),
+      { ...node(5, "", 50, 1, ["step"]), ariaCurrent: "step" },
+      node(6, "已过初筛", 50, 5, ["step-label"]),
+      node(7, "", 50, 1, ["step"]),
+      node(8, "待面试", 50, 7, ["step-label"]),
+    ]);
+    const generated = generateAssistedRule(page, {
+      layout: "stepper",
+      titleNodeId: 2,
+      statusNodeId: 6,
+    });
+    expect(generated.errors).toEqual([]);
+    const rule: AssistedParserRule = {
+      id: "stepper-rule",
+      name: "进度条规则",
+      enabled: true,
+      priority: 100,
+      version: 1,
+      definition: generated.definition,
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+      lastTestedAt: null,
+    };
+    const result = testAssistedRule(page, [{ id: "job-1", jobTitle: "后端工程师" }], rule);
+    expect(result.result.results[0]).toMatchObject({ matched: true, status: "screening_passed" });
   });
 });

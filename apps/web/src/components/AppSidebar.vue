@@ -1,5 +1,5 @@
 <script setup lang="ts">
-type Page = "progress" | "notifications" | "tasks" | "profiles" | "settings" | "debug";
+type Page = "progress" | "notifications" | "tasks" | "profiles" | "settings" | "debug" | "rule_studio";
 defineProps<{ active: Page; runnerHealthy: boolean; unreadCount: number; debugEnabled: boolean }>();
 defineEmits<{ change: [value: Page] }>();
 </script>
@@ -29,6 +29,9 @@ defineEmits<{ change: [value: Page] }>();
       </button>
       <button v-if="debugEnabled" :class="{ active: active === 'debug' }" @click="$emit('change', 'debug')">
         <i class="mdi mdi-bug-outline"></i><span>识别调试</span>
+      </button>
+      <button v-if="debugEnabled" :class="{ active: active === 'rule_studio' }" @click="$emit('change', 'rule_studio')">
+        <i class="mdi mdi-vector-square"></i><span>规则工作台</span>
       </button>
     </nav>
     <div class="leaf-mark" aria-hidden="true">❧</div>

@@ -222,6 +222,9 @@ async function recognitionPreview(job: RunnerRecognitionPreviewJob): Promise<voi
       body: JSON.stringify({
         snapshot,
         screenshotBase64: image.data.toString("base64"),
+        screenshotWidth: image.width,
+        screenshotHeight: image.height,
+        screenshotTruncated: image.truncated,
         needsLogin: detection.requiresLogin,
         loginReason: detection.requiresLogin ? detection.reason : null,
       }),

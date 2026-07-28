@@ -6,6 +6,8 @@ const MAX_CAPTURE_HEIGHT = 20_000;
 export interface FullPageCapture {
   data: Buffer;
   truncated: boolean;
+  width: number;
+  height: number;
 }
 
 interface PageDimensions {
@@ -127,7 +129,7 @@ export async function captureFullPage(page: Page): Promise<FullPageCapture> {
         fullPage: true,
         captureBeyondViewport: true,
       });
-      return { data: Buffer.from(data), truncated: false };
+      return { data: Buffer.from(data), truncated: false, width, height };
     } catch {
       // Fall through to a bounded capture for pathological Chromium layouts.
     }
@@ -138,5 +140,5 @@ export async function captureFullPage(page: Page): Promise<FullPageCapture> {
     captureBeyondViewport: true,
     clip: { x: 0, y: 0, width, height },
   });
-  return { data: Buffer.from(data), truncated };
+  return { data: Buffer.from(data), truncated, width, height };
 }

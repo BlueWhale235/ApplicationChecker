@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type {
   LocalPageSnapshot,
+  AssistedParserRule,
   RecognitionPreviewDetail,
+  RecognitionPreviewSnapshot,
   RecognitionPreviewSummary,
   RunnerRecognitionPreviewJob,
   StatusMappings,
@@ -11,10 +13,11 @@ import { recognizeLocalPage } from "@application-checker/local-status";
 interface PreviewRecord extends RecognitionPreviewDetail {
   job: RunnerRecognitionPreviewJob;
   screenshotBase64: string | null;
+  snapshot: LocalPageSnapshot | null;
 }
 
 function publicDetail(record: PreviewRecord): RecognitionPreviewDetail {
-  const { job: _job, screenshotBase64: _screenshot, ...detail } = record;
+  const { job: _job, screenshotBase64: _screenshot, snapshot: _snapshot, ...detail } = record;
   return detail;
 }
 
@@ -63,7 +66,11 @@ export class RecognitionPreviewStore {
       snapshotSummary: null,
       results: [],
       screenshotAvailable: false,
+      screenshotWidth: null,
+      screenshotHeight: null,
+      screenshotTruncated: false,
       screenshotBase64: null,
+      snapshot: null,
       job: { ...input, kind: "recognition_preview", previewId: id },
     };
     this.records.unshift(record);
@@ -83,14 +90,21 @@ export class RecognitionPreviewStore {
     screenshotBase64: string;
     needsLogin: boolean;
     loginReason: string | null;
-  }, statusMappings?: StatusMappings): RecognitionPreviewDetail | null {
+    screenshotWidth?: number;
+    screenshotHeight?: number;
+    screenshotTruncated?: boolean;
+  }, statusMappings?: StatusMappings, assistedRules: AssistedParserRule[] = []): RecognitionPreviewDetail | null {
     const record = this.records.find((item) => item.id === id);
     if (!record || record.status !== "running") return null;
     record.completedAt = new Date().toISOString();
     record.finalUrl = input.snapshot.url;
     record.pageTitle = input.snapshot.title;
     record.screenshotBase64 = input.screenshotBase64;
+    record.snapshot = input.snapshot;
     record.screenshotAvailable = Boolean(input.screenshotBase64);
+    record.screenshotWidth = input.screenshotWidth ?? 1440;
+    record.screenshotHeight = input.screenshotHeight ?? 900;
+    record.screenshotTruncated = Boolean(input.screenshotTruncated);
     record.snapshotSummary = {
       nodeCount: input.snapshot.nodes.length,
       textCharacters: input.snapshot.visibleText.length,
@@ -103,7 +117,7 @@ export class RecognitionPreviewStore {
       record.error = input.loginReason;
       return publicDetail(record);
     }
-    const result = recognizeLocalPage(input.snapshot, record.job.applications, statusMappings);
+    const result = recognizeLocalPage(input.snapshot, record.job.applications, statusMappings, assistedRules);
     record.status = "succeeded";
     record.adapterId = result.adapterId;
     record.adapterVersion = result.adapterVersion;
@@ -135,5 +149,17 @@ export class RecognitionPreviewStore {
   screenshot(id: string): Buffer | null {
     const encoded = this.records.find((item) => item.id === id)?.screenshotBase64;
     return encoded ? Buffer.from(encoded, "base64") : null;
+  }
+
+  snapshot(id: string): RecognitionPreviewSnapshot | null {
+    const record = this.records.find((item) => item.id === id);
+    if (!record?.snapshot || !record.screenshotWidth || !record.screenshotHeight) return null;
+    return {
+      snapshot: record.snapshot,
+      applications: record.job.applications,
+      screenshotWidth: record.screenshotWidth,
+      screenshotHeight: record.screenshotHeight,
+      screenshotTruncated: record.screenshotTruncated,
+    };
   }
 }

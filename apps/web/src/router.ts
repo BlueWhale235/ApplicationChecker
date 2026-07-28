@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
 import { h } from "vue";
 
-export type AppPage = "progress" | "notifications" | "tasks" | "profiles" | "settings" | "debug";
+export type AppPage = "progress" | "notifications" | "tasks" | "profiles" | "settings" | "debug" | "rule_studio";
 const RouteMarker = { render: () => h("span") };
 
 const routes: RouteRecordRaw[] = [
@@ -12,6 +12,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/browser-profiles", name: "profiles", component: RouteMarker, meta: { page: "profiles" } },
   { path: "/settings", name: "settings", component: RouteMarker, meta: { page: "settings" } },
   { path: "/recognition-debug", name: "debug", component: RouteMarker, meta: { page: "debug" } },
+  { path: "/rule-studio", name: "rule_studio", component: RouteMarker, meta: { page: "rule_studio" } },
   { path: "/ai-debug", redirect: "/recognition-debug" },
   { path: "/:pathMatch(.*)*", redirect: "/applications" },
 ];
@@ -28,4 +29,5 @@ export const pagePaths: Record<AppPage, string> = {
   profiles: "/browser-profiles",
   settings: "/settings",
   debug: "/recognition-debug",
+  rule_studio: "/rule-studio",
 };

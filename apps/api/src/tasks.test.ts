@@ -11,6 +11,7 @@ import { createDb, type DbContext } from "./db.js";
 import { registerRoutes } from "./routes.js";
 import { cleanupExpiredScreenshots, queueRun } from "./service.js";
 import { AiDebugStore } from "./ai-debug.js";
+import { RecognitionPreviewStore } from "./recognition-preview.js";
 
 const folders: string[] = [];
 afterEach(async () => {
@@ -546,6 +547,7 @@ describe("task management routes", () => {
     });
     expect((await disabledApp.inject({ method: "GET", url: "/debug/status" })).json()).toEqual({ enabled: false });
     expect((await disabledApp.inject({ method: "GET", url: "/debug/ai-traces" })).statusCode).toBe(404);
+    expect((await disabledApp.inject({ method: "GET", url: "/debug/parser-rules" })).statusCode).toBe(404);
     await disabledApp.close();
     await disabled.context.db.destroy();
     disabled.context.raw.close();
@@ -570,6 +572,7 @@ describe("task management routes", () => {
       context: enabled.context,
       config: { ...enabled.config, debugTools: true },
       aiDebugStore: store,
+      recognitionPreviewStore: new RecognitionPreviewStore(),
       runnerHeartbeat: { at: Date.now() },
     });
     expect((await enabledApp.inject({ method: "GET", url: "/debug/status" })).json()).toEqual({ enabled: true });
@@ -577,6 +580,52 @@ describe("task management routes", () => {
     const detail = await enabledApp.inject({ method: "GET", url: `/debug/ai-traces/${traceId}` });
     expect(detail.json().sanitizedRequest).toContain("[image omitted: 3 bytes]");
     expect((await enabledApp.inject({ method: "POST", url: "/debug/ai-traces/clear" })).json()).toEqual({ deleted: 1 });
+    expect((await enabledApp.inject({ method: "GET", url: "/debug/parser-rules" })).json()).toEqual([]);
+    const ruleCandidate = await enabledApp.inject({
+      method: "POST",
+      url: "/applications",
+      payload: {
+        company: "汇川技术",
+        jobTitle: "销售工程师",
+        checkUrl: "https://recruit.inovance.com/",
+      },
+    });
+    expect(ruleCandidate.statusCode, ruleCandidate.body).toBe(201);
+    const checkGroups = await enabledApp.inject({
+      method: "GET",
+      url: "/debug/parser-rules/check-groups?q=%E6%B1%87%E5%B7%9D&limit=10",
+    });
+    expect(checkGroups.statusCode, checkGroups.body).toBe(200);
+    expect(checkGroups.json()).toMatchObject([
+      { company: "汇川技术", jobTitle: "销售工程师", site: "inovance.com", memberCount: 1 },
+    ]);
+    const createdRule = await enabledApp.inject({
+      method: "POST",
+      url: "/debug/parser-rules",
+      payload: {
+        name: "调试规则",
+        enabled: true,
+        priority: 100,
+        definition: {
+          schemaVersion: 1,
+          layout: "list",
+          hostname: "careers.example.com",
+          pathname: "/applications/*",
+          container: null,
+          title: {
+            tag: "h3", role: null, classes: ["job-title"], dataStatus: null,
+            ariaCurrent: null, ariaSelected: null, ancestorTags: [],
+          },
+          status: {
+            tag: "span", role: null, classes: ["status"], dataStatus: null,
+            ariaCurrent: null, ariaSelected: null, ancestorTags: [],
+          },
+          active: null,
+        },
+      },
+    });
+    expect(createdRule.statusCode, createdRule.body).toBe(200);
+    expect(createdRule.json()).toMatchObject({ name: "调试规则", version: 1 });
     await enabledApp.close();
     await enabled.context.db.destroy();
     enabled.context.raw.close();

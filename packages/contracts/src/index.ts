@@ -72,6 +72,8 @@ export interface LocalDomNode {
   role: string | null;
   classes: string[];
   dataStatus: string | null;
+  ariaCurrent?: string | null;
+  ariaSelected?: string | null;
   text: string;
   x: number;
   y: number;
@@ -96,6 +98,67 @@ export interface ParserRouteRule {
   priority: number;
   hostname: string;
   pathname: string;
+}
+
+export type AssistedRuleLayout = "list" | "stepper";
+
+export interface AssistedNodeLocator {
+  tag: string | null;
+  role: string | null;
+  classes: string[];
+  dataStatus: string | null;
+  ariaCurrent: string | null;
+  ariaSelected: string | null;
+  ancestorTags: string[];
+}
+
+export interface AssistedParserRuleDefinition {
+  schemaVersion: 1;
+  layout: AssistedRuleLayout;
+  hostname: string;
+  pathname: string;
+  container: AssistedNodeLocator | null;
+  title: AssistedNodeLocator;
+  status: AssistedNodeLocator;
+  active: AssistedNodeLocator | null;
+}
+
+export interface AssistedParserRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  priority: number;
+  version: number;
+  definition: AssistedParserRuleDefinition;
+  createdAt: string;
+  updatedAt: string;
+  lastTestedAt: string | null;
+}
+
+export interface AssistedRuleSelection {
+  layout: AssistedRuleLayout;
+  titleNodeId: number;
+  statusNodeId: number;
+  hostname?: string;
+  pathname?: string;
+  name?: string;
+}
+
+export interface AssistedRuleTestResult {
+  valid: boolean;
+  errors: string[];
+  result: LocalRecognitionResult;
+  matchedNodeIds: number[];
+}
+
+export interface RuleStudioCheckGroupOption {
+  applicationId: string;
+  groupId: string;
+  company: string;
+  jobTitle: string;
+  site: string;
+  url: string;
+  memberCount: number;
 }
 
 export interface LocalRecognitionResultItem {
@@ -541,6 +604,17 @@ export interface RecognitionPreviewDetail extends RecognitionPreviewSummary {
   } | null;
   results: LocalRecognitionResultItem[];
   screenshotAvailable: boolean;
+  screenshotWidth: number | null;
+  screenshotHeight: number | null;
+  screenshotTruncated: boolean;
+}
+
+export interface RecognitionPreviewSnapshot {
+  snapshot: LocalPageSnapshot;
+  applications: RunnerRecognitionPreviewJob["applications"];
+  screenshotWidth: number;
+  screenshotHeight: number;
+  screenshotTruncated: boolean;
 }
 
 export const DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";

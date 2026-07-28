@@ -171,6 +171,20 @@ export interface AppSettingsTable {
   updated_at: string;
 }
 
+export interface ParserRulesTable {
+  id: string;
+  name: string;
+  enabled: number;
+  priority: number;
+  version: number;
+  hostname: string;
+  pathname: string;
+  rule_json: string;
+  created_at: string;
+  updated_at: string;
+  last_tested_at: string | null;
+}
+
 export interface Database {
   check_groups: CheckGroupsTable;
   applications: ApplicationsTable;
@@ -181,6 +195,7 @@ export interface Database {
   browser_profiles: BrowserProfilesTable;
   login_sessions: LoginSessionsTable;
   app_settings: AppSettingsTable;
+  parser_rules: ParserRulesTable;
 }
 
 export interface DbContext {
@@ -354,6 +369,21 @@ CREATE TABLE IF NOT EXISTS app_settings (
   status_mappings TEXT NOT NULL DEFAULT '{}',
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS parser_rules (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+  priority INTEGER NOT NULL DEFAULT 100,
+  version INTEGER NOT NULL DEFAULT 1,
+  hostname TEXT NOT NULL,
+  pathname TEXT NOT NULL,
+  rule_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_tested_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS parser_rules_scope_priority
+  ON parser_rules(hostname, pathname, priority);
 `;
 
 export function createDb(filename: string): DbContext {

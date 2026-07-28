@@ -71,6 +71,42 @@ desktopApp/artifacts/ApplicationChecker-portable-win-x64.zip
 powershell -ExecutionPolicy Bypass -File desktopApp/build-portable.ps1 -SkipChecks
 ```
 
+### 只构建 internal
+
+日常修改 Vue 前端、API、Runner 或本地识别器时，可以只重新生成桌面版的 `internal` 运行内容：
+
+```powershell
+pnpm desktop:build:internal
+```
+
+该命令会执行依赖恢复、类型检查、测试和工作区构建，然后只更新：
+
+```text
+desktopApp/.stage/ApplicationChecker/internal/
+├─ api/
+├─ runner/
+└─ web/
+```
+
+它不会重新发布 .NET 桌面外壳、处理 Node.js 运行时或生成便携 ZIP，已有的 `internal/node` 也不会被删除。
+
+依赖已经安装并且只是快速验证本次修改时，可以跳过依赖恢复、类型检查和测试：
+
+```powershell
+pnpm desktop:build:internal -- -SkipInstall -SkipChecks
+```
+
+指定其他 `internal` 输出目录：
+
+```powershell
+pnpm desktop:build:internal -- `
+  -OutputPath "D:\ApplicationChecker\internal" `
+  -SkipInstall `
+  -SkipChecks
+```
+
+直接覆盖已解压应用的 `internal` 前，应先完全退出 Application Checker，避免 API、Runner 或原生 SQLite 模块仍被占用。完整发布和 GitHub Release 仍应使用 `pnpm desktop:build`。
+
 ## 使用
 
 1. 解压 `ApplicationChecker-portable-win-x64.zip`。

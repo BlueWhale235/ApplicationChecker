@@ -171,4 +171,11 @@ export async function registerCoreController(app: FastifyInstance, deps: RouteDe
     if (!image) throw httpError(404, "预览截图不存在");
     return reply.header("content-type", "image/png").send(image);
   });
+
+  app.get("/debug/recognition-previews/:id/snapshot", async (request) => {
+    if (!config.debugTools || !recognitionPreviewStore) throw httpError(404, "识别预览功能未启用");
+    const snapshot = recognitionPreviewStore.snapshot((request.params as { id: string }).id);
+    if (!snapshot) throw httpError(404, "预览快照不存在");
+    return snapshot;
+  });
 }

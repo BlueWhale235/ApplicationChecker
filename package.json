@@ -11,7 +11,8 @@
     "typecheck": "pnpm --filter @application-checker/contracts build && pnpm --filter @application-checker/cookie-state build && pnpm --filter @application-checker/status-mapping build && pnpm --filter @application-checker/ai-status build && pnpm --filter @application-checker/local-status build && pnpm -r typecheck",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
-    "desktop:build": "powershell -ExecutionPolicy Bypass -File desktopApp/build-portable.ps1"
+    "desktop:build": "powershell -ExecutionPolicy Bypass -File desktopApp/build-portable.ps1",
+    "desktop:build:internal": "powershell -ExecutionPolicy Bypass -File desktopApp/build-internal.ps1"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

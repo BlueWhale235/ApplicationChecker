@@ -21,6 +21,8 @@ import ProgressPage from "./pages/ProgressPage.vue";
 import BrowserProfilesPage from "./pages/BrowserProfilesPage.vue";
 import SettingsPage from "./pages/SettingsPage.vue";
 import AiDebugPage from "./pages/AiDebugPage.vue";
+import RuleStudioPage from "./pages/RuleStudioPage.vue";
+import type { AssistedParserRule } from "@application-checker/contracts";
 import { pagePaths, type AppPage } from "./router";
 
 const route = useRoute();
@@ -166,7 +168,7 @@ async function refresh(silent = false) {
     profiles.value = browserProfiles;
     unreadNotificationCount.value = notificationCount.unreadCount;
     debugEnabled.value = debugStatus.enabled;
-    if (active.value === "debug" && !debugStatus.enabled) void router.replace(pagePaths.settings);
+    if (["debug", "rule_studio"].includes(active.value) && !debugStatus.enabled) void router.replace(pagePaths.settings);
     if (!silent) {
       settingsForm.globalCron = appSettings.globalCron ?? "";
       settingsForm.timezone = appSettings.timezone;
@@ -227,7 +229,7 @@ watch(taskHistoryPageCount, (count) => {
 });
 watch([query, statusFilter, scheduleFilter], () => { applicationPage.value = 1; });
 watch([active, debugEnabled], ([page, enabled]) => {
-  if (page === "debug" && !loading.value && !enabled) void router.replace(pagePaths.settings);
+  if (["debug", "rule_studio"].includes(page) && !loading.value && !enabled) void router.replace(pagePaths.settings);
 });
 watch(applicationPageCount, (count) => {
   if (applicationPage.value > count) applicationPage.value = count;
@@ -311,6 +313,27 @@ async function clearAiDebugTraces() {
     debugRefreshToken.value += 1;
     flash(result.deleted ? `已清空 ${result.deleted} 条 AI 调试记录` : "没有可清空的调试记录");
   });
+}
+
+async function deleteParserRule(rule: AssistedParserRule) {
+  if (!await askConfirm({
+    title: "删除解析规则",
+    message: `将删除“${rule.name}”。使用该规则的网站会回退到内置解析器或 AI，此操作无法恢复。`,
+    confirmLabel: "删除规则",
+    danger: true,
+  })) return;
+  await action(async () => {
+    await api.deleteParserRule(rule.id);
+    debugRefreshToken.value += 1;
+    flash("解析规则已删除");
+  });
+}
+
+function confirmRuleStudio(
+  options: { title: string; message: string; confirmLabel: string; danger: boolean },
+  done: (confirmed: boolean) => void,
+) {
+  void askConfirm(options).then(done);
 }
 
 function askConfirm(options: { title: string; message: string; confirmLabel?: string; danger?: boolean }): Promise<boolean> {
@@ -723,6 +746,15 @@ async function deleteProfile(site: string) {
           :busy="busy"
           :refresh-token="debugRefreshToken"
           @clear="clearAiDebugTraces"
+          @failure="error = $event"
+          @notice="flash"
+        />
+        <RuleStudioPage
+          v-else-if="active === 'rule_studio' && debugEnabled"
+          :busy="busy"
+          :key="debugRefreshToken"
+          @delete="deleteParserRule"
+          @confirm="confirmRuleStudio"
           @failure="error = $event"
           @notice="flash"
         />
