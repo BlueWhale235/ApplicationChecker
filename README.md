@@ -14,7 +14,7 @@
 
 职迹是一个面向个人用户的本地应用，用来记录岗位、管理投递进度，并按计划自动打开招聘网站检查申请状态。
 
-应用会复用加密保存的 Cookie 和 localStorage，保存完整网页截图，并可选用 OpenAI-compatible 视觉模型识别页面中的申请状态。所有业务数据默认保存在本机，不需要云端数据库。
+应用会复用加密保存的 Cookie、localStorage 和 IndexedDB，保存完整网页截图，并可选用 OpenAI-compatible 视觉模型识别页面中的申请状态。所有业务数据默认保存在本机，不需要云端数据库。
 
 ## 主要功能
 
@@ -24,7 +24,7 @@
 - 支持全局、自定义和手动 Cron 检查计划
 - 使用 SQLite 保存岗位、运行记录、通知、浏览器状态和设置
 - 自动截取完整网页，支持截图保留天数和到期清理
-- 加密保存招聘网站 Cookie、localStorage 和 AI API Key
+- 加密保存招聘网站 Cookie、localStorage、IndexedDB 和 AI API Key
 - 登录失效时提供人工登录流程
 - 人工状态锁定、AI 自动识别、置信度阈值和状态变更通知
 - Docker 版和 Windows WebView2 便携桌面版
@@ -246,7 +246,7 @@ desktopApp/       .NET 10 WPF + WebView2 桌面外壳
 - Web 服务默认只监听 `127.0.0.1`
 - Runner 内部接口使用独立 Bearer Token
 - 桌面版每次启动生成独立会话凭据保护本地 API
-- Cookie、localStorage 和 AI API Key 使用 `STATE_ENCRYPTION_KEY` 加密
+- Cookie、localStorage、IndexedDB 和 AI API Key 使用 `STATE_ENCRYPTION_KEY` 加密
 - 招聘网站截图只在配置 AI 后发送给指定的 AI 服务
 - 请妥善备份密钥；丢失 `STATE_ENCRYPTION_KEY` 后无法恢复已加密的登录状态
 - 不要提交 `.env`、`data`、截图、数据库或发布产物到 Git

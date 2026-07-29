@@ -13,7 +13,7 @@ defineEmits<{ remove: [site: string] }>();
       <div v-if="profiles.length" class="profile-list">
         <article v-for="profile in profiles" :key="profile.site">
           <div class="profile-icon"><i class="mdi mdi-web"></i></div>
-          <div><strong>{{ profile.site }}</strong><span>{{ profile.cookieCount }} 个 Cookie · 版本 {{ profile.version }}</span></div>
+          <div><strong>{{ profile.site }}</strong><span>{{ profile.cookieCount }} 个 Cookie</span></div>
           <time>{{ new Date(profile.updatedAt).toLocaleString("zh-CN") }}</time>
           <v-btn color="error" variant="text" size="small" @click="$emit('remove', profile.site)">清除</v-btn>
         </article>

@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import type { RunnerJob, RunnerLoginJob, RunnerRecognitionPreviewJob } from "@application-checker/contracts";
-import { collectBrowserState, installBrowserState } from "./browser-state.js";
+import { collectBrowserState, installBrowserState, restoreIndexedDbState } from "./browser-state.js";
 import { classifyPage } from "./detection.js";
 import { captureFullPage } from "./full-page-capture.js";
 import { captureLocalPageSnapshot } from "./dom-snapshot.js";
@@ -65,7 +65,8 @@ function launchArgs(proxyUrl: string | null): string[] {
     "--no-sandbox",
     "--disable-dev-shm-usage",
     "--disable-background-networking",
-    "--disable-features=Translate,MediaRouter",
+    "--disable-save-password-bubble",
+    "--disable-features=Translate,MediaRouter,AutofillServerCommunication,PasswordLeakDetection,PasswordManagerOnboarding",
     "--window-size=1440,900",
     `--disk-cache-dir=${browserCachePath}`,
     `--disk-cache-size=${browserCacheSize}`,
@@ -132,7 +133,10 @@ async function capture(job: RunnerJob): Promise<void> {
     await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
     await page.setUserAgent(job.userAgent);
     await installBrowserState(page, job.browserState);
-    const response = await page.goto(job.url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    let response = await page.goto(job.url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    if (await restoreIndexedDbState(page, job.browserState)) {
+      response = await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
+    }
     await settle(page);
     const { observed, detection, image, snapshot: pageSnapshot } = await captureStablePage(
       page,
@@ -196,6 +200,9 @@ async function login(job: RunnerLoginJob): Promise<void> {
     await page.setUserAgent(job.userAgent);
     await installBrowserState(page, job.browserState);
     await page.goto(job.url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    if (await restoreIndexedDbState(page, job.browserState)) {
+      await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
+    }
     await api(`/internal/login/${job.sessionId}/ready`, { method: "POST", body: "{}" });
     while (true) {
       const control = await api<{ status: string; expires_at: string }>(`/internal/login/${job.sessionId}/control`);
@@ -237,7 +244,10 @@ async function recognitionPreview(job: RunnerRecognitionPreviewJob): Promise<voi
     await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
     await page.setUserAgent(job.userAgent);
     await installBrowserState(page, job.browserState);
-    const response = await page.goto(job.url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    let response = await page.goto(job.url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    if (await restoreIndexedDbState(page, job.browserState)) {
+      response = await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
+    }
     await settle(page);
     const { detection, image, snapshot } = await captureStablePage(page, response?.status() ?? null, true);
     if (!snapshot) throw new Error("Recognition preview snapshot was not captured");

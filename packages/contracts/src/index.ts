@@ -526,6 +526,30 @@ export interface BrowserCookie {
 export interface OriginStorage {
   origin: string;
   localStorage: Record<string, string>;
+  indexedDB?: IndexedDatabaseSnapshot[];
+}
+
+export interface IndexedDatabaseSnapshot {
+  name: string;
+  version: number;
+  stores: IndexedObjectStoreSnapshot[];
+}
+
+export interface IndexedObjectStoreSnapshot {
+  name: string;
+  keyPath: string | string[] | null;
+  autoIncrement: boolean;
+  indexes: Array<{
+    name: string;
+    keyPath: string | string[];
+    unique: boolean;
+    multiEntry: boolean;
+  }>;
+  records: Array<{
+    key: unknown;
+    value: unknown;
+  }>;
+  truncated: boolean;
 }
 
 export interface BrowserStateEnvelope {

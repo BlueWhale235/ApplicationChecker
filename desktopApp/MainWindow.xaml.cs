@@ -115,6 +115,8 @@ public partial class MainWindow : Window
         Browser.CoreWebView2.Settings.AreDevToolsEnabled = _devToolsEnabled;
         Browser.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = _devToolsEnabled;
         Browser.CoreWebView2.Settings.IsStatusBarEnabled = false;
+        Browser.CoreWebView2.Settings.IsGeneralAutofillEnabled = false;
+        Browser.CoreWebView2.Settings.IsPasswordAutosaveEnabled = false;
         Browser.Source = new Uri(baseUrl);
         Browser.Visibility = Visibility.Visible;
         LoadingPanel.Visibility = Visibility.Collapsed;
