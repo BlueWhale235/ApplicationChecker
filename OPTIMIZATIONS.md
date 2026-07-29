@@ -40,6 +40,18 @@
 - 桌面程序退出时，自动检查池和登录池都会一起关闭。
 - 浏览器磁盘缓存继续受 512 MB 上限约束。
 
+### 1.5 Windows 进程归属
+
+Windows 任务管理器默认按应用类型和窗口分组，不一定按父子进程树显示 Node.js、Edge 和 WebView2。桌面版因此额外使用 Windows Job Object 管理后台进程：
+
+- API 和 Runner 两个 Node.js 进程启动后立即加入主程序持有的 Job Object。
+- Runner 后续启动的 Edge 进程及其渲染器、GPU 和 Utility 子进程继承该 Job。
+- Job 设置 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`。
+- 主程序正常退出、异常退出或崩溃导致 Job 句柄关闭时，Windows 内核统一终止其中仍存活的后台进程。
+- 现有主动关闭和等待逻辑继续保留，Job Object 作为最终兜底。
+
+Job Object 约束的是实际生命周期和资源归属，不保证任务管理器界面一定将所有进程折叠显示在主程序节点下。
+
 ## 2. 浏览器状态持久化
 
 系统按站点加密保存以下浏览器状态：

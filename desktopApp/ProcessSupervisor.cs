@@ -4,6 +4,7 @@ namespace ApplicationChecker.Desktop;
 
 internal sealed class ProcessSupervisor : IAsyncDisposable
 {
+    private WindowsJobObject? _job;
     private readonly List<Process> _processes = [];
     private readonly List<Task> _logTasks = [];
 
@@ -26,7 +27,23 @@ internal sealed class ProcessSupervisor : IAsyncDisposable
         foreach (var pair in environment)
             info.Environment[pair.Key] = pair.Value;
 
+        _job ??= new WindowsJobObject();
         var process = Process.Start(info) ?? throw new InvalidOperationException($"无法启动 {Path.GetFileName(argument)}");
+        try
+        {
+            _job.Assign(process);
+        }
+        catch
+        {
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+            }
+            catch { }
+            process.Dispose();
+            throw;
+        }
         _processes.Add(process);
         _logTasks.Add(PumpLogsAsync(process, logPath));
         return process;
@@ -75,5 +92,7 @@ internal sealed class ProcessSupervisor : IAsyncDisposable
         catch { }
         _processes.Clear();
         _logTasks.Clear();
+        _job?.Dispose();
+        _job = null;
     }
 }
