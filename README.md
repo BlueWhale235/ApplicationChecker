@@ -25,9 +25,13 @@
 - 使用 SQLite 保存岗位、运行记录、通知、浏览器状态和设置
 - 自动截取完整网页，支持截图保留天数和到期清理
 - 加密保存招聘网站 Cookie、localStorage、IndexedDB 和 AI API Key
+- 通过规则工作台扩展本地 DOM 解析，并支持自定义状态映射
+- 按需复用 Edge 进程，连续检查提速且空闲后自动释放资源
 - 登录失效时提供人工登录流程
 - 人工状态锁定、AI 自动识别、置信度阈值和状态变更通知
 - Docker 版和 Windows WebView2 便携桌面版
+
+浏览器资源策略、本地解析链路、规则工作台和状态映射的设计说明见 [OPTIMIZATIONS.md](OPTIMIZATIONS.md)。
 
 ## 选择运行方式
 

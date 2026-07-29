@@ -1,4 +1,4 @@
-import type { Browser, Page } from "puppeteer-core";
+import type { Page } from "puppeteer-core";
 import type { BrowserCookie, BrowserStateEnvelope } from "@application-checker/contracts";
 
 const indexedDbRecordLimit = 1_000;
@@ -154,8 +154,8 @@ export async function restoreIndexedDbState(page: Page, state: BrowserStateEnvel
   }, state.origins);
 }
 
-export async function collectBrowserState(browser: Browser, page: Page, site: string): Promise<BrowserStateEnvelope> {
-  const rawCookies = await browser.cookies();
+export async function collectBrowserState(page: Page, site: string): Promise<BrowserStateEnvelope> {
+  const rawCookies = await page.browserContext().cookies();
   const cookies: BrowserCookie[] = rawCookies.filter((cookie) => {
     const domain = cookie.domain.replace(/^\./, "").toLowerCase();
     return domain === site || domain.endsWith(`.${site}`);

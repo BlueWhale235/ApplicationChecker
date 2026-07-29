@@ -1,9 +1,9 @@
 import "dotenv/config";
-import puppeteer, { type Browser, type Page } from "puppeteer-core";
+import puppeteer, { type Page } from "puppeteer-core";
 import { existsSync } from "node:fs";
-import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import type { RunnerJob, RunnerLoginJob, RunnerRecognitionPreviewJob } from "@application-checker/contracts";
+import { BrowserPool, type BrowserLease } from "./browser-pool.js";
 import { collectBrowserState, installBrowserState, restoreIndexedDbState } from "./browser-state.js";
 import { classifyPage } from "./detection.js";
 import { captureFullPage } from "./full-page-capture.js";
@@ -34,13 +34,6 @@ const browserDataPath = path.resolve(process.env.BROWSER_DATA_PATH ?? "./data/br
 const browserCachePath = path.resolve(process.env.BROWSER_CACHE_PATH ?? path.join(browserDataPath, "cache"));
 const browserCacheSize = 512 * 1024 * 1024;
 
-async function freshBrowserProfile(kind: string, id: string): Promise<string> {
-  const folder = path.join(browserDataPath, `${kind}-${id}`);
-  await rm(folder, { recursive: true, force: true });
-  await mkdir(path.join(folder, "tmp"), { recursive: true });
-  return folder;
-}
-
 function browserEnvironment(profilePath: string): NodeJS.ProcessEnv {
   const taskTempPath = path.join(profilePath, "tmp");
   return { ...process.env, TEMP: taskTempPath, TMP: taskTempPath, TMPDIR: taskTempPath };
@@ -60,7 +53,7 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-function launchArgs(proxyUrl: string | null): string[] {
+function launchArgs(): string[] {
   return [
     "--no-sandbox",
     "--disable-dev-shm-usage",
@@ -70,9 +63,38 @@ function launchArgs(proxyUrl: string | null): string[] {
     "--window-size=1440,900",
     `--disk-cache-dir=${browserCachePath}`,
     `--disk-cache-size=${browserCacheSize}`,
-    ...(proxyUrl ? [`--proxy-server=${proxyUrl}`] : []),
   ];
 }
+
+const automatedBrowserPool = new BrowserPool({
+  name: "automated",
+  profilePath: path.join(browserDataPath, "pool-automated"),
+  idleTimeoutMs: 90_000,
+  maxUses: 30,
+  launch: (profilePath) => puppeteer.launch({
+    executablePath: browserBin,
+    userDataDir: profilePath,
+    env: browserEnvironment(profilePath),
+    headless: true,
+    args: launchArgs(),
+  }),
+});
+
+const loginBrowserPool = new BrowserPool({
+  name: "login",
+  profilePath: path.join(browserDataPath, "pool-login"),
+  idleTimeoutMs: 180_000,
+  maxUses: 30,
+  launch: (profilePath) => puppeteer.launch({
+    executablePath: browserBin,
+    userDataDir: profilePath,
+    env: browserEnvironment(profilePath),
+    headless: false,
+    defaultViewport: null,
+    waitForInitialPage: false,
+    args: [...launchArgs(), "--no-startup-window", "--start-maximized"],
+  }),
+});
 
 async function settle(page: Page): Promise<void> {
   await page.waitForNetworkIdle({ idleTime: 1000, timeout: 12_000 }).catch(() => {});
@@ -105,31 +127,21 @@ async function captureStablePage(page: Page, status: number | null, includeSnaps
 }
 
 async function capture(job: RunnerJob): Promise<void> {
-  let browser: Browser | null = null;
-  let profilePath: string | null = null;
+  let lease: BrowserLease | null = null;
   let cancelled = false;
   let controlTimer: NodeJS.Timeout | undefined;
   try {
-    profilePath = await freshBrowserProfile("capture", job.runId);
-    browser = await puppeteer.launch({
-      executablePath: browserBin,
-      userDataDir: profilePath,
-      env: browserEnvironment(profilePath),
-      headless: true,
-      args: launchArgs(job.proxyUrl),
-    });
+    lease = await automatedBrowserPool.acquire(job.proxyUrl);
     controlTimer = setInterval(() => {
       void api<{ status: string }>(`/internal/runs/${job.runId}/control`).then(async (control) => {
-        if (control.status === "cancelled" && browser) {
+        if (control.status === "cancelled" && lease) {
           cancelled = true;
-          const current = browser;
-          browser = null;
-          await current.close().catch(() => {});
+          await lease.release();
         }
       }).catch(() => {});
     }, 1000);
     controlTimer.unref();
-    const page = await browser.newPage();
+    const page = await lease.context.newPage();
     await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
     await page.setUserAgent(job.userAgent);
     await installBrowserState(page, job.browserState);
@@ -144,6 +156,9 @@ async function capture(job: RunnerJob): Promise<void> {
       job.recognitionMode !== "ai_only",
     );
     if (detection.requiresLogin) {
+      void loginBrowserPool.prewarm().catch((error) => {
+        console.error("Unable to prewarm the login browser", error);
+      });
       await api(`/internal/runs/${job.runId}/needs-login`, {
         method: "POST",
         body: JSON.stringify({
@@ -155,7 +170,7 @@ async function capture(job: RunnerJob): Promise<void> {
       });
       return;
     }
-    const state = await withNavigationRetry(page, () => collectBrowserState(browser!, page, job.site));
+    const state = await withNavigationRetry(page, () => collectBrowserState(page, job.site));
     await api(`/internal/runs/${job.runId}/complete`, {
       method: "POST",
       body: JSON.stringify({
@@ -177,26 +192,15 @@ async function capture(job: RunnerJob): Promise<void> {
     }).catch(() => {});
   } finally {
     if (controlTimer) clearInterval(controlTimer);
-    await browser?.close().catch(() => {});
-    if (profilePath) await rm(profilePath, { recursive: true, force: true }).catch(() => {});
+    await lease?.release();
   }
 }
 
 async function login(job: RunnerLoginJob): Promise<void> {
-  let browser: Browser | null = null;
-  let profilePath: string | null = null;
+  let lease: BrowserLease | null = null;
   try {
-    profilePath = await freshBrowserProfile("login", job.sessionId);
-    browser = await puppeteer.launch({
-      executablePath: browserBin,
-      userDataDir: profilePath,
-      env: browserEnvironment(profilePath),
-      headless: false,
-      defaultViewport: null,
-      args: [...launchArgs(job.proxyUrl), "--start-maximized"],
-    });
-    const pages = await browser.pages();
-    const page = pages[0] ?? await browser.newPage();
+    lease = await loginBrowserPool.acquire(job.proxyUrl);
+    const page = await lease.context.newPage();
     await page.setUserAgent(job.userAgent);
     await installBrowserState(page, job.browserState);
     await page.goto(job.url, { waitUntil: "domcontentloaded", timeout: 60_000 });
@@ -207,7 +211,7 @@ async function login(job: RunnerLoginJob): Promise<void> {
     while (true) {
       const control = await api<{ status: string; expires_at: string }>(`/internal/login/${job.sessionId}/control`);
       if (control.status === "saving") {
-        const state = await collectBrowserState(browser, page, job.site);
+        const state = await collectBrowserState(page, job.site);
         await api(`/internal/login/${job.sessionId}/complete`, {
           method: "POST",
           body: JSON.stringify({ finalUrl: page.url(), browserState: state }),
@@ -223,24 +227,15 @@ async function login(job: RunnerLoginJob): Promise<void> {
       body: JSON.stringify({ message: error instanceof Error ? error.message : "Unknown login error" }),
     }).catch(() => {});
   } finally {
-    await browser?.close().catch(() => {});
-    if (profilePath) await rm(profilePath, { recursive: true, force: true }).catch(() => {});
+    await lease?.release();
   }
 }
 
 async function recognitionPreview(job: RunnerRecognitionPreviewJob): Promise<void> {
-  let browser: Browser | null = null;
-  let profilePath: string | null = null;
+  let lease: BrowserLease | null = null;
   try {
-    profilePath = await freshBrowserProfile("recognition-preview", job.previewId);
-    browser = await puppeteer.launch({
-      executablePath: browserBin,
-      userDataDir: profilePath,
-      env: browserEnvironment(profilePath),
-      headless: true,
-      args: launchArgs(job.proxyUrl),
-    });
-    const page = await browser.newPage();
+    lease = await automatedBrowserPool.acquire(job.proxyUrl);
+    const page = await lease.context.newPage();
     await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
     await page.setUserAgent(job.userAgent);
     await installBrowserState(page, job.browserState);
@@ -269,8 +264,7 @@ async function recognitionPreview(job: RunnerRecognitionPreviewJob): Promise<voi
       body: JSON.stringify({ message: error instanceof Error ? error.message : "Unknown preview error" }),
     }).catch(() => {});
   } finally {
-    await browser?.close().catch(() => {});
-    if (profilePath) await rm(profilePath, { recursive: true, force: true }).catch(() => {});
+    await lease?.release();
   }
 }
 
@@ -283,17 +277,21 @@ const heartbeat = setInterval(() => {
 }, 5000);
 heartbeat.unref();
 
-while (!stopping) {
-  try {
-    await api("/internal/heartbeat", { method: "POST", body: "{}" });
-    const job = await api<RunnerJob | RunnerLoginJob | RunnerRecognitionPreviewJob | { kind: "idle" }>("/internal/claim", { method: "POST", body: "{}" });
-    if (job.kind === "capture") await capture(job);
-    else if (job.kind === "login") await login(job);
-    else if (job.kind === "recognition_preview") await recognitionPreview(job);
-    else await new Promise((resolve) => setTimeout(resolve, 1500));
-  } catch (error) {
-    console.error(error);
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+try {
+  while (!stopping) {
+    try {
+      await api("/internal/heartbeat", { method: "POST", body: "{}" });
+      const job = await api<RunnerJob | RunnerLoginJob | RunnerRecognitionPreviewJob | { kind: "idle" }>("/internal/claim", { method: "POST", body: "{}" });
+      if (job.kind === "capture") await capture(job);
+      else if (job.kind === "login") await login(job);
+      else if (job.kind === "recognition_preview") await recognitionPreview(job);
+      else await new Promise((resolve) => setTimeout(resolve, 1500));
+    } catch (error) {
+      console.error(error);
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
   }
+} finally {
+  clearInterval(heartbeat);
+  await Promise.all([automatedBrowserPool.close(), loginBrowserPool.close()]);
 }
-clearInterval(heartbeat);
