@@ -502,10 +502,11 @@ export interface AppSettings {
 export interface BrowserStorageUsage {
   cacheBytes: number;
   tempBytes: number;
+  logBytes: number;
 }
 
 export interface BrowserStorageCleanupResult {
-  kind: "cache" | "temp";
+  kind: "cache" | "temp" | "logs";
   beforeBytes: number;
   afterBytes: number;
   freedBytes: number;

@@ -12,15 +12,21 @@ import { initializeRuntimeSettings } from "./runtime-settings.js";
 import { startScheduler } from "./scheduler.js";
 import { AiDebugStore } from "./ai-debug.js";
 import { RecognitionPreviewStore } from "./recognition-preview.js";
+import { recoverInterruptedWork } from "./startup-recovery.js";
 
 const config = loadConfig();
 const context = createDb(config.databasePath);
 await initializeRuntimeSettings(context, config);
+const recovery = await recoverInterruptedWork(context);
+if (recovery.runsRequeued || recovery.loginSessionsFailed || recovery.applicationStatusesRepaired) {
+  console.warn(`[startup-recovery] requeued ${recovery.runsRequeued} run(s), closed ${recovery.loginSessionsFailed} login session(s), repaired ${recovery.applicationStatusesRepaired} application status(es)`);
+}
 const runnerHeartbeat = { at: 0 };
 const aiDebugStore = config.debugTools ? new AiDebugStore() : undefined;
 const recognitionPreviewStore = new RecognitionPreviewStore();
 const app = Fastify({
-  logger: true,
+  logger: { level: "warn" },
+  disableRequestLogging: true,
   bodyLimit: 35 * 1024 * 1024,
 });
 await app.register(cookie);

@@ -54,7 +54,7 @@ import {
   normalizeCustomStatusMappings,
   parseStatusMappings,
 } from "@application-checker/status-mapping";
-import { clearDirectoryContents, directorySize } from "../storage-maintenance.js";
+import { clearDirectoryContents, clearLogContents, directorySize } from "../storage-maintenance.js";
 import type {
   BrowserStateEnvelope,
   FastifyInstance,
@@ -171,16 +171,18 @@ export async function registerNotificationSettingsController(
   });
 
   app.get("/settings/browser-storage", async () => {
-    const [cacheBytes, tempBytes] = await Promise.all([
+    const [cacheBytes, tempBytes, logBytes] = await Promise.all([
       directorySize(config.browserCachePath),
       directorySize(config.tempPath),
+      directorySize(config.logsPath),
     ]);
-    return { cacheBytes, tempBytes };
+    return { cacheBytes, tempBytes, logBytes };
   });
 
   app.post("/settings/browser-storage/:kind/clear", async (request) => {
     const kind = (request.params as { kind: string }).kind;
-    if (kind !== "cache" && kind !== "temp") throw httpError(404, "存储类型不存在");
+    if (kind !== "cache" && kind !== "temp" && kind !== "logs") throw httpError(404, "存储类型不存在");
+    if (kind === "logs") return { kind, ...await clearLogContents(config.logsPath) };
     const activeRun = await context.db.selectFrom("runs").select("id")
       .where("status", "in", [...activeRunStatuses]).executeTakeFirst();
     const previewBusy = recognitionPreviewStore?.list()

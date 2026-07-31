@@ -128,7 +128,7 @@ export const api = {
   deleteProfile: (site: string) => request<void>(`/browser-profiles/${encodeURIComponent(site)}/delete`, { method: "POST" }),
   settings: () => request<AppSettings>("/settings"),
   browserStorage: () => request<BrowserStorageUsage>("/settings/browser-storage"),
-  clearBrowserStorage: (kind: "cache" | "temp") =>
+  clearBrowserStorage: (kind: "cache" | "temp" | "logs") =>
     request<BrowserStorageCleanupResult>(`/settings/browser-storage/${kind}/clear`, { method: "POST" }),
   updateSettings: (body: SettingsUpdate) => request<{
     ok: true;

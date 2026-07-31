@@ -1,4 +1,4 @@
-import { lstat, mkdir, readdir, rm } from "node:fs/promises";
+import { lstat, mkdir, readdir, rm, truncate } from "node:fs/promises";
 import path from "node:path";
 
 export interface DirectoryCleanupResult {
@@ -40,6 +40,29 @@ export async function clearDirectoryContents(folder: string): Promise<DirectoryC
   for (const entry of entries) {
     try {
       await rm(path.join(folder, entry), { recursive: true, force: true, maxRetries: 2, retryDelay: 100 });
+    } catch {
+      failed += 1;
+    }
+  }
+  const afterBytes = await directorySize(folder);
+  return {
+    beforeBytes,
+    afterBytes,
+    freedBytes: Math.max(0, beforeBytes - afterBytes),
+    failed,
+  };
+}
+
+export async function clearLogContents(folder: string): Promise<DirectoryCleanupResult> {
+  const beforeBytes = await directorySize(folder);
+  await mkdir(folder, { recursive: true });
+  const entries = await readdir(folder, { withFileTypes: true });
+  let failed = 0;
+  for (const entry of entries) {
+    const target = path.join(folder, entry.name);
+    try {
+      if (entry.isFile()) await truncate(target, 0);
+      else await rm(target, { recursive: true, force: true, maxRetries: 2, retryDelay: 100 });
     } catch {
       failed += 1;
     }

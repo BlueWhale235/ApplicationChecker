@@ -51,20 +51,41 @@ internal sealed class ProcessSupervisor : IAsyncDisposable
 
     private static async Task PumpLogsAsync(Process process, string logPath)
     {
-        await using var stream = new FileStream(logPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
-        await using var writer = new StreamWriter(stream) { AutoFlush = true };
-        await writer.WriteLineAsync($"[{DateTimeOffset.Now:O}] process {process.Id} started");
+        using var writeLock = new SemaphoreSlim(1, 1);
+
+        async Task WriteLineAsync(string line)
+        {
+            await writeLock.WaitAsync();
+            try
+            {
+                await using var stream = new FileStream(
+                    logPath,
+                    FileMode.Append,
+                    FileAccess.Write,
+                    FileShare.ReadWrite | FileShare.Delete,
+                    bufferSize: 4096,
+                    useAsync: true);
+                await using var writer = new StreamWriter(stream);
+                await writer.WriteLineAsync(line);
+            }
+            finally
+            {
+                writeLock.Release();
+            }
+        }
+
+        await WriteLineAsync($"[{DateTimeOffset.Now:O}] process {process.Id} started");
 
         async Task PumpAsync(StreamReader reader, string channel)
         {
             while (await reader.ReadLineAsync() is { } line)
-                await writer.WriteLineAsync($"[{DateTimeOffset.Now:O}] [{channel}] {line}");
+                await WriteLineAsync($"[{DateTimeOffset.Now:O}] [{channel}] {line}");
         }
 
         await Task.WhenAll(
             PumpAsync(process.StandardOutput, "stdout"),
             PumpAsync(process.StandardError, "stderr"));
-        await writer.WriteLineAsync($"[{DateTimeOffset.Now:O}] process {process.Id} exited ({process.ExitCode})");
+        await WriteLineAsync($"[{DateTimeOffset.Now:O}] process {process.Id} exited ({process.ExitCode})");
     }
 
     public async ValueTask DisposeAsync()

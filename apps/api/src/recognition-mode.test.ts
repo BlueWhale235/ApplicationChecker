@@ -46,6 +46,7 @@ async function setup(mode: RecognitionMode) {
     dataPath: folder,
     databasePath: path.join(folder, "test.sqlite"),
     screenshotsPath: path.join(folder, "screenshots"),
+    logsPath: path.join(folder, "logs"),
     browserCachePath: path.join(folder, "browser", "cache"),
     tempPath: path.join(folder, "tmp"),
     runtimeSettingsPath: path.join(folder, "runtime-settings.json"),

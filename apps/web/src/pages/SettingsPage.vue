@@ -26,7 +26,7 @@ const emit = defineEmits<{
   configureStatusMappings: [];
   recognitionMode: [value: RecognitionMode];
   refreshStorage: [];
-  clearStorage: [kind: "cache" | "temp"];
+  clearStorage: [kind: "cache" | "temp" | "logs"];
 }>();
 
 function formatBytes(bytes: number): string {
@@ -34,6 +34,12 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+}
+
+function formatLogBytes(bytes: number): string {
+  const kilobytes = bytes / 1024;
+  if (kilobytes <= 1024) return `${kilobytes.toFixed(1)} KB`;
+  return `${(kilobytes / 1024).toFixed(1)} MB`;
 }
 
 onMounted(() => emit("refreshStorage"));
@@ -106,7 +112,7 @@ const recognitionModes: Array<{ title: string; value: RecognitionMode }> = [
       </div>
       <div class="content-card browser-storage-card">
         <div class="card-title">
-          <div><h2>浏览器存储</h2><p>复用网页静态资源，并清理自动检查产生的临时文件。</p></div>
+          <div><h2>存储与日志</h2><p>查看浏览器缓存、临时文件与故障日志占用空间。</p></div>
           <i class="mdi mdi-database-cog-outline"></i>
         </div>
         <div class="storage-items">
@@ -122,8 +128,14 @@ const recognitionModes: Array<{ title: string; value: RecognitionMode }> = [
             <b>{{ storage ? formatBytes(storage.tempBytes) : "计算中…" }}</b>
             <v-btn size="small" variant="outlined" color="error" :disabled="!storage" :loading="busy" @click="$emit('clearStorage', 'temp')">清理临时文件</v-btn>
           </div>
+          <div class="logs-storage-item">
+            <i class="mdi mdi-text-box-remove-outline"></i>
+            <span><strong>运行日志</strong><small>仅记录警告和错误，用于排查异常</small></span>
+            <b>{{ storage ? formatLogBytes(storage.logBytes) : "计算中…" }}</b>
+            <v-btn size="small" variant="outlined" color="error" :disabled="!storage" :loading="busy" @click="$emit('clearStorage', 'logs')">清除日志</v-btn>
+          </div>
         </div>
-        <p class="settings-help">正在检查、登录或加载规则预览时不能清理。新任务的临时目录会在任务结束后自动删除。</p>
+        <p class="settings-help">缓存和临时文件在检查、登录或加载规则预览时不能清理；运行日志可随时清除。</p>
       </div>
       <div class="content-card project-card">
         <div>
@@ -168,6 +180,7 @@ const recognitionModes: Array<{ title: string; value: RecognitionMode }> = [
 .browser-storage-card { grid-column: 1 / -1; }
 .storage-items { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .storage-items > div { display: grid; grid-template-columns: auto 1fr auto auto; gap: 11px; align-items: center; padding: 14px; border: 1px solid #e4ded3; border-radius: 9px; background: #fbf8f1; }
+.storage-items .logs-storage-item { grid-column: 1 / -1; }
 .storage-items > div > i { color: #477363; font-size: 24px; }
 .storage-items span { min-width: 0; }
 .storage-items strong, .storage-items small { display: block; }

@@ -7,6 +7,7 @@ export interface Config {
   dataPath: string;
   databasePath: string;
   screenshotsPath: string;
+  logsPath: string;
   browserCachePath: string;
   tempPath: string;
   runtimeSettingsPath: string;
@@ -56,6 +57,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     dataPath,
     databasePath: path.join(dataPath, "application-checker.sqlite"),
     screenshotsPath: path.join(dataPath, "screenshots"),
+    logsPath: path.join(dataPath, "logs"),
     browserCachePath: path.join(dataPath, "browser", "cache"),
     tempPath: path.join(dataPath, "tmp"),
     runtimeSettingsPath: path.join(dataPath, "runtime-settings.json"),

@@ -12,6 +12,7 @@ import { registerRoutes } from "./routes.js";
 import { cleanupExpiredScreenshots, queueRun } from "./service.js";
 import { AiDebugStore } from "./ai-debug.js";
 import { RecognitionPreviewStore } from "./recognition-preview.js";
+import { recoverInterruptedWork } from "./startup-recovery.js";
 
 const folders: string[] = [];
 afterEach(async () => {
@@ -30,6 +31,7 @@ async function setup(): Promise<{ folder: string; context: DbContext; config: Co
     dataPath: folder,
     databasePath: path.join(folder, "test.sqlite"),
     screenshotsPath,
+    logsPath: path.join(folder, "logs"),
     browserCachePath: path.join(folder, "browser", "cache"),
     tempPath: path.join(folder, "tmp"),
     runtimeSettingsPath: path.join(folder, "runtime-settings.json"),
@@ -140,14 +142,16 @@ describe("runtime settings and POST action routes", () => {
     const { context, config } = await setup();
     await mkdir(path.join(config.browserCachePath, "Cache"), { recursive: true });
     await mkdir(config.tempPath, { recursive: true });
+    await mkdir(config.logsPath, { recursive: true });
     await writeFile(path.join(config.browserCachePath, "Cache", "asset.js"), "12345");
     await writeFile(path.join(config.tempPath, "edge.tmp"), "1234");
+    await writeFile(path.join(config.logsPath, "api.log"), "warning");
     const app = Fastify();
     await registerRoutes(app, { context, config, runnerHeartbeat: { at: Date.now() } });
 
     const usage = await app.inject({ method: "GET", url: "/settings/browser-storage" });
     expect(usage.statusCode, usage.body).toBe(200);
-    expect(usage.json()).toEqual({ cacheBytes: 5, tempBytes: 4 });
+    expect(usage.json()).toEqual({ cacheBytes: 5, tempBytes: 4, logBytes: 7 });
 
     const cleared = await app.inject({ method: "POST", url: "/settings/browser-storage/cache/clear" });
     expect(cleared.statusCode, cleared.body).toBe(200);
@@ -157,8 +161,68 @@ describe("runtime settings and POST action routes", () => {
     const blocked = await app.inject({ method: "POST", url: "/settings/browser-storage/temp/clear" });
     expect(blocked.statusCode).toBe(409);
     expect(await stat(path.join(config.tempPath, "edge.tmp"))).toBeTruthy();
+    const logsCleared = await app.inject({ method: "POST", url: "/settings/browser-storage/logs/clear" });
+    expect(logsCleared.statusCode, logsCleared.body).toBe(200);
+    expect(logsCleared.json()).toMatchObject({ kind: "logs", beforeBytes: 7, afterBytes: 0, freedBytes: 7, failed: 0 });
+    expect((await stat(path.join(config.logsPath, "api.log"))).size).toBe(0);
 
     await app.close();
+    await context.db.destroy();
+    context.raw.close();
+  });
+
+  it("requeues interrupted runs and closes orphaned login sessions on startup", async () => {
+    const { context } = await setup();
+    const runId = await queueRun(context, "11111111-1111-4111-8111-111111111111", "manual");
+    expect(runId).toBeTruthy();
+    await context.db.updateTable("runs").set({
+      status: "running",
+      started_at: "2026-07-31T03:10:32.171Z",
+    }).where("id", "=", runId!).execute();
+    await context.db.updateTable("applications").set({ last_run_status: "running" })
+      .where("id", "=", "11111111-1111-4111-8111-111111111111").execute();
+    await context.db.insertInto("login_sessions").values({
+      id: "22222222-2222-4222-8222-222222222222",
+      application_id: "11111111-1111-4111-8111-111111111111",
+      run_id: runId!,
+      status: "active",
+      access_token_hash: "hash",
+      token_used_at: "2026-07-31T03:10:35.000Z",
+      expires_at: "2026-07-31T04:10:35.000Z",
+      error_message: null,
+      created_at: "2026-07-31T03:10:35.000Z",
+      updated_at: "2026-07-31T03:10:35.000Z",
+      completed_at: null,
+    }).execute();
+
+    expect(await recoverInterruptedWork(context)).toEqual({
+      runsRequeued: 1,
+      loginSessionsFailed: 1,
+      applicationStatusesRepaired: 0,
+    });
+    expect(await context.db.selectFrom("runs").select(["status", "started_at", "error_code"])
+      .where("id", "=", runId!).executeTakeFirst()).toMatchObject({
+      status: "queued",
+      started_at: null,
+      error_code: "RECOVERED_AFTER_RESTART",
+    });
+    expect(await context.db.selectFrom("applications").select("last_run_status")
+      .where("id", "=", "11111111-1111-4111-8111-111111111111").executeTakeFirst())
+      .toEqual({ last_run_status: "queued" });
+    expect(await context.db.selectFrom("login_sessions").select(["status", "completed_at"])
+      .where("id", "=", "22222222-2222-4222-8222-222222222222").executeTakeFirst())
+      .toMatchObject({ status: "failed", completed_at: expect.any(String) });
+
+    await context.db.deleteFrom("runs").where("id", "=", runId!).execute();
+    expect(await recoverInterruptedWork(context)).toEqual({
+      runsRequeued: 0,
+      loginSessionsFailed: 0,
+      applicationStatusesRepaired: 1,
+    });
+    expect(await context.db.selectFrom("applications").select(["last_run_status", "last_run_at"])
+      .where("id", "=", "11111111-1111-4111-8111-111111111111").executeTakeFirst())
+      .toEqual({ last_run_status: null, last_run_at: null });
+
     await context.db.destroy();
     context.raw.close();
   });

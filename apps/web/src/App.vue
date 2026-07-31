@@ -540,14 +540,17 @@ async function refreshBrowserStorage() {
     error.value = value instanceof Error ? value.message : "无法读取浏览器存储占用";
   }
 }
-async function clearBrowserStorage(kind: "cache" | "temp") {
-  const cache = kind === "cache";
+async function clearBrowserStorage(kind: "cache" | "temp" | "logs") {
+  const labels = {
+    cache: { title: "清除浏览器缓存", message: "将删除自动检查浏览器缓存的 JS、CSS、字体、图片等资源。登录状态不会被删除，后续检查可能需要重新下载页面资源。", confirm: "清除缓存", done: "浏览器缓存" },
+    temp: { title: "清理临时文件", message: "将删除 data/tmp 中旧版或异常退出后遗留的临时文件。登录状态、岗位、任务和截图不会被删除。", confirm: "清理临时文件", done: "临时文件" },
+    logs: { title: "清除运行日志", message: "将清空 API、Runner 和桌面程序的现有日志。岗位、任务、截图、登录状态和设置不会受到影响。", confirm: "清除日志", done: "运行日志" },
+  } as const;
+  const label = labels[kind];
   if (!await askConfirm({
-    title: cache ? "清除浏览器缓存" : "清理临时文件",
-    message: cache
-      ? "将删除自动检查浏览器缓存的 JS、CSS、字体、图片等资源。登录状态不会被删除，后续检查可能需要重新下载页面资源。"
-      : "将删除 data/tmp 中旧版或异常退出后遗留的临时文件。登录状态、岗位、任务和截图不会被删除。",
-    confirmLabel: cache ? "清除缓存" : "清理临时文件",
+    title: label.title,
+    message: label.message,
+    confirmLabel: label.confirm,
     danger: true,
   })) return;
   await action(async () => {
@@ -556,7 +559,7 @@ async function clearBrowserStorage(kind: "cache" | "temp") {
     const freed = result.freedBytes < 1024 ** 2
       ? `${Math.round(result.freedBytes / 1024)} KB`
       : `${(result.freedBytes / 1024 ** 2).toFixed(1)} MB`;
-    flash(`${cache ? "浏览器缓存" : "临时文件"}已清理，释放 ${freed}${result.failed ? `，${result.failed} 项因占用未能删除` : ""}`);
+    flash(`${label.done}已清理，释放 ${freed}${result.failed ? `，${result.failed} 项因占用未能清理` : ""}`);
   });
 }
 async function saveAiSettings(value: AiSettingsUpdate) {

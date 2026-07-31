@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { clearDirectoryContents, directorySize } from "./storage-maintenance.js";
+import { clearDirectoryContents, clearLogContents, directorySize } from "./storage-maintenance.js";
 
 const folders: string[] = [];
 
@@ -38,5 +38,22 @@ describe("browser storage maintenance", () => {
       failed: 0,
     });
     await expect(readFile(path.join(folder, "not-there"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("truncates active log files and removes rotated log folders", async () => {
+    const folder = await mkdtemp(path.join(os.tmpdir(), "application-checker-logs-"));
+    folders.push(folder);
+    await mkdir(path.join(folder, "archive"));
+    await writeFile(path.join(folder, "api.log"), "warning");
+    await writeFile(path.join(folder, "archive", "old.log"), "old");
+
+    expect(await clearLogContents(folder)).toEqual({
+      beforeBytes: 10,
+      afterBytes: 0,
+      freedBytes: 10,
+      failed: 0,
+    });
+    expect(await readFile(path.join(folder, "api.log"), "utf8")).toBe("");
+    await expect(readFile(path.join(folder, "archive", "old.log"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

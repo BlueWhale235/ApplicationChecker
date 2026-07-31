@@ -62,9 +62,12 @@ export function startScheduler(context: DbContext, config: Config): () => void {
       running = false;
     }
   };
+  const runTick = () => {
+    void tick().catch((error) => console.error("Scheduler tick failed", error));
+  };
   void cleanupExpiredScreenshots(context, config).catch(() => {});
-  void tick();
-  const timer = setInterval(() => void tick(), 30_000);
+  runTick();
+  const timer = setInterval(runTick, 30_000);
   timer.unref();
   return () => clearInterval(timer);
 }
