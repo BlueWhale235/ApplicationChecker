@@ -110,6 +110,10 @@ export const api = {
     request<AssistedRuleTestResult>("/parser-rules/test", {
       method: "POST", body: JSON.stringify({ previewId, rule }),
     }),
+  testScriptParserRule: (previewId: string, rule: AssistedParserRule) =>
+    request<RecognitionPreviewDetail>("/parser-rules/test-script", {
+      method: "POST", body: JSON.stringify({ previewId, rule }),
+    }),
   createParserRule: (body: {
     name: string; enabled: boolean; priority: number; definition: AssistedParserRuleDefinition; tested?: boolean;
   }) => request<AssistedParserRule>("/parser-rules", { method: "POST", body: JSON.stringify(body) }),
@@ -117,9 +121,9 @@ export const api = {
     name: string; enabled: boolean; priority: number; definition: AssistedParserRuleDefinition; tested?: boolean;
   }) => request<AssistedParserRule>(`/parser-rules/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteParserRule: (id: string) => request<{ deleted: number }>(`/parser-rules/${id}/delete`, { method: "POST" }),
-  exportParserRules: () => request<{ schemaVersion: 1; exportedAt: string; rules: AssistedParserRule[] }>("/parser-rules/export"),
+  exportParserRules: () => request<{ schemaVersion: 2; exportedAt: string; rules: AssistedParserRule[] }>("/parser-rules/export"),
   exportParserRule: (id: string) =>
-    request<{ schemaVersion: 1; exportedAt: string; rules: AssistedParserRule[] }>(`/parser-rules/${id}/export`),
+    request<{ schemaVersion: 2; exportedAt: string; rules: AssistedParserRule[] }>(`/parser-rules/${id}/export`),
   importParserRules: (body: { schemaVersion: number; rules: AssistedParserRule[]; confirm: boolean }) =>
     request<{ added: number; skipped: number; conflicts: string[] }>("/parser-rules/import", {
       method: "POST", body: JSON.stringify(body),

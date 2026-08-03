@@ -182,6 +182,17 @@ API Key 使用 AES-256-GCM 加密保存。未配置 AI 或模型调用失败时�
 
 对于同一个检查组，应用只提交一次截图，并要求模型按岗位 ID 返回结构化结果。未匹配、低置信度、人工锁定或暂停自动化的岗位不会被自动修改。
 
+## 规则工作台
+
+规则工作台支持两种互斥的本地识别方式：
+
+- **点选规则**：新建时加载招聘页面截图，依次点选岗位标题和当前状态，生成稳定的 DOM 定位规则。
+- **页面脚本**：适合需要填写姓名/手机号、点击查询，或同页包含多个岗位等复杂页面。脚本可读取只读的 `application`、`applications`，并使用 `helpers` 操作页面。
+
+已有点选规则点击“编辑”后会直接打开规则定义 JSON，可修改 `hostname`、`pathname`、`container`、`title` 和 `status` 等字段。编辑器会即时检查 JSON 格式、规则版本和必填字段；保存时 API 还会校验 URLPattern、定位器长度及不安全内容。直接编辑 JSON 不会重新执行页面测试。
+
+页面脚本的执行超时可设置为 `1000` 到 `60000` 毫秒。达到超时后会关闭当前浏览器页面并终止本次脚本结果，避免失控脚本长期占用浏览器资源。`waitForSelector`、`waitForText` 和 `waitForTextChange` 的单次等待参数同样最多为 60 秒。
+
 ## 代理
 
 通过 `UPSTREAM_PROXY_URL` 可以让自动检查浏览器使用上游代理：
@@ -268,6 +279,15 @@ docker compose logs runner
 如果页面可打开但任务一直排队，优先检查 Runner 日志和 `/api/health`。
 
 ### Windows 桌面版
+
+- 构建：
+```
+pnpm run desktop:build
+```
+- 前端、API、RUNNER构建：
+```
+pnpm run desktop:build:internal
+```
 
 - API 日志：`data/logs/api.log`
 - Runner 日志：`data/logs/runner.log`

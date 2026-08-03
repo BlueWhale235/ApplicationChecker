@@ -1010,8 +1010,8 @@ describe("task management routes", () => {
         enabled: true,
         priority: 100,
         definition: {
-          schemaVersion: 1,
-          layout: "list",
+          schemaVersion: 2,
+          kind: "selector",
           hostname: "careers.example.com",
           pathname: "/applications/*",
           container: null,
@@ -1023,7 +1023,6 @@ describe("task management routes", () => {
             tag: "span", role: null, classes: ["status"], dataStatus: null,
             ariaCurrent: null, ariaSelected: null, ancestorTags: [],
           },
-          active: null,
         },
       },
     });
@@ -1035,7 +1034,7 @@ describe("task management routes", () => {
     });
     expect(singleExport.statusCode, singleExport.body).toBe(200);
     expect(singleExport.json()).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       rules: [{ id: createdRule.json().id, name: "调试规则" }],
     });
     await enabledApp.close();

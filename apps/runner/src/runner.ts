@@ -2,13 +2,14 @@ import "dotenv/config";
 import puppeteer, { type Page } from "puppeteer-core";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import type { RunnerJob, RunnerLoginJob, RunnerRecognitionPreviewJob } from "@application-checker/contracts";
+import type { RunnerJob, RunnerLoginJob, RunnerRecognitionPreviewJob, ScriptRuleExecution } from "@application-checker/contracts";
 import { BrowserPool, type BrowserLease } from "./browser-pool.js";
 import { collectBrowserState, installBrowserState, restoreIndexedDbState } from "./browser-state.js";
 import { classifyPage } from "./detection.js";
 import { captureFullPage } from "./full-page-capture.js";
 import { captureLocalPageSnapshot } from "./dom-snapshot.js";
 import { withNavigationRetry } from "./page-stability.js";
+import { executeScriptRule, selectScriptRule } from "./script-rule.js";
 
 const apiBase = (process.env.APP_INTERNAL_URL ?? "http://127.0.0.1:8080/api").replace(/\/$/, "");
 const token = process.env.RUNNER_INTERNAL_TOKEN ?? "development-runner-token-change-me-123456";
@@ -150,6 +151,20 @@ async function capture(job: RunnerJob): Promise<void> {
       response = await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
     }
     await settle(page);
+    const initialDetection = classifyPage(await signals(page, response?.status() ?? null));
+    let scriptExecution: ScriptRuleExecution | null = null;
+    if (!initialDetection.requiresLogin) {
+      const scriptRule = selectScriptRule(job.scriptRules, page.url());
+      if (scriptRule) {
+        try {
+          scriptExecution = await executeScriptRule(page, scriptRule, job.applicationId, job.applications);
+          await settle(page);
+        } catch (error) {
+          if (page.isClosed()) throw error;
+          console.error(`Page script ${scriptRule.id} failed; continuing with normal recognition`, error);
+        }
+      }
+    }
     const { observed, detection, image, snapshot: pageSnapshot } = await captureStablePage(
       page,
       response?.status() ?? null,
@@ -180,6 +195,7 @@ async function capture(job: RunnerJob): Promise<void> {
         truncated: image.truncated,
         browserState: state,
         pageSnapshot,
+        scriptExecution,
       }),
     });
     if (completion.needsLogin) {
@@ -249,6 +265,12 @@ async function recognitionPreview(job: RunnerRecognitionPreviewJob): Promise<voi
       response = await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
     }
     await settle(page);
+    let scriptExecution: ScriptRuleExecution | null = null;
+    const initialDetection = classifyPage(await signals(page, response?.status() ?? null));
+    if (job.scriptRule && !initialDetection.requiresLogin) {
+      scriptExecution = await executeScriptRule(page, job.scriptRule, job.applicationId, job.applications);
+      await settle(page);
+    }
     const { detection, image, snapshot } = await captureStablePage(page, response?.status() ?? null, true);
     if (!snapshot) throw new Error("Recognition preview snapshot was not captured");
     await api(`/internal/recognition-previews/${job.previewId}/complete`, {
@@ -261,6 +283,7 @@ async function recognitionPreview(job: RunnerRecognitionPreviewJob): Promise<voi
         screenshotTruncated: image.truncated,
         needsLogin: detection.requiresLogin,
         loginReason: detection.requiresLogin ? detection.reason : null,
+        scriptExecution,
       }),
     });
   } catch (error) {

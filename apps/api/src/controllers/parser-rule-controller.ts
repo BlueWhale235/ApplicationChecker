@@ -94,6 +94,7 @@ export async function registerParserRuleController(app: FastifyInstance, deps: R
     const preview = store.snapshot(body.previewId);
     if (!preview) throw httpError(404, "预览快照不存在");
     validateDefinition(body.rule.definition);
+    if (body.rule.definition.kind !== "selector") throw httpError(400, "页面脚本需要使用浏览器测试");
     const settings = await appSettings(context);
     return testAssistedRule(
       preview.snapshot,
@@ -101,6 +102,21 @@ export async function registerParserRuleController(app: FastifyInstance, deps: R
       { ...body.rule, enabled: true },
       parseStatusMappings(settings.status_mappings),
     );
+  });
+
+  app.post("/parser-rules/test-script", async (request) => {
+    const store = requirePreviewStore(deps);
+    const body = request.body as { previewId?: string; rule?: AssistedParserRule };
+    if (!body.previewId || !body.rule) throw httpError(400, "previewId 和 rule 不能为空");
+    try {
+      validateDefinition(body.rule.definition);
+    } catch (error) {
+      throw httpError(400, error instanceof Error ? error.message : "页面脚本无效");
+    }
+    if (body.rule.definition.kind !== "script") throw httpError(400, "只能测试页面脚本规则");
+    const queued = store.enqueueScriptTest(body.previewId, body.rule);
+    if (!queued) throw httpError(404, "预览快照不存在");
+    return queued;
   });
 
   app.post("/parser-rules", async (request) => {
@@ -156,19 +172,19 @@ export async function registerParserRuleController(app: FastifyInstance, deps: R
   });
 
   app.get("/parser-rules/export", async () => {
-    return { schemaVersion: 1, exportedAt: new Date().toISOString(), rules: await listParserRules(context) };
+    return { schemaVersion: 2, exportedAt: new Date().toISOString(), rules: await listParserRules(context) };
   });
 
   app.get("/parser-rules/:id/export", async (request) => {
     const id = (request.params as { id: string }).id;
     const rule = (await listParserRules(context)).find((item) => item.id === id);
     if (!rule) throw httpError(404, "规则不存在");
-    return { schemaVersion: 1, exportedAt: new Date().toISOString(), rules: [rule] };
+    return { schemaVersion: 2, exportedAt: new Date().toISOString(), rules: [rule] };
   });
 
   app.post("/parser-rules/import", async (request) => {
     const body = request.body as { schemaVersion?: number; rules?: AssistedParserRule[]; confirm?: boolean };
-    if (body.schemaVersion !== 1 || !Array.isArray(body.rules)) throw httpError(400, "规则文件格式不正确");
+    if (body.schemaVersion !== 2 || !Array.isArray(body.rules)) throw httpError(400, "规则文件格式不正确");
     const existing = await listParserRules(context);
     const conflicts: string[] = [];
     const accepted = body.rules.filter((rule) => {
@@ -190,7 +206,7 @@ export async function registerParserRuleController(app: FastifyInstance, deps: R
     for (const rule of accepted) {
       await saveParserRule(context, {
         name: rule.name,
-        enabled: rule.enabled,
+        enabled: rule.definition.kind === "script" ? false : rule.enabled,
         priority: rule.priority,
         definition: rule.definition,
       });

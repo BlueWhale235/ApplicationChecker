@@ -57,8 +57,8 @@ import type {
   RunnerLoginJob,
   RunsTable,
 } from "./shared.js";
-import type { LocalPageSnapshot, RecognitionSource, RunnerRecognitionPreviewJob } from "@application-checker/contracts";
-import { LOCAL_AUTO_APPLY_THRESHOLD, recognizeLocalPage } from "@application-checker/local-status";
+import type { LocalPageSnapshot, RecognitionSource, RunnerRecognitionPreviewJob, ScriptRuleExecution } from "@application-checker/contracts";
+import { LOCAL_AUTO_APPLY_THRESHOLD, recognizeLocalPage, recognizeScriptExecution } from "@application-checker/local-status";
 import { parseStatusMappings } from "@application-checker/status-mapping";
 import { listParserRules } from "../parser-rules.js";
 
@@ -140,7 +140,11 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       .where("check_group_id", "=", groupId).execute();
     const members = await context.db.selectFrom("applications")
       .innerJoin("run_application_results", "run_application_results.application_id", "applications.id")
-      .select(["applications.id", "applications.job_title", "applications.applied_at", "applications.location"])
+      .select([
+        "applications.id", "applications.company", "applications.job_title", "applications.check_url",
+        "applications.posting_url", "applications.applied_at", "applications.location", "applications.notes",
+        "applications.site", "applications.progress_status", "applications.progress_status_v2",
+      ])
       .where("run_application_results.run_id", "=", run.id).orderBy("applications.created_at").execute();
     return {
       kind: "capture",
@@ -151,13 +155,24 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       company: run.group_company ?? run.company,
       jobTitle: run.job_title,
       applications: members.map((member) => ({
-        id: member.id, jobTitle: member.job_title, appliedAt: member.applied_at, location: member.location,
+        id: member.id,
+        company: member.company,
+        jobTitle: member.job_title,
+        checkUrl: member.check_url || null,
+        postingUrl: member.posting_url,
+        appliedAt: member.applied_at,
+        location: member.location,
+        notes: member.notes,
+        site: member.site,
+        progressStatus: member.progress_status_v2 ?? "unset",
       })),
       site: run.site,
       browserState: await loadBrowserState(context, config, run.site),
       proxyUrl: config.upstreamProxyUrl,
       userAgent: settings.default_user_agent,
       recognitionMode: settings.recognition_mode,
+      scriptRules: settings.recognition_mode === "ai_only" ? []
+        : (await listParserRules(context, true)).filter((rule) => rule.definition.kind === "script"),
     };
   });
 
@@ -200,6 +215,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       truncated: boolean;
       browserState: BrowserStateEnvelope;
       pageSnapshot?: LocalPageSnapshot | null;
+      scriptExecution?: ScriptRuleExecution | null;
     };
     const run = await context.db.selectFrom("runs").innerJoin("applications", "applications.id", "runs.application_id")
       .select([
@@ -239,24 +255,32 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     const recognitionMode = settings.recognition_mode;
     const statusMappings = parseStatusMappings(settings.status_mappings);
     const assistedRules = await listParserRules(context, true);
-    const localResult = recognitionMode !== "ai_only" && body.pageSnapshot
-      ? recognizeLocalPage(body.pageSnapshot, members.map((member) => ({
-        id: member.id,
-        jobTitle: member.job_title,
-        location: member.location,
-      })), statusMappings, assistedRules)
+    const candidates = members.map((member) => ({
+      id: member.id,
+      jobTitle: member.job_title,
+      location: member.location,
+    }));
+    const scriptResult = recognitionMode !== "ai_only" && body.scriptExecution
+      ? recognizeScriptExecution(body.scriptExecution, candidates, statusMappings)
       : null;
-    const localDiagnosticResults: MergedResult[] = localResult ? localResult.results.map((result) => ({
-      applicationId: result.applicationId,
-      matched: result.matched,
-      rawStatus: result.rawStatus,
-      status: result.status,
-      confidence: result.confidence,
-      evidence: result.evidence,
-      source: "local",
-      adapterId: localResult.adapterId,
-      ruleVersion: localResult.adapterVersion,
+    const localResult = recognitionMode !== "ai_only" && body.pageSnapshot
+      ? recognizeLocalPage(body.pageSnapshot, candidates, statusMappings, assistedRules)
+      : null;
+    const diagnosticFrom = (result: typeof localResult): MergedResult[] => result ? result.results.map((item): MergedResult => ({
+      applicationId: item.applicationId,
+      matched: item.matched,
+      rawStatus: item.rawStatus,
+      status: item.status,
+      confidence: item.confidence,
+      evidence: item.evidence,
+      source: "local" as const,
+      adapterId: result.adapterId,
+      ruleVersion: result.adapterVersion,
     })) : [];
+    const scriptDiagnosticResults = diagnosticFrom(scriptResult);
+    const localDiagnosticResults = diagnosticFrom(localResult);
+    groupResults = scriptDiagnosticResults.filter((result) => isRecognizedResult(result)
+      && result.confidence >= LOCAL_AUTO_APPLY_THRESHOLD);
     if (localResult) {
       aiDebugStore?.recordLocal({
         runId: id,
@@ -270,10 +294,11 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         snapshot: body.pageSnapshot!,
         result: localResult,
       });
-      groupResults = localResult.results
+      const resolvedByScript = new Set(groupResults.map((result) => result.applicationId));
+      groupResults.push(...localResult.results
         .filter((result) => result.matched && result.status && result.status !== "unset"
-          && result.confidence >= LOCAL_AUTO_APPLY_THRESHOLD)
-        .map((result) => ({
+          && result.confidence >= LOCAL_AUTO_APPLY_THRESHOLD && !resolvedByScript.has(result.applicationId))
+        .map((result): MergedResult => ({
           applicationId: result.applicationId,
           matched: result.matched,
           rawStatus: result.rawStatus,
@@ -283,7 +308,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
           source: "local",
           adapterId: localResult.adapterId,
           ruleVersion: localResult.adapterVersion,
-        }));
+        })));
     }
     const locallyResolved = new Set(groupResults.map((result) => result.applicationId));
     const aiMembers = recognitionMode === "local_only"
@@ -343,7 +368,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         aiError = error instanceof Error ? error.message.slice(0, 500) : "AI recognition failed";
       }
     }
-    for (const diagnostic of localDiagnosticResults) {
+    for (const diagnostic of [...scriptDiagnosticResults, ...localDiagnosticResults]) {
       if (!groupResults.some((result) => result.applicationId === diagnostic.applicationId)) {
         groupResults.push(diagnostic);
       }
@@ -359,10 +384,11 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
             : groupResults.length ? "succeeded"
               : aiMembers.length && !recognizer.configured ? (localResult ? "partial" : "skipped")
                 : "succeeded";
+    const primaryLocalAdapter = groupResults.find((result) => result.source === "local")?.adapterId ?? localResult?.adapterId ?? null;
     const recognitionProvider = recognitionSource === "mixed"
-      ? `local:${localResult?.adapterId ?? "none"} + ai:${aiProvider ?? "unknown"}`
+      ? `local:${primaryLocalAdapter ?? "none"} + ai:${aiProvider ?? "unknown"}`
       : recognitionSource === "local"
-        ? `local:${localResult?.adapterId ?? "none"}`
+        ? `local:${primaryLocalAdapter ?? "none"}`
         : recognitionSource === "ai" ? aiProvider : localResult ? `local:${localResult.adapterId}` : null;
     if (recognitionSource === "mixed") aiDebugStore?.markMixed(id, aiProvider);
     const stillRunning = await context.db.selectFrom("runs").select("status").where("id", "=", id).executeTakeFirst();
@@ -581,6 +607,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       screenshotWidth: number;
       screenshotHeight: number;
       screenshotTruncated?: boolean;
+      scriptExecution?: ScriptRuleExecution | null;
     };
     const result = recognitionPreviewStore.complete(id, {
       snapshot: body.snapshot,
@@ -590,6 +617,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       screenshotWidth: body.screenshotWidth,
       screenshotHeight: body.screenshotHeight,
       screenshotTruncated: Boolean(body.screenshotTruncated),
+      ...(body.scriptExecution !== undefined ? { scriptExecution: body.scriptExecution } : {}),
     }, parseStatusMappings((await appSettings(context)).status_mappings), await listParserRules(context, true));
     if (!result) throw httpError(404, "识别预览不存在或状态无效");
     return result;

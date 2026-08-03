@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AssistedParserRuleDefinition } from "@application-checker/contracts";
 import { createDb, type DbContext } from "./db.js";
-import { deleteParserRule, listParserRules, saveParserRule } from "./parser-rules.js";
+import { deleteParserRule, listParserRules, saveParserRule, validateDefinition } from "./parser-rules.js";
 
 const folders: string[] = [];
 const contexts: DbContext[] = [];
@@ -17,8 +17,8 @@ afterEach(async () => {
 });
 
 const definition: AssistedParserRuleDefinition = {
-  schemaVersion: 1,
-  layout: "list",
+  schemaVersion: 2,
+  kind: "selector",
   hostname: "careers.example.com",
   pathname: "/applications/*",
   container: {
@@ -33,7 +33,6 @@ const definition: AssistedParserRuleDefinition = {
     tag: "span", role: null, classes: ["status"], dataStatus: null,
     ariaCurrent: null, ariaSelected: null, ancestorTags: ["main", "div"],
   },
-  active: null,
 };
 
 async function setup(): Promise<DbContext> {
@@ -73,5 +72,22 @@ describe("parser rule persistence", () => {
     await saveParserRule(context, { name: "A", definition, priority: 100 });
     await expect(saveParserRule(context, { name: "B", definition, priority: 100 }))
       .rejects.toThrow(/已存在/);
+  });
+
+  it("validates and persists a bounded page script rule", async () => {
+    const context = await setup();
+    const scriptDefinition: AssistedParserRuleDefinition = {
+      schemaVersion: 2,
+      kind: "script",
+      hostname: "careers.example.com",
+      pathname: "/query/*",
+      script: "return { applicationId: application.id, rawStatus: helpers.text('.status') };",
+      timeoutMs: 8_000,
+    };
+    validateDefinition(scriptDefinition);
+    const created = await saveParserRule(context, { name: "Query script", definition: scriptDefinition, tested: true });
+    expect(created.definition).toEqual(scriptDefinition);
+    expect(() => validateDefinition({ ...scriptDefinition, timeoutMs: 60_000 })).not.toThrow();
+    expect(() => validateDefinition({ ...scriptDefinition, timeoutMs: 60_001 })).toThrow(/超时时间/);
   });
 });

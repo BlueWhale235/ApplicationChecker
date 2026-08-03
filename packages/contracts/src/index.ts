@@ -100,8 +100,6 @@ export interface ParserRouteRule {
   pathname: string;
 }
 
-export type AssistedRuleLayout = "list" | "stepper";
-
 export interface AssistedNodeLocator {
   tag: string | null;
   role: string | null;
@@ -112,16 +110,26 @@ export interface AssistedNodeLocator {
   ancestorTags: string[];
 }
 
-export interface AssistedParserRuleDefinition {
-  schemaVersion: 1;
-  layout: AssistedRuleLayout;
+export interface SelectorParserRuleDefinition {
+  schemaVersion: 2;
+  kind: "selector";
   hostname: string;
   pathname: string;
   container: AssistedNodeLocator | null;
   title: AssistedNodeLocator;
   status: AssistedNodeLocator;
-  active: AssistedNodeLocator | null;
 }
+
+export interface ScriptParserRuleDefinition {
+  schemaVersion: 2;
+  kind: "script";
+  hostname: string;
+  pathname: string;
+  script: string;
+  timeoutMs: number;
+}
+
+export type AssistedParserRuleDefinition = SelectorParserRuleDefinition | ScriptParserRuleDefinition;
 
 export interface AssistedParserRule {
   id: string;
@@ -136,12 +144,37 @@ export interface AssistedParserRule {
 }
 
 export interface AssistedRuleSelection {
-  layout: AssistedRuleLayout;
   titleNodeId: number;
   statusNodeId: number;
   hostname?: string;
   pathname?: string;
   name?: string;
+}
+
+export interface ScriptRuleApplication {
+  id: string;
+  company: string;
+  jobTitle: string;
+  checkUrl: string | null;
+  postingUrl: string | null;
+  appliedAt: string | null;
+  location: string | null;
+  notes: string | null;
+  site: string;
+  progressStatus: ProgressStatus;
+}
+
+export interface ScriptRuleOutputItem {
+  applicationId: string;
+  rawStatus: string;
+  evidence?: string;
+}
+
+export interface ScriptRuleExecution {
+  ruleId: string;
+  ruleVersion: number;
+  durationMs: number;
+  results: ScriptRuleOutputItem[];
 }
 
 export interface AssistedRuleTestResult {
@@ -567,17 +600,13 @@ export interface RunnerJob {
   url: string;
   company: string;
   jobTitle: string;
-  applications: Array<{
-    id: string;
-    jobTitle: string;
-    appliedAt: string | null;
-    location: string | null;
-  }>;
+  applications: ScriptRuleApplication[];
   site: string;
   browserState: BrowserStateEnvelope | null;
   proxyUrl: string | null;
   userAgent: string;
   recognitionMode: RecognitionMode;
+  scriptRules: AssistedParserRule[];
 }
 
 export interface RunnerLoginJob {
@@ -601,16 +630,12 @@ export interface RunnerRecognitionPreviewJob {
   applicationId: string;
   url: string;
   company: string;
-  applications: Array<{
-    id: string;
-    jobTitle: string;
-    appliedAt: string | null;
-    location: string | null;
-  }>;
+  applications: ScriptRuleApplication[];
   site: string;
   browserState: BrowserStateEnvelope | null;
   proxyUrl: string | null;
   userAgent: string;
+  scriptRule?: AssistedParserRule | null;
 }
 
 export interface RecognitionPreviewSummary {
@@ -646,6 +671,8 @@ export interface RecognitionPreviewDetail extends RecognitionPreviewSummary {
   screenshotWidth: number | null;
   screenshotHeight: number | null;
   screenshotTruncated: boolean;
+  scriptDurationMs: number | null;
+  scriptRuleId: string | null;
 }
 
 export interface RecognitionPreviewSnapshot {

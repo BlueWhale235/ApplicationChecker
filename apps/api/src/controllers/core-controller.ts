@@ -136,7 +136,10 @@ export async function registerCoreController(app: FastifyInstance, deps: RouteDe
     if (!url) throw httpError(400, "岗位未设置检查链接");
     const groupId = application.check_group_id ?? application.id;
     const members = await context.db.selectFrom("applications")
-      .select(["id", "job_title", "applied_at", "location"])
+      .select([
+        "id", "company", "job_title", "check_url", "posting_url", "applied_at", "location", "notes",
+        "site", "progress_status_v2",
+      ])
       .where("check_group_id", "=", groupId).orderBy("created_at").execute();
     const settings = await appSettings(context);
     return store.enqueue({
@@ -145,10 +148,10 @@ export async function registerCoreController(app: FastifyInstance, deps: RouteDe
       url,
       company: application.group_company ?? application.company,
       applications: members.map((member) => ({
-        id: member.id,
-        jobTitle: member.job_title,
-        appliedAt: member.applied_at,
-        location: member.location,
+        id: member.id, company: member.company, jobTitle: member.job_title,
+        checkUrl: member.check_url || null, postingUrl: member.posting_url,
+        appliedAt: member.applied_at, location: member.location, notes: member.notes,
+        site: member.site, progressStatus: member.progress_status_v2 ?? "unset",
       })),
       site: application.site,
       browserState: await loadBrowserState(context, config, application.site),

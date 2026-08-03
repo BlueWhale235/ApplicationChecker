@@ -10,6 +10,10 @@ import {
 } from "./index.js";
 
 describe("status mapping", () => {
+  it("maps the common pending-processing status to screening", () => {
+    expect(matchStatusMapping("待处理")?.rule.status).toBe("screening");
+  });
+
   it.each([
     ["业务筛选", "screening_passed"],
     ["待评估", "screening"],

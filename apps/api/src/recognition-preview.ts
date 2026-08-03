@@ -6,9 +6,10 @@ import type {
   RecognitionPreviewSnapshot,
   RecognitionPreviewSummary,
   RunnerRecognitionPreviewJob,
+  ScriptRuleExecution,
   StatusMappings,
 } from "@application-checker/contracts";
-import { recognizeLocalPage } from "@application-checker/local-status";
+import { recognizeLocalPage, recognizeScriptExecution } from "@application-checker/local-status";
 
 interface PreviewRecord extends RecognitionPreviewDetail {
   job: RunnerRecognitionPreviewJob;
@@ -69,6 +70,8 @@ export class RecognitionPreviewStore {
       screenshotWidth: null,
       screenshotHeight: null,
       screenshotTruncated: false,
+      scriptDurationMs: null,
+      scriptRuleId: input.scriptRule?.id ?? null,
       screenshotBase64: null,
       snapshot: null,
       job: { ...input, kind: "recognition_preview", previewId: id },
@@ -76,6 +79,13 @@ export class RecognitionPreviewStore {
     this.records.unshift(record);
     if (this.records.length > this.capacity) this.records.length = this.capacity;
     return publicDetail(record);
+  }
+
+  enqueueScriptTest(sourceId: string, rule: AssistedParserRule): RecognitionPreviewDetail | null {
+    const source = this.records.find((item) => item.id === sourceId);
+    if (!source) return null;
+    const { kind: _kind, previewId: _previewId, scriptRule: _previousRule, ...input } = source.job;
+    return this.enqueue({ ...input, scriptRule: { ...rule, enabled: true } });
   }
 
   claim(): RunnerRecognitionPreviewJob | null {
@@ -93,6 +103,7 @@ export class RecognitionPreviewStore {
     screenshotWidth?: number;
     screenshotHeight?: number;
     screenshotTruncated?: boolean;
+    scriptExecution?: ScriptRuleExecution | null;
   }, statusMappings?: StatusMappings, assistedRules: AssistedParserRule[] = []): RecognitionPreviewDetail | null {
     const record = this.records.find((item) => item.id === id);
     if (!record || record.status !== "running") return null;
@@ -117,7 +128,9 @@ export class RecognitionPreviewStore {
       record.error = input.loginReason;
       return publicDetail(record);
     }
-    const result = recognizeLocalPage(input.snapshot, record.job.applications, statusMappings, assistedRules);
+    const result = input.scriptExecution
+      ? recognizeScriptExecution(input.scriptExecution, record.job.applications, statusMappings)
+      : recognizeLocalPage(input.snapshot, record.job.applications, statusMappings, assistedRules);
     record.status = "succeeded";
     record.adapterId = result.adapterId;
     record.adapterVersion = result.adapterVersion;
@@ -126,6 +139,8 @@ export class RecognitionPreviewStore {
     record.pageEvidence = result.pageEvidence;
     record.results = result.results;
     record.matchedCount = result.results.filter((item) => item.matched && item.confidence >= 0.9).length;
+    record.scriptDurationMs = input.scriptExecution?.durationMs ?? null;
+    record.scriptRuleId = input.scriptExecution?.ruleId ?? null;
     return publicDetail(record);
   }
 

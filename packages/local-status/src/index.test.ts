@@ -4,6 +4,7 @@ import {
   generateAssistedRule,
   normalizeRecognitionText,
   recognizeLocalPage,
+  recognizeScriptExecution,
   resolveParserAdapter,
   testAssistedRule,
   validateParserAdapters,
@@ -138,7 +139,6 @@ describe("assisted parser rules", () => {
 
   it("generates a reusable path rule and extracts repeated cards", () => {
     const generated = generateAssistedRule(assistedSnapshot, {
-      layout: "list",
       titleNodeId: 2,
       statusNodeId: 3,
     });
@@ -167,47 +167,38 @@ describe("assisted parser rules", () => {
     ]);
   });
 
-  it("requires an active marker for stepper rules", () => {
-    const page = snapshot("https://careers.example.com/progress", [
-      node(1, "后端工程师", 10),
-      node(2, "初筛", 50),
-    ]);
-    expect(generateAssistedRule(page, {
-      layout: "stepper",
-      titleNodeId: 1,
-      statusNodeId: 2,
-    }).errors).toContain("当前步骤节点没有可识别的 active/current/selected 标记");
-  });
-
-  it("uses aria-current to select the active step", () => {
-    const page = snapshot("https://careers.example.com/progress", [
-      node(1, "", 0, null, ["progress-card"]),
-      node(2, "后端工程师", 10, 1, ["job-title"]),
-      node(3, "", 50, 1, ["step"]),
-      node(4, "初筛", 50, 3, ["step-label"]),
-      { ...node(5, "", 50, 1, ["step"]), ariaCurrent: "step" },
-      node(6, "已过初筛", 50, 5, ["step-label"]),
-      node(7, "", 50, 1, ["step"]),
-      node(8, "待面试", 50, 7, ["step-label"]),
-    ]);
-    const generated = generateAssistedRule(page, {
-      layout: "stepper",
-      titleNodeId: 2,
-      statusNodeId: 6,
-    });
-    expect(generated.errors).toEqual([]);
+  it("does not run page scripts against a static DOM snapshot", () => {
     const rule: AssistedParserRule = {
-      id: "stepper-rule",
-      name: "进度条规则",
-      enabled: true,
-      priority: 100,
-      version: 1,
-      definition: generated.definition,
-      createdAt: new Date(0).toISOString(),
-      updatedAt: new Date(0).toISOString(),
-      lastTestedAt: null,
+      id: "script-rule", name: "脚本规则", enabled: true, priority: 100, version: 1,
+      definition: {
+        schemaVersion: 2, kind: "script", hostname: "careers.example.com", pathname: "/*",
+        script: "return null", timeoutMs: 5000,
+      },
+      createdAt: new Date(0).toISOString(), updatedAt: new Date(0).toISOString(), lastTestedAt: null,
     };
-    const result = testAssistedRule(page, [{ id: "job-1", jobTitle: "后端工程师" }], rule);
-    expect(result.result.results[0]).toMatchObject({ matched: true, status: "screening_passed" });
+    expect(testAssistedRule(assistedSnapshot, [{ id: "job-1", jobTitle: "后端工程师" }], rule))
+      .toMatchObject({ valid: false, errors: ["页面脚本必须在真实浏览器页面中测试"] });
+  });
+});
+
+describe("page script recognition", () => {
+  it("maps raw script statuses and leaves missing applications unmatched", () => {
+    const result = recognizeScriptExecution({
+      ruleId: "script-1",
+      ruleVersion: 3,
+      durationMs: 125,
+      results: [{ applicationId: "job-1", rawStatus: "当前状态：待面试", evidence: "查询结果区域" }],
+    }, [
+      { id: "job-1", jobTitle: "后端工程师" },
+      { id: "job-2", jobTitle: "产品经理" },
+    ]);
+    expect(result).toMatchObject({
+      adapterId: "script:script-1",
+      adapterVersion: "3",
+      results: [
+        { applicationId: "job-1", matched: true, status: "interview_pending", confidence: 0.99 },
+        { applicationId: "job-2", matched: false, status: null },
+      ],
+    });
   });
 });

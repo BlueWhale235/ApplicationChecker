@@ -9,6 +9,7 @@ import type {
   LocalRecognitionResult,
   LocalRecognitionResultItem,
   ParserRouteRule,
+  ScriptRuleExecution,
   StatusMappings,
 } from "@application-checker/contracts";
 import {
@@ -19,7 +20,7 @@ import {
 
 export const LOCAL_PARSER_VERSION = "1.0.0";
 export const LOCAL_AUTO_APPLY_THRESHOLD = 0.9;
-export const ASSISTED_RULE_SCHEMA_VERSION = 1;
+export const ASSISTED_RULE_SCHEMA_VERSION = 2;
 
 export interface LocalRecognitionCandidate {
   id: string;
@@ -138,24 +139,6 @@ function commonAncestor(left: LocalDomNode, right: LocalDomNode, byId: Map<numbe
   return null;
 }
 
-function hasActiveMarker(node: LocalDomNode): boolean {
-  return Boolean(
-    (node.ariaCurrent && node.ariaCurrent !== "false")
-    || (node.ariaSelected && node.ariaSelected !== "false")
-    || node.dataStatus
-    || node.classes.some((token) => /(active|current|selected|processing|success|finished|done)/i.test(token)),
-  );
-}
-
-function nearestActiveNode(node: LocalDomNode, byId: Map<number, LocalDomNode>): LocalDomNode | null {
-  let current: LocalDomNode | undefined = node;
-  for (let depth = 0; current && depth < 5; depth += 1) {
-    if (hasActiveMarker(current)) return current;
-    current = current.parentId === null ? undefined : byId.get(current.parentId);
-  }
-  return null;
-}
-
 function generalizedPathname(url: URL): string {
   const parts = url.pathname.split("/").map((part) => {
     if (!part) return part;
@@ -185,35 +168,28 @@ export function generateAssistedRule(
     };
     return {
       definition: {
-        schemaVersion: 1,
-        layout: selection.layout,
+        schemaVersion: 2,
+        kind: "selector",
         hostname: selection.hostname ?? url.hostname,
         pathname: selection.pathname ?? generalizedPathname(url),
         container: null,
         title: empty,
         status: empty,
-        active: null,
       },
       errors,
     };
   }
   const container = commonAncestor(title, status, byId);
-  const activeNode = nearestActiveNode(status, byId);
-  const activeLocator = activeNode ? locatorFor(activeNode, byId) : null;
   if (!title.text.trim()) errors.push("所选岗位标题节点没有可见文本");
   if (!status.text.trim()) errors.push("所选状态节点没有可见文本");
-  if (selection.layout === "stepper" && !activeLocator) {
-    errors.push("当前步骤节点没有可识别的 active/current/selected 标记");
-  }
   const definition: AssistedParserRuleDefinition = {
-    schemaVersion: 1,
-    layout: selection.layout,
+    schemaVersion: 2,
+    kind: "selector",
     hostname: selection.hostname ?? url.hostname,
     pathname: selection.pathname ?? generalizedPathname(url),
     container: container && container.id !== title.id && container.id !== status.id ? locatorFor(container, byId) : null,
     title: locatorFor(title, byId),
     status: locatorFor(status, byId),
-    active: selection.layout === "stepper" ? activeLocator : null,
   };
   try {
     if (!urlPatternMatches(definition, url)) errors.push("规则范围与当前页面地址不匹配");
@@ -231,29 +207,18 @@ function descendantsOf(root: LocalDomNode, snapshot: LocalPageSnapshot): LocalDo
   return snapshot.nodes.filter((node) => ids.has(node.id));
 }
 
-function nodeOrAncestorMatches(
-  node: LocalDomNode,
-  locator: AssistedNodeLocator,
-  byId: Map<number, LocalDomNode>,
-): boolean {
-  let current: LocalDomNode | undefined = node;
-  for (let depth = 0; current && depth < 5; depth += 1) {
-    if (locatorMatches(current, locator, byId)) return true;
-    current = current.parentId === null ? undefined : byId.get(current.parentId);
-  }
-  return false;
-}
-
 function recognizeWithAssistedRule(
   snapshot: LocalPageSnapshot,
   candidates: LocalRecognitionCandidate[],
   rule: AssistedParserRule,
   statusRules: StatusMappingRule[],
 ): { result: LocalRecognitionResult; matchedNodeIds: number[] } | null {
+  if (rule.definition.kind !== "selector") return null;
+  const definition = rule.definition;
   const url = new URL(snapshot.url);
-  if (!rule.enabled || !urlPatternMatches(rule.definition, url)) return null;
+  if (!rule.enabled || !urlPatternMatches(definition, url)) return null;
   const byId = new Map(snapshot.nodes.map((node) => [node.id, node]));
-  const titleNodes = snapshot.nodes.filter((node) => locatorMatches(node, rule.definition.title, byId));
+  const titleNodes = snapshot.nodes.filter((node) => locatorMatches(node, definition.title, byId));
   const matchedNodeIds: number[] = [];
   const results = candidates.map((candidate): LocalRecognitionResultItem => {
     const target = normalizeRecognitionText(candidate.jobTitle);
@@ -267,10 +232,10 @@ function recognizeWithAssistedRule(
     }
     const titleNode = matches[0]!;
     let scope = snapshot.nodes;
-    if (rule.definition.container) {
+    if (definition.container) {
       let current: LocalDomNode | undefined = titleNode;
       for (let depth = 0; current && depth < 8; depth += 1) {
-        if (locatorMatches(current, rule.definition.container, byId)) {
+        if (locatorMatches(current, definition.container, byId)) {
           scope = descendantsOf(current, snapshot);
           break;
         }
@@ -281,10 +246,7 @@ function recognizeWithAssistedRule(
         node.y >= titleNode.y - 40 && node.y <= titleNode.y + 360
         && node.x + node.width >= titleNode.x - 100 && node.x <= titleNode.x + Math.max(1000, titleNode.width * 5));
     }
-    let statusNodes = scope.filter((node) => locatorMatches(node, rule.definition.status, byId));
-    if (rule.definition.layout === "stepper" && rule.definition.active) {
-      statusNodes = statusNodes.filter((node) => nodeOrAncestorMatches(node, rule.definition.active!, byId));
-    }
+    const statusNodes = scope.filter((node) => locatorMatches(node, definition.status, byId));
     let mapped = statusMatches(statusNodes, statusRules);
     if (mapped.length) {
       const longest = Math.max(...mapped.map((item) => normalizeRecognitionText(item.term).length));
@@ -338,6 +300,14 @@ export function testAssistedRule(
   customStatusMappings?: StatusMappings | null,
 ): AssistedRuleTestResult {
   const errors: string[] = [];
+  if (rule.definition.kind !== "selector") {
+    return {
+      valid: false,
+      errors: ["页面脚本必须在真实浏览器页面中测试"],
+      result: recognizeLocalPage(snapshot, candidates, customStatusMappings, []),
+      matchedNodeIds: [],
+    };
+  }
   let matched: ReturnType<typeof recognizeWithAssistedRule> = null;
   try {
     matched = recognizeWithAssistedRule(snapshot, candidates, rule, createStatusMappingRules(customStatusMappings));
@@ -349,6 +319,56 @@ export function testAssistedRule(
   const result = matched?.result ?? fallback;
   if (result.results.every((item) => !item.matched)) errors.push("规则未可靠识别任何岗位");
   return { valid: errors.length === 0, errors, result, matchedNodeIds: matched?.matchedNodeIds ?? [] };
+}
+
+export function recognizeScriptExecution(
+  execution: ScriptRuleExecution,
+  candidates: LocalRecognitionCandidate[],
+  customStatusMappings?: StatusMappings | null,
+): LocalRecognitionResult {
+  const statusRules = createStatusMappingRules(customStatusMappings);
+  const returned = new Map(execution.results.map((item) => [item.applicationId, item]));
+  const results = candidates.map((candidate): LocalRecognitionResultItem => {
+    const item = returned.get(candidate.id);
+    if (!item) {
+      return {
+        applicationId: candidate.id, matched: false, rawStatus: null, status: null, confidence: 0,
+        evidence: "页面脚本未返回该岗位的结果", titleMatch: "none", statusRule: null,
+      };
+    }
+    const normalized = normalizeRecognitionText(item.rawStatus);
+    const matches = statusRules.flatMap((rule) => rule.terms
+      .filter((term) => normalized.includes(normalizeRecognitionText(term)))
+      .map((term) => ({ rule, term })));
+    const selected = matches.sort((left, right) =>
+      normalizeRecognitionText(right.term).length - normalizeRecognitionText(left.term).length)[0];
+    if (!selected) {
+      return {
+        applicationId: candidate.id, matched: false, rawStatus: item.rawStatus, status: null, confidence: 0,
+        evidence: item.evidence || `页面脚本返回“${item.rawStatus}”，但没有匹配的状态映射`,
+        titleMatch: "exact", statusRule: null,
+      };
+    }
+    return {
+      applicationId: candidate.id,
+      matched: true,
+      rawStatus: item.rawStatus,
+      status: selected.rule.status,
+      confidence: 0.99,
+      evidence: item.evidence || `页面脚本返回状态“${item.rawStatus}”`,
+      titleMatch: "exact",
+      statusRule: selected.rule.id,
+    };
+  });
+  return {
+    adapterId: `script:${execution.ruleId}`,
+    adapterVersion: String(execution.ruleVersion),
+    route: null,
+    pageType: "status",
+    pageEvidence: `页面脚本执行完成，耗时 ${execution.durationMs}ms`,
+    results,
+    fallbackReason: results.some((item) => !item.matched) ? "页面脚本未可靠识别全部岗位" : null,
+  };
 }
 
 function urlPatternMatches(rule: { hostname: string; pathname: string }, url: URL): boolean {
@@ -572,7 +592,7 @@ export function recognizeLocalPage(
 ): LocalRecognitionResult {
   const statusRules = createStatusMappingRules(customStatusMappings);
   const orderedRules = assistedRules
-    .filter((rule) => rule.enabled)
+    .filter((rule) => rule.enabled && rule.definition.kind === "selector")
     .sort((left, right) => {
       const specificity = (value: AssistedParserRule) =>
         value.definition.hostname.replaceAll("*", "").length + value.definition.pathname.replaceAll("*", "").length;

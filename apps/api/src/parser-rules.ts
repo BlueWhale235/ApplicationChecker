@@ -1,19 +1,31 @@
 import { randomUUID } from "node:crypto";
 import type {
+  AssistedNodeLocator,
   AssistedParserRule,
   AssistedParserRuleDefinition,
 } from "@application-checker/contracts";
 import type { DbContext, ParserRulesTable } from "./db.js";
 
 function definitionFromJson(value: string): AssistedParserRuleDefinition {
-  const definition = JSON.parse(value) as AssistedParserRuleDefinition;
+  const parsed = JSON.parse(value) as Record<string, unknown> & { schemaVersion?: number };
+  const definition = parsed.schemaVersion === 1 && "title" in parsed && "status" in parsed
+    ? {
+      schemaVersion: 2 as const,
+      kind: "selector" as const,
+      hostname: String(parsed.hostname ?? ""),
+      pathname: String(parsed.pathname ?? ""),
+      container: (parsed.container ?? null) as AssistedNodeLocator | null,
+      title: parsed.title as AssistedNodeLocator,
+      status: parsed.status as AssistedNodeLocator,
+    }
+    : parsed as unknown as AssistedParserRuleDefinition;
   validateDefinition(definition);
   return definition;
 }
 
 export function validateDefinition(value: AssistedParserRuleDefinition): void {
-  if (value.schemaVersion !== 1) throw new Error("不支持的规则版本");
-  if (!["list", "stepper"].includes(value.layout)) throw new Error("不支持的页面模板");
+  if (value.schemaVersion !== 2) throw new Error("不支持的规则版本");
+  if (!["selector", "script"].includes(value.kind)) throw new Error("不支持的规则类型");
   if (!value.hostname || !value.pathname) throw new Error("hostname 和 pathname 不能为空");
   if (/[\r\n{};]/.test(`${value.hostname}${value.pathname}`)) throw new Error("Path 规则包含非法字符");
   const Pattern = (globalThis as unknown as {
@@ -21,7 +33,15 @@ export function validateDefinition(value: AssistedParserRuleDefinition): void {
   }).URLPattern;
   if (!Pattern) throw new Error("规则工作台需要 Node.js 24 或更高版本");
   new Pattern({ hostname: value.hostname, pathname: value.pathname });
-  for (const locator of [value.container, value.title, value.status, value.active]) {
+  if (value.kind === "script") {
+    if (!value.script.trim()) throw new Error("页面脚本不能为空");
+    if (value.script.length > 20_000) throw new Error("页面脚本不能超过 20000 个字符");
+    if (!Number.isInteger(value.timeoutMs) || value.timeoutMs < 1_000 || value.timeoutMs > 60_000) {
+      throw new Error("脚本超时时间必须在 1000 到 60000 毫秒之间");
+    }
+    return;
+  }
+  for (const locator of [value.container, value.title, value.status]) {
     if (!locator) continue;
     if (locator.classes.length > 4 || locator.ancestorTags.length > 4) throw new Error("定位器层级超出限制");
     const serialized = JSON.stringify(locator);
