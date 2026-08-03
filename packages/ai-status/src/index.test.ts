@@ -152,10 +152,10 @@ describe("recognizer configuration", () => {
   });
 
   it.each([
-    ["official_homepage", "官网首页"],
-    ["login", "登录页面"],
-    ["blank", "页面没有有效内容"],
-  ])("resets every application for a %s page", async (pageType, pageEvidence) => {
+    ["official_homepage", "官网首页", "官网首页或非个人投递状态页"],
+    ["login", "登录页面", "login_required"],
+    ["blank", "页面没有有效内容", "空白页或无有效内容"],
+  ])("reports every application as unmatched for a %s page", async (pageType, pageEvidence, rawStatus) => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify({
         pageType,
@@ -183,8 +183,8 @@ describe("recognizer configuration", () => {
       finalUrl: "https://example.com",
     });
     expect(result.results).toEqual([
-      expect.objectContaining({ applicationId: "a", matched: true, status: "unset", confidence: 1, evidence: pageEvidence }),
-      expect.objectContaining({ applicationId: "b", matched: true, status: "unset", confidence: 1, evidence: pageEvidence }),
+      expect.objectContaining({ applicationId: "a", matched: false, rawStatus, status: null, confidence: 1, evidence: pageEvidence }),
+      expect.objectContaining({ applicationId: "b", matched: false, rawStatus, status: null, confidence: 1, evidence: pageEvidence }),
     ]);
   });
 

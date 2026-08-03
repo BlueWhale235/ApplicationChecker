@@ -182,13 +182,19 @@ export async function registerApplicationController(app: FastifyInstance, deps: 
       ? await context.db.selectFrom("check_groups").selectAll().where("id", "=", current.check_group_id).executeTakeFirst()
       : null;
     const checkUrl = body.checkUrl === undefined ? current.check_url : (body.checkUrl?.trim() ?? "");
+    const scheduleWasEdited = body.scheduleMode !== undefined || body.cronExpression !== undefined;
     const scheduleMode = checkUrl ? (body.scheduleMode ?? currentGroup?.schedule_mode ?? current.schedule_mode) : "manual";
-    const cronExpression = checkUrl
+    const requestedCronExpression = checkUrl
       ? (body.cronExpression === undefined ? (currentGroup?.cron_expression ?? current.cron_expression) : body.cronExpression)
-
       : null;
+    const cronExpression = scheduleMode === "custom" ? requestedCronExpression : null;
     if (scheduleMode === "custom" && !cronExpression) throw httpError(400, "自定义计划需要 Cron 表达式");
-    const nextRunAt = await calculateNextRun(context, { schedule_mode: scheduleMode, cron_expression: cronExpression });
+    let nextRunAt: string | null;
+    try {
+      nextRunAt = await calculateNextRun(context, { schedule_mode: scheduleMode, cron_expression: cronExpression });
+    } catch {
+      throw httpError(400, "Cron 表达式或时区无效");
+    }
     const company = body.company?.trim() ?? current.company;
     const site = checkUrl ? siteForUrl(checkUrl) : "manual";
     const { group } = await findOrCreateCheckGroup(context, {
@@ -219,20 +225,40 @@ export async function registerApplicationController(app: FastifyInstance, deps: 
         }).where("check_group_id", "=", currentGroup.id).execute();
       }
     }
-    await context.db.updateTable("applications").set({
-      check_group_id: group.id,
-      ...(body.company !== undefined ? { company: body.company.trim() } : {}),
-      ...(body.jobTitle !== undefined ? { job_title: body.jobTitle.trim() } : {}),
-      ...(body.checkUrl !== undefined ? { check_url: checkUrl, site, resolved_url: null } : {}),
-      ...(body.postingUrl !== undefined ? { posting_url: body.postingUrl } : {}),
-      ...(body.appliedAt !== undefined ? { applied_at: body.appliedAt } : {}),
-      ...(body.location !== undefined ? { location: body.location?.trim() || null } : {}),
-      ...(body.notes !== undefined ? { notes: body.notes?.trim() || null } : {}),
-      schedule_mode: group.schedule_mode,
-      cron_expression: group.cron_expression,
-      next_run_at: group.next_run_at,
-      updated_at: nowIso(),
-    }).where("id", "=", id).execute();
+    const updatedAt = nowIso();
+    const targetSchedule = scheduleWasEdited
+      ? { scheduleMode, cronExpression, nextRunAt }
+      : { scheduleMode: group.schedule_mode, cronExpression: group.cron_expression, nextRunAt: group.next_run_at };
+    await context.db.transaction().execute(async (trx) => {
+      if (scheduleWasEdited) {
+        await trx.updateTable("check_groups").set({
+          schedule_mode: scheduleMode,
+          cron_expression: cronExpression,
+          next_run_at: nextRunAt,
+          updated_at: updatedAt,
+        }).where("id", "=", group.id).execute();
+        await trx.updateTable("applications").set({
+          schedule_mode: scheduleMode,
+          cron_expression: cronExpression,
+          next_run_at: nextRunAt,
+          updated_at: updatedAt,
+        }).where("check_group_id", "=", group.id).execute();
+      }
+      await trx.updateTable("applications").set({
+        check_group_id: group.id,
+        ...(body.company !== undefined ? { company: body.company.trim() } : {}),
+        ...(body.jobTitle !== undefined ? { job_title: body.jobTitle.trim() } : {}),
+        ...(body.checkUrl !== undefined ? { check_url: checkUrl, site, resolved_url: null } : {}),
+        ...(body.postingUrl !== undefined ? { posting_url: body.postingUrl } : {}),
+        ...(body.appliedAt !== undefined ? { applied_at: body.appliedAt } : {}),
+        ...(body.location !== undefined ? { location: body.location?.trim() || null } : {}),
+        ...(body.notes !== undefined ? { notes: body.notes?.trim() || null } : {}),
+        schedule_mode: targetSchedule.scheduleMode,
+        cron_expression: targetSchedule.cronExpression,
+        next_run_at: targetSchedule.nextRunAt,
+        updated_at: updatedAt,
+      }).where("id", "=", id).execute();
+    });
     if (body.appliedAt !== undefined) await syncAppliedEvent(context, id, body.appliedAt ?? null);
     if (currentGroup && currentGroup.id !== group.id) {
       const remaining = await context.db.selectFrom("applications").select(({ fn }) => fn.countAll<number>().as("count"))

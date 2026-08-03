@@ -101,8 +101,8 @@ export interface StatusRecognizer {
 }
 
 const allowed = new Set<ProgressStatus>(Object.keys(progressLabels) as ProgressStatus[]);
-const resetPageTypes = new Set(["official_homepage", "login", "blank"]);
-const resetPageLabels: Record<string, string> = {
+const nonApplicationPageTypes = new Set(["official_homepage", "login", "blank"]);
+const nonApplicationPageLabels: Record<string, string> = {
   official_homepage: "官网首页或非个人投递状态页",
   login: "需要登录或验证",
   blank: "空白页或无有效内容",
@@ -113,7 +113,7 @@ function createSystemPrompt(statusMappings?: StatusMappings | null): string {
   return [
   "你是招聘网站投递状态识别器。请根据截图，为每个候选岗位识别当前投递状态。",
   "先判断整个页面类型：application_status=个人投递状态页；official_homepage=公司官网首页、招聘首页或职位列表且没有个人投递记录；login=登录、注册或验证页面；blank=空白、持续加载、错误页或没有有效内容；other=其他页面。",
-  "页面类型规则优先级最高：若为 official_homepage、login 或 blank，所有候选岗位必须返回 matched=true、status=unset，不能因为缺少岗位状态而推测为淘汰或其他进度。",
+  "页面类型规则优先级最高：若为 official_homepage、login 或 blank，所有候选岗位必须返回 matched=false、status=null，不能修改现有岗位状态，也不能因为缺少岗位状态而推测为淘汰或其他进度。",
   `状态映射：${formatStatusMappingPrompt(statusMappings)}。`,
   "只返回 JSON 对象，格式为：",
   '{"pageType":"application_status|official_homepage|login|blank|other","pageEvidence":"不超过20字的页面类型证据","results":[{"applicationId":"候选岗位UUID","matched":true,"rawStatus":"页面原文","status":"unset|screening|screening_passed|interview_pending|interviewed|signing_pending|offer|rejected|null","confidence":0到1,"evidence":"不超过20字的截图证据"}]}。',
@@ -292,13 +292,13 @@ export class OpenAiCompatibleRecognizer implements StatusRecognizer {
       const pageType = typeof value.pageType === "string" ? value.pageType : "";
       const pageEvidence = typeof value.pageEvidence === "string" ? value.pageEvidence.trim().slice(0, 500) : null;
       let results: GroupRecognitionResultItem[];
-      if (resetPageTypes.has(pageType)) {
-        const evidence = pageEvidence || resetPageLabels[pageType] || "非投递状态页";
+      if (nonApplicationPageTypes.has(pageType)) {
+        const evidence = pageEvidence || nonApplicationPageLabels[pageType] || "非投递状态页";
         results = input.applications.map((application) => ({
           applicationId: application.id,
-          matched: true,
-          rawStatus: resetPageLabels[pageType] ?? pageType,
-          status: "unset",
+          matched: false,
+          rawStatus: pageType === "login" ? "login_required" : nonApplicationPageLabels[pageType] ?? pageType,
+          status: null,
           confidence: 1,
           evidence,
         }));

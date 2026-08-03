@@ -4,6 +4,7 @@ import type { ApplicationDetail, ApplicationSummary, ProgressStatus, RunSummary,
 import SummaryStrip from "../components/SummaryStrip.vue";
 import ApplicationTable from "../components/ApplicationTable.vue";
 import ApplicationDrawer from "../components/ApplicationDrawer.vue";
+import type { AppliedAtSort } from "../application-sorting";
 
 const props = defineProps<{
   applications: ApplicationSummary[];
@@ -17,6 +18,7 @@ const props = defineProps<{
   statusItems: Array<{ title: string; value: string }>;
   scheduleFilter: ScheduleMode | "";
   scheduleItems: Array<{ title: string; value: ScheduleMode | "" }>;
+  appliedAtSort: AppliedAtSort;
   busy: boolean;
   page: number;
   pageCount: number;
@@ -44,6 +46,7 @@ defineEmits<{
   query: [value: string];
   statusFilter: [value: string];
   scheduleFilter: [value: ScheduleMode | ""];
+  appliedAtSort: [value: AppliedAtSort];
   page: [value: number];
   toggle: [id: string];
   togglePage: [ids: string[], checked: boolean];
@@ -118,10 +121,12 @@ defineEmits<{
       :items="items"
       :selected="selected"
       :active-id="activeId"
+      :applied-at-sort="appliedAtSort"
       @toggle="$emit('toggle', $event)"
       @toggle-page="(ids, checked) => $emit('togglePage', ids, checked)"
       @open="$emit('open', $event)"
       @run="$emit('run', $event)"
+      @applied-at-sort="$emit('appliedAtSort', $event)"
     />
     <div v-if="total > perPage" class="application-pagination">
       <span>共 {{ total }} 条，每页 {{ perPage }} 条</span>

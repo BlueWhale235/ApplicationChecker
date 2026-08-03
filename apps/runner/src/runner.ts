@@ -171,7 +171,7 @@ async function capture(job: RunnerJob): Promise<void> {
       return;
     }
     const state = await withNavigationRetry(page, () => collectBrowserState(page, job.site));
-    await api(`/internal/runs/${job.runId}/complete`, {
+    const completion = await api<{ needsLogin?: boolean }>(`/internal/runs/${job.runId}/complete`, {
       method: "POST",
       body: JSON.stringify({
         finalUrl: observed.url,
@@ -182,6 +182,11 @@ async function capture(job: RunnerJob): Promise<void> {
         pageSnapshot,
       }),
     });
+    if (completion.needsLogin) {
+      void loginBrowserPool.prewarm().catch((error) => {
+        console.error("Unable to prewarm the login browser", error);
+      });
+    }
   } catch (error) {
     if (!cancelled) await api(`/internal/runs/${job.runId}/fail`, {
       method: "POST",

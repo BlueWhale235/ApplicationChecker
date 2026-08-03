@@ -514,6 +514,164 @@ describe("task management routes", () => {
     context.raw.close();
   });
 
+  it("keeps the current status and notifies when AI identifies a non-application page after local fallback", async () => {
+    const { context, config } = await setup();
+    await context.db.updateTable("applications").set({ manual_locked: 1 })
+      .where("id", "=", "11111111-1111-4111-8111-111111111111").execute();
+    const recognizer = {
+      configured: true,
+      model: "vision-test",
+      recognize: vi.fn(),
+      recognizeGroup: vi.fn().mockResolvedValue({
+        provider: "vision-test",
+        results: [{
+          applicationId: "11111111-1111-4111-8111-111111111111",
+          matched: false,
+          rawStatus: "official_homepage",
+          status: null,
+          confidence: 1,
+          evidence: "公司招聘官网首页，无个人投递记录",
+        }],
+      }),
+    } satisfies StatusRecognizer;
+    const app = Fastify();
+    await registerRoutes(app, { context, config, recognizer, runnerHeartbeat: { at: Date.now() } });
+    const runId = await queueRun(context, "11111111-1111-4111-8111-111111111111", "manual");
+    await app.inject({
+      method: "POST", url: "/internal/claim",
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+    });
+    const complete = await app.inject({
+      method: "POST",
+      url: `/internal/runs/${runId}/complete`,
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+      payload: {
+        finalUrl: "https://example.com/status",
+        pageTitle: "公司招聘官网",
+        screenshotBase64: Buffer.from("png").toString("base64"),
+        truncated: false,
+        browserState: { version: 1, cookies: [], origins: [] },
+        pageSnapshot: {
+          url: "https://example.com/status",
+          title: "公司招聘官网",
+          language: "zh-CN",
+          visibleText: "欢迎访问公司招聘官网",
+          nodes: [],
+          truncated: false,
+          nodeLimitReached: false,
+          textLimitReached: false,
+        },
+      },
+    });
+    expect(complete.statusCode, complete.body).toBe(200);
+    expect(recognizer.recognizeGroup).toHaveBeenCalledTimes(1);
+
+    const result = await context.db.selectFrom("run_application_results")
+      .select(["matched", "suggested_status", "confidence", "applied", "not_applied_reason", "recognition_source"])
+      .where("run_id", "=", runId!).executeTakeFirstOrThrow();
+    expect(result).toEqual({
+      matched: 0,
+      suggested_status: null,
+      confidence: 1,
+      applied: 0,
+      not_applied_reason: "unmatched",
+      recognition_source: "ai",
+    });
+    const notifications = (await app.inject({ method: "GET", url: "/notifications" })).json();
+    expect(notifications).toMatchObject({
+      total: 1,
+      unreadCount: 1,
+      items: [{
+        kind: "recognition_unmatched",
+        applicationId: "11111111-1111-4111-8111-111111111111",
+        confidence: 1,
+      }],
+    });
+    expect(notifications.items[0].evidence).toContain("公司招聘官网首页，无个人投递记录");
+    const detail = (await app.inject({ method: "GET", url: `/applications/11111111-1111-4111-8111-111111111111` })).json();
+    expect(detail.application).toMatchObject({ progressStatus: "screening" });
+    expect(detail.runs[0]).toMatchObject({
+      recognitionSuggestedStatus: null,
+      recognitionConfidence: null,
+      recognitionResults: [{ matched: false, suggestedStatus: null, notAppliedReason: "unmatched" }],
+    });
+
+    await app.close();
+    await context.db.destroy();
+    context.raw.close();
+  });
+
+  it("moves the run to needs_login when AI emits the login_required rule", async () => {
+    const { context, config } = await setup();
+    const recognizer = {
+      configured: true,
+      model: "vision-test",
+      recognize: vi.fn(),
+      recognizeGroup: vi.fn().mockResolvedValue({
+        provider: "vision-test",
+        results: [{
+          applicationId: "11111111-1111-4111-8111-111111111111",
+          matched: false,
+          rawStatus: "login_required",
+          status: null,
+          confidence: 1,
+          evidence: "页面要求登录后查看投递记录",
+        }],
+      }),
+    } satisfies StatusRecognizer;
+    const app = Fastify();
+    await registerRoutes(app, { context, config, recognizer, runnerHeartbeat: { at: Date.now() } });
+    const runId = await queueRun(context, "11111111-1111-4111-8111-111111111111", "manual");
+    await app.inject({
+      method: "POST", url: "/internal/claim",
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+    });
+    const complete = await app.inject({
+      method: "POST",
+      url: `/internal/runs/${runId}/complete`,
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+      payload: {
+        finalUrl: "https://example.com/login",
+        pageTitle: "账号登录",
+        screenshotBase64: Buffer.from("png").toString("base64"),
+        truncated: false,
+        browserState: { version: 1, cookies: [], origins: [] },
+      },
+    });
+    expect(complete.statusCode, complete.body).toBe(200);
+    expect(complete.json()).toEqual({ ok: true, needsLogin: true });
+
+    const run = await context.db.selectFrom("runs")
+      .select(["status", "error_code", "error_message", "recognition_status", "recognition_source"])
+      .where("id", "=", runId!).executeTakeFirstOrThrow();
+    expect(run).toMatchObject({
+      status: "needs_login",
+      error_code: "LOGIN_REQUIRED",
+      error_message: "页面要求登录后查看投递记录",
+      recognition_status: "succeeded",
+      recognition_source: "ai",
+    });
+    const application = await context.db.selectFrom("applications")
+      .select(["progress_status_v2", "last_run_status"])
+      .where("id", "=", "11111111-1111-4111-8111-111111111111").executeTakeFirstOrThrow();
+    expect(application).toEqual({ progress_status_v2: "screening", last_run_status: "needs_login" });
+    const result = await context.db.selectFrom("run_application_results")
+      .select(["matched", "raw_status", "suggested_status", "applied", "not_applied_reason"])
+      .where("run_id", "=", runId!).executeTakeFirstOrThrow();
+    expect(result).toEqual({
+      matched: 0,
+      raw_status: "login_required",
+      suggested_status: null,
+      applied: 0,
+      not_applied_reason: "unmatched",
+    });
+    expect(await context.db.selectFrom("notifications").select("id").execute()).toHaveLength(0);
+
+    await app.close();
+    await context.db.destroy();
+    context.raw.close();
+  });
+
   it("notifies every affected application when page capture or recognition fails", async () => {
     const { context, config } = await setup();
     const app = Fastify();
@@ -646,6 +804,18 @@ describe("task management routes", () => {
     expect(activeRuns).toHaveLength(1);
     expect(await context.db.selectFrom("run_application_results").selectAll()
       .where("run_id", "=", activeRuns[0]!.id).execute()).toHaveLength(2);
+    const editedPlan = await app.inject({
+      method: "POST",
+      url: `/applications/${secondId}/update`,
+      payload: { scheduleMode: "inherit", cronExpression: null },
+    });
+    expect(editedPlan.statusCode, editedPlan.body).toBe(200);
+    expect(editedPlan.json()).toMatchObject({ scheduleMode: "inherit", cronExpression: null });
+    expect(await context.db.selectFrom("applications").select(["schedule_mode", "cron_expression"])
+      .where("check_group_id", "=", seed.check_group_id).execute()).toEqual([
+      { schedule_mode: "inherit", cron_expression: null },
+      { schedule_mode: "inherit", cron_expression: null },
+    ]);
     const plan = await app.inject({
       method: "POST",
       url: `/applications/${secondId}/check-plan/update`,

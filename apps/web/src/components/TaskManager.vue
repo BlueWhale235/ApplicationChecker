@@ -150,7 +150,7 @@ const sourceLabels = { local: "本地", ai: "AI" } as const;
                       <span v-if="result.rawStatus">{{ result.rawStatus }}</span>
                       <small v-if="result.source">{{ sourceLabels[result.source] }}{{ result.adapterId ? ` · ${result.adapterId} ${result.ruleVersion || ""}` : "" }}</small>
                     </div>
-                    <span v-if="result.suggestedStatus" class="status-chip" :data-status="result.suggestedStatus">{{ progressLabels[result.suggestedStatus] }}</span>
+                    <span v-if="result.matched && result.suggestedStatus" class="status-chip" :data-status="result.suggestedStatus">{{ progressLabels[result.suggestedStatus] }}</span>
                     <span v-else class="result-unmatched">未匹配</span>
                     <div class="result-meta">
                       <span><i class="mdi mdi-chart-donut"></i>{{ result.confidence === null ? "无置信度" : `${Math.round(result.confidence * 100)}%` }}</span>

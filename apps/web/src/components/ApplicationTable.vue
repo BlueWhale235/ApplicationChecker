@@ -2,13 +2,20 @@
 import { computed } from "vue";
 import type { ApplicationSummary } from "@application-checker/contracts";
 import { progressLabels, runLabels } from "@application-checker/contracts";
+import type { AppliedAtSort } from "../application-sorting";
 
-const props = defineProps<{ items: ApplicationSummary[]; selected: Set<string>; activeId: string | null }>();
+const props = defineProps<{
+  items: ApplicationSummary[];
+  selected: Set<string>;
+  activeId: string | null;
+  appliedAtSort: AppliedAtSort;
+}>();
 defineEmits<{
   toggle: [id: string];
   togglePage: [ids: string[], checked: boolean];
   open: [id: string];
   run: [id: string];
+  appliedAtSort: [value: AppliedAtSort];
 }>();
 
 const allPageSelected = computed(() => props.items.length > 0 && props.items.every((item) => props.selected.has(item.id)));
@@ -34,6 +41,33 @@ function relative(value: string | null): string {
   if (hours < 24) return `${hours} 小时前`;
   return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
+
+function formatAppliedAt(value: string | null): string {
+  if (!value) return "未填写";
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(`${value}T00:00:00`));
+}
+
+function nextAppliedAtSort(value: AppliedAtSort): AppliedAtSort {
+  if (value === "default") return "desc";
+  if (value === "desc") return "asc";
+  return "default";
+}
+
+const appliedAtSortLabel = computed(() => ({
+  default: "默认排序",
+  desc: "投递时间倒序",
+  asc: "投递时间升序，未填写项在最前",
+}[props.appliedAtSort]));
+
+const appliedAtSortIcon = computed(() => ({
+  default: "mdi-unfold-more-horizontal",
+  desc: "mdi-arrow-down",
+  asc: "mdi-arrow-up",
+}[props.appliedAtSort]));
 </script>
 
 <template>
@@ -55,7 +89,17 @@ function relative(value: string | null): string {
           </th>
           <th>公司 / 岗位</th>
           <th>当前状态</th>
-          <th>投递链接 / 域名</th>
+          <th class="sortable-heading" :aria-sort="appliedAtSort === 'asc' ? 'ascending' : appliedAtSort === 'desc' ? 'descending' : 'none'">
+            <button
+              type="button"
+              :title="`${appliedAtSortLabel}；点击切换`"
+              :aria-label="`${appliedAtSortLabel}，点击切换排序`"
+              @click="$emit('appliedAtSort', nextAppliedAtSort(appliedAtSort))"
+            >
+              投递时间
+              <i class="mdi" :class="appliedAtSortIcon"></i>
+            </button>
+          </th>
           <th>上次检查</th>
           <th>下次检查</th>
           <th>登录状态</th>
@@ -79,10 +123,7 @@ function relative(value: string | null): string {
             <span class="job-title">{{ item.jobTitle }}</span>
           </td>
           <td><span class="status-chip" :data-status="item.progressStatus">{{ progressLabels[item.progressStatus] }}</span></td>
-          <td>
-            <span class="link-line">{{ item.resolvedUrl || item.checkUrl || "邮件投递 / 未提供状态页" }}</span>
-            <small>{{ item.checkUrl ? item.site : "仅手动记录" }}</small>
-          </td>
+          <td><span :class="{ 'muted-date': !item.appliedAt }">{{ formatAppliedAt(item.appliedAt) }}</span></td>
           <td>
             <span>{{ relative(item.lastRunAt) }}</span>
             <small v-if="item.lastRunStatus">{{ runLabels[item.lastRunStatus] }}</small>
@@ -128,10 +169,13 @@ function relative(value: string | null): string {
 .application-table tbody tr.selected { background: #eef5f0; box-shadow: inset 3px 0 #32765c; }
 .application-checkbox :deep(.v-selection-control__input) { margin: 0 auto; width: 34px; height: 34px; }
 .application-checkbox :deep(.v-selection-control__input > .v-icon) { font-size: 21px; }
-.company, .job-title, .link-line, .application-table td > small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.company, .job-title, .application-table td > small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .company { color: #24312d; font-size: 14px; font-weight: 600; }
 .job-title { margin-top: 5px; color: #6d7772; font-size: 11px; }
-.link-line { color: #48554f; }
+.sortable-heading button { display: inline-flex; align-items: center; gap: 4px; color: inherit; font: inherit; border: 0; padding: 7px 0; background: transparent; cursor: pointer; }
+.sortable-heading button:hover { color: #2f7058; }
+.sortable-heading i { font-size: 15px; }
+.muted-date { color: #9aa19d; }
 .application-table td > small { margin-top: 5px; color: #8a928e; font-size: 10px; }
 .empty-table { min-height: 310px; display: grid; place-content: center; justify-items: center; color: #74807b; }
 .empty-table i { font-size: 42px; color: #9aac9f; }

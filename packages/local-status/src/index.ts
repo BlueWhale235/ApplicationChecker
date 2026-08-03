@@ -618,15 +618,15 @@ export function recognizeLocalPage(
       pageEvidence: classification.evidence,
       results: candidates.map((candidate) => ({
         applicationId: candidate.id,
-        matched: true,
-        rawStatus: classification.type,
-        status: "unset",
+        matched: false,
+        rawStatus: classification.type === "login" ? "login_required" : classification.type,
+        status: null,
         confidence: 0.99,
         evidence: classification.evidence,
         titleMatch: "none",
         statusRule: classification.type,
       })),
-      fallbackReason: null,
+      fallbackReason: classification.evidence,
     };
   }
   const results = candidates.map((candidate) => parseCandidate(snapshot, adapter, candidate, statusRules));

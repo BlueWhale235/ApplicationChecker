@@ -93,10 +93,18 @@ describe("local recognition", () => {
     expect(result.results[0]).toMatchObject({ matched: false, status: null });
   });
 
-  it("maps blank pages to unset", () => {
+  it("reports blank pages as unmatched without changing the application status", () => {
     const result = recognizeLocalPage(snapshot("https://app.zhiye.com/", [], " "), [{ id: "job-1", jobTitle: "产品经理" }]);
     expect(result).toMatchObject({ pageType: "blank" });
-    expect(result.results[0]).toMatchObject({ matched: true, status: "unset" });
+    expect(result.results[0]).toMatchObject({ matched: false, status: null });
+  });
+
+  it("emits the login_required rule for a login page", () => {
+    const result = recognizeLocalPage(snapshot("https://app.zhiye.com/login", [], "账号登录\n请输入密码后登录"), [
+      { id: "job-1", jobTitle: "产品经理" },
+    ]);
+    expect(result).toMatchObject({ pageType: "login" });
+    expect(result.results[0]).toMatchObject({ matched: false, rawStatus: "login_required", status: null });
   });
 
   it("does not guess on an unsupported website", () => {

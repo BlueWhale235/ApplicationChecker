@@ -24,6 +24,7 @@ import AiDebugPage from "./pages/AiDebugPage.vue";
 import RuleStudioPage from "./pages/RuleStudioPage.vue";
 import type { AssistedParserRule } from "@application-checker/contracts";
 import { pagePaths, type AppPage } from "./router";
+import { sortApplicationsByAppliedAt, type AppliedAtSort } from "./application-sorting";
 
 const route = useRoute();
 const router = useRouter();
@@ -92,6 +93,7 @@ const selected = ref(new Set<string>());
 const query = ref("");
 const statusFilter = ref("");
 const scheduleFilter = ref<ScheduleMode | "">("");
+const appliedAtSort = ref<AppliedAtSort>("default");
 const applicationPage = ref(1);
 const applicationsPerPage = 10;
 const loading = ref(true);
@@ -127,10 +129,11 @@ const filtered = computed(() => applications.value.filter((item) => {
   const matchesSchedule = !scheduleFilter.value || item.scheduleMode === scheduleFilter.value;
   return matchesQuery && matchesStatus && matchesSchedule;
 }));
-const applicationPageCount = computed(() => Math.max(1, Math.ceil(filtered.value.length / applicationsPerPage)));
+const sortedApplications = computed(() => sortApplicationsByAppliedAt(filtered.value, appliedAtSort.value));
+const applicationPageCount = computed(() => Math.max(1, Math.ceil(sortedApplications.value.length / applicationsPerPage)));
 const paginatedApplications = computed(() => {
   const start = (applicationPage.value - 1) * applicationsPerPage;
-  return filtered.value.slice(start, start + applicationsPerPage);
+  return sortedApplications.value.slice(start, start + applicationsPerPage);
 });
 const progressFilterItems = computed(() => [
   { title: "全部状态", value: "" },
@@ -228,7 +231,7 @@ watch(taskHistoryPage, () => {
 watch(taskHistoryPageCount, (count) => {
   if (taskHistoryPage.value > count) taskHistoryPage.value = count;
 });
-watch([query, statusFilter, scheduleFilter], () => { applicationPage.value = 1; });
+watch([query, statusFilter, scheduleFilter, appliedAtSort], () => { applicationPage.value = 1; });
 watch([active, debugEnabled], ([page, enabled]) => {
   if (page === "debug" && !loading.value && !enabled) void router.replace(pagePaths.settings);
 });
@@ -681,6 +684,7 @@ async function deleteProfile(site: string) {
           :status-items="progressFilterItems"
           :schedule-filter="scheduleFilter"
           :schedule-items="scheduleFilterItems"
+          :applied-at-sort="appliedAtSort"
           :busy="busy"
           :page="applicationPage"
           :page-count="applicationPageCount"
@@ -690,6 +694,7 @@ async function deleteProfile(site: string) {
           @query="query = $event"
           @status-filter="statusFilter = $event"
           @schedule-filter="scheduleFilter = $event"
+          @applied-at-sort="appliedAtSort = $event"
           @page="applicationPage = $event"
           @toggle="toggle"
           @toggle-page="togglePage"

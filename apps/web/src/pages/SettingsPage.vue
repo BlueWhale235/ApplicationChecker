@@ -79,7 +79,7 @@ const recognitionModes: Array<{ title: string; value: RecognitionMode }> = [
         </p>
       </div>
       <div class="content-card">
-        <div class="card-title"><div><h2>AI 回退识别</h2><p>本地解析无法可靠判断时，可调用兼容的视觉模型。</p></div><i class="mdi mdi-auto-fix"></i></div>
+        <div class="card-title"><div><h2>AI识别</h2><p>本地解析无法可靠判断时，可调用兼容的视觉模型。</p></div><i class="mdi mdi-auto-fix"></i></div>
         <div class="service-state" :class="{ ok: settings.aiConfigured }">
           <i :class="settings.aiConfigured ? 'mdi mdi-check-circle' : 'mdi mdi-minus-circle-outline'"></i>
           <div><strong>{{ settings.aiConfigured ? "已配置" : "未配置" }}</strong><span>{{ settings.aiModel || "核心检查功能不受影响" }}</span></div>

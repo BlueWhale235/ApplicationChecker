@@ -231,6 +231,9 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       adapterId: string | null;
       ruleVersion: string | null;
     };
+    const isRecognizedResult = (result: MergedResult | undefined): boolean => Boolean(
+      result?.matched && result.status && result.status !== "unset",
+    );
     let groupResults: MergedResult[] = [];
     const settings = await appSettings(context);
     const recognitionMode = settings.recognition_mode;
@@ -268,7 +271,8 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         result: localResult,
       });
       groupResults = localResult.results
-        .filter((result) => result.matched && result.status && result.confidence >= LOCAL_AUTO_APPLY_THRESHOLD)
+        .filter((result) => result.matched && result.status && result.status !== "unset"
+          && result.confidence >= LOCAL_AUTO_APPLY_THRESHOLD)
         .map((result) => ({
           applicationId: result.applicationId,
           matched: result.matched,
@@ -313,7 +317,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
           });
           groupResults.push({
             applicationId: aiMembers[0]!.id,
-            matched: Boolean(single.status),
+            matched: Boolean(single.status && single.status !== "unset"),
             rawStatus: null,
             status: single.status,
             confidence: single.confidence,
@@ -372,20 +376,25 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     const validResults = new Map(groupResults
       .filter((result) => candidateIds.has(result.applicationId) && !seen.has(result.applicationId) && seen.add(result.applicationId))
       .map((result) => [result.applicationId, result]));
-    const firstSuggestion = groupResults.find((result) => result.status)?.status ?? null;
+    const loginRequiredResult = groupResults.find((result) => result.rawStatus === "login_required");
+    const loginRequired = Boolean(loginRequiredResult);
+    const firstSuggestion = loginRequired ? null : groupResults.find(isRecognizedResult)?.status ?? null;
     const firstEvidence = aiError ?? groupResults.find((result) => result.evidence)?.evidence ?? null;
-    const firstConfidence = groupResults.find((result) => result.status)?.confidence ?? null;
-    const firstAiResult = groupResults.find((result) => result.source === "ai" && result.status);
+    const firstConfidence = loginRequired ? null : groupResults.find(isRecognizedResult)?.confidence ?? null;
+    const firstAiResult = loginRequired
+      ? undefined
+      : groupResults.find((result) => result.source === "ai" && isRecognizedResult(result));
     let updated = { numUpdatedRows: 0n };
     let pausedByRejection = false;
     await context.db.transaction().execute(async (trx) => {
       for (const member of members) {
         const result = validResults.get(member.id);
-        const matched = Boolean(result?.matched && result.status);
+        const matched = isRecognizedResult(result);
         const blockedByPause = Boolean(member.automation_paused);
         const threshold = result?.source === "local" ? LOCAL_AUTO_APPLY_THRESHOLD : settings.ai_confidence_threshold;
-        const applied = matched && result!.confidence >= threshold && !member.manual_locked && !blockedByPause;
-        const notAppliedReason = aiStatus === "failed" && aiMemberIds.has(member.id) ? "ai_failed"
+        const applied = !loginRequired && matched && result!.confidence >= threshold && !member.manual_locked && !blockedByPause;
+        const notAppliedReason = loginRequired ? "unmatched"
+          : aiStatus === "failed" && aiMemberIds.has(member.id) ? "ai_failed"
           : !matched ? "unmatched"
             : member.manual_locked ? "manual_locked"
               : blockedByPause ? null
@@ -403,7 +412,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
           adapter_id: result?.adapterId ?? null,
           rule_version: result?.ruleVersion ?? null,
         }).where("run_id", "=", id).where("application_id", "=", member.id).execute();
-        if (notAppliedReason === "ai_failed" || notAppliedReason === "unmatched") {
+        if (!loginRequired && (notAppliedReason === "ai_failed" || notAppliedReason === "unmatched")) {
           const currentStatus = member.progress_status_v2 ?? "unset";
           const notificationKind = notAppliedReason === "ai_failed"
             ? "recognition_failed" as const
@@ -471,7 +480,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         }
       }
       updated = await trx.updateTable("runs").set({
-        status: "succeeded",
+        status: loginRequired ? "needs_login" : "succeeded",
         final_url: body.finalUrl,
         page_title: body.pageTitle,
         screenshot_path: screenshotPath,
@@ -489,8 +498,10 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         recognition_confidence: firstConfidence,
         recognition_evidence: firstEvidence,
         recognition_provider: recognitionProvider,
-        error_code: null,
-        error_message: null,
+        error_code: loginRequired ? "LOGIN_REQUIRED" : null,
+        error_message: loginRequired
+          ? (loginRequiredResult?.evidence || "AI 识别到登录或验证页面，需要登录后继续").slice(0, 500)
+          : null,
 
         completed_at: completed,
       }).where("id", "=", id).where("status", "=", "running").executeTakeFirst();
@@ -501,9 +512,9 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     }
     if (pausedByRejection) await clearGroupScheduleIfFullyPaused(context, groupId);
     await context.db.updateTable("applications").set({
-      last_run_status: "succeeded", last_run_at: completed, updated_at: completed,
+      last_run_status: loginRequired ? "needs_login" : "succeeded", last_run_at: completed, updated_at: completed,
     }).where("check_group_id", "=", groupId).execute();
-    return { ok: true };
+    return { ok: true, needsLogin: loginRequired };
   });
 
   app.post("/internal/runs/:id/fail", async (request) => {
