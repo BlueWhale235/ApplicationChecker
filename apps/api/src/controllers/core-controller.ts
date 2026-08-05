@@ -119,7 +119,8 @@ export async function registerCoreController(app: FastifyInstance, deps: RouteDe
 
   app.post("/recognition-previews", async (request) => {
     const store = previewStore();
-    const applicationId = (request.body as { applicationId?: string }).applicationId;
+    const body = request.body as { applicationId?: string; keepAlive?: boolean };
+    const applicationId = body.applicationId;
     if (!applicationId) throw httpError(400, "applicationId is required");
     const application = await context.db.selectFrom("applications")
       .leftJoin("check_groups", "check_groups.id", "applications.check_group_id")
@@ -143,6 +144,9 @@ export async function registerCoreController(app: FastifyInstance, deps: RouteDe
       .where("check_group_id", "=", groupId).orderBy("created_at").execute();
     const settings = await appSettings(context);
     return store.enqueue({
+      purpose: "capture",
+      sourcePreviewId: null,
+      keepAlive: Boolean(body.keepAlive),
       groupId,
       applicationId,
       url,
@@ -180,5 +184,10 @@ export async function registerCoreController(app: FastifyInstance, deps: RouteDe
     const snapshot = previewStore().snapshot((request.params as { id: string }).id);
     if (!snapshot) throw httpError(404, "预览快照不存在");
     return snapshot;
+  });
+
+  app.post("/recognition-previews/:id/release", async (request) => {
+    previewStore().requestRelease((request.params as { id: string }).id);
+    return { ok: true };
   });
 }

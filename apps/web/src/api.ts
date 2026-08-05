@@ -93,10 +93,11 @@ export const api = {
   aiDebugTrace: (id: string) => request<AiDebugTraceDetail>(`/debug/recognition-traces/${id}`),
   clearAiDebugTraces: () => request<{ deleted: number }>("/debug/recognition-traces/clear", { method: "POST" }),
   recognitionPreviews: () => request<RecognitionPreviewDetail[]>("/recognition-previews"),
-  createRecognitionPreview: (applicationId: string) => request<RecognitionPreviewDetail>("/recognition-previews", {
-    method: "POST", body: JSON.stringify({ applicationId }),
+  createRecognitionPreview: (applicationId: string, keepAlive = false) => request<RecognitionPreviewDetail>("/recognition-previews", {
+    method: "POST", body: JSON.stringify({ applicationId, keepAlive }),
   }),
   recognitionPreview: (id: string) => request<RecognitionPreviewDetail>(`/recognition-previews/${id}`),
+  releaseRecognitionPreview: (id: string) => request<{ ok: true }>(`/recognition-previews/${id}/release`, { method: "POST" }),
   recognitionPreviewSnapshot: (id: string) => request<RecognitionPreviewSnapshot>(`/recognition-previews/${id}/snapshot`),
   recognitionPreviewScreenshotUrl: (id: string) => `/api/recognition-previews/${id}/screenshot`,
   parserRules: () => request<AssistedParserRule[]>("/parser-rules"),

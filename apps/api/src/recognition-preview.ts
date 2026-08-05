@@ -6,6 +6,7 @@ import type {
   RecognitionPreviewSnapshot,
   RecognitionPreviewSummary,
   RunnerRecognitionPreviewJob,
+  RunnerRecognitionPreviewReleaseJob,
   ScriptRuleExecution,
   StatusMappings,
 } from "@application-checker/contracts";
@@ -41,6 +42,7 @@ function summary(record: PreviewRecord): RecognitionPreviewSummary {
 
 export class RecognitionPreviewStore {
   private readonly records: PreviewRecord[] = [];
+  private readonly pendingReleases = new Set<string>();
 
   constructor(private readonly capacity = 20) {}
 
@@ -72,6 +74,8 @@ export class RecognitionPreviewStore {
       screenshotTruncated: false,
       scriptDurationMs: null,
       scriptRuleId: input.scriptRule?.id ?? null,
+      scriptLogs: [],
+      scriptLogsTruncated: false,
       screenshotBase64: null,
       snapshot: null,
       job: { ...input, kind: "recognition_preview", previewId: id },
@@ -84,11 +88,45 @@ export class RecognitionPreviewStore {
   enqueueScriptTest(sourceId: string, rule: AssistedParserRule): RecognitionPreviewDetail | null {
     const source = this.records.find((item) => item.id === sourceId);
     if (!source) return null;
-    const { kind: _kind, previewId: _previewId, scriptRule: _previousRule, ...input } = source.job;
-    return this.enqueue({ ...input, scriptRule: { ...rule, enabled: true } });
+    const {
+      kind: _kind,
+      previewId: _previewId,
+      purpose: _purpose,
+      sourcePreviewId: _sourcePreviewId,
+      keepAlive: _keepAlive,
+      scriptRule: _previousRule,
+      ...input
+    } = source.job;
+    const detail = this.enqueue({
+      ...input,
+      purpose: "script_test",
+      sourcePreviewId: source.job.sourcePreviewId ?? source.id,
+      keepAlive: true,
+      scriptRule: { ...rule, enabled: true },
+    });
+    const record = this.records.find((item) => item.id === detail.id);
+    if (record) {
+      record.screenshotBase64 = source.screenshotBase64;
+      record.snapshot = source.snapshot;
+      record.screenshotAvailable = source.screenshotAvailable;
+      record.screenshotWidth = source.screenshotWidth;
+      record.screenshotHeight = source.screenshotHeight;
+      record.screenshotTruncated = source.screenshotTruncated;
+      record.snapshotSummary = source.snapshotSummary;
+    }
+    return detail;
   }
 
-  claim(): RunnerRecognitionPreviewJob | null {
+  requestRelease(previewId: string): void {
+    this.pendingReleases.add(previewId);
+  }
+
+  claim(): RunnerRecognitionPreviewJob | RunnerRecognitionPreviewReleaseJob | null {
+    const releaseId = this.pendingReleases.values().next().value as string | undefined;
+    if (releaseId) {
+      this.pendingReleases.delete(releaseId);
+      return { kind: "recognition_preview_release", previewId: releaseId };
+    }
     const record = [...this.records].reverse().find((item) => item.status === "queued");
     if (!record) return null;
     record.status = "running";
@@ -141,15 +179,60 @@ export class RecognitionPreviewStore {
     record.matchedCount = result.results.filter((item) => item.matched && item.confidence >= 0.9).length;
     record.scriptDurationMs = input.scriptExecution?.durationMs ?? null;
     record.scriptRuleId = input.scriptExecution?.ruleId ?? null;
+    record.scriptLogs = input.scriptExecution?.logs ?? [];
+    record.scriptLogsTruncated = input.scriptExecution?.logsTruncated ?? false;
     return publicDetail(record);
   }
 
-  fail(id: string, error: string): void {
+  completeScriptTest(id: string, input: {
+    finalUrl: string;
+    pageTitle: string;
+    needsLogin: boolean;
+    loginReason: string | null;
+    scriptExecution: ScriptRuleExecution | null;
+  }, statusMappings?: StatusMappings): RecognitionPreviewDetail | null {
+    const record = this.records.find((item) => item.id === id);
+    if (!record || record.status !== "running" || record.job.purpose !== "script_test") return null;
+    record.completedAt = new Date().toISOString();
+    record.finalUrl = input.finalUrl;
+    record.pageTitle = input.pageTitle;
+    record.scriptDurationMs = input.scriptExecution?.durationMs ?? null;
+    record.scriptRuleId = input.scriptExecution?.ruleId ?? record.scriptRuleId;
+    record.scriptLogs = input.scriptExecution?.logs ?? [];
+    record.scriptLogsTruncated = input.scriptExecution?.logsTruncated ?? false;
+    if (input.needsLogin) {
+      record.status = "needs_login";
+      record.error = input.loginReason;
+      return publicDetail(record);
+    }
+    if (!input.scriptExecution) return null;
+    const result = recognizeScriptExecution(input.scriptExecution, record.job.applications, statusMappings);
+    record.status = "succeeded";
+    record.adapterId = result.adapterId;
+    record.adapterVersion = result.adapterVersion;
+    record.route = result.route;
+    record.pageType = result.pageType;
+    record.pageEvidence = result.pageEvidence;
+    record.results = result.results;
+    record.matchedCount = result.results.filter((item) => item.matched && item.confidence >= 0.9).length;
+    return publicDetail(record);
+  }
+
+  fail(id: string, error: string, script?: {
+    durationMs?: number | null;
+    ruleId?: string | null;
+    logs?: RecognitionPreviewDetail["scriptLogs"];
+    logsTruncated?: boolean;
+  }): void {
     const record = this.records.find((item) => item.id === id);
     if (!record || !["queued", "running"].includes(record.status)) return;
     record.status = "failed";
     record.error = error.slice(0, 1_000);
     record.completedAt = new Date().toISOString();
+    record.scriptDurationMs = script?.durationMs ?? record.scriptDurationMs;
+    record.scriptRuleId = script?.ruleId ?? record.scriptRuleId;
+    record.scriptLogs = script?.logs ?? record.scriptLogs;
+    record.scriptLogsTruncated = script?.logsTruncated ?? record.scriptLogsTruncated;
   }
 
   list(): RecognitionPreviewSummary[] {

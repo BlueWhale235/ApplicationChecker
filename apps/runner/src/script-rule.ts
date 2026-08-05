@@ -4,10 +4,30 @@ import type {
   ScriptParserRuleDefinition,
   ScriptRuleApplication,
   ScriptRuleExecution,
+  ScriptRuleLogEntry,
   ScriptRuleOutputItem,
 } from "@application-checker/contracts";
+import { randomUUID } from "node:crypto";
+import {
+  formatScriptLogValues,
+  ScriptRuleLogCollector,
+  type ScriptRuleLogPayload,
+} from "./script-rule-log.js";
 
 const MAX_RESULT_BYTES = 64 * 1024;
+const SCRIPT_LOG_BRIDGE = "__applicationCheckerScriptLog";
+
+export class ScriptRuleExecutionError extends Error {
+  constructor(
+    message: string,
+    readonly durationMs: number,
+    readonly logs: ScriptRuleLogEntry[],
+    readonly logsTruncated: boolean,
+  ) {
+    super(message);
+    this.name = "ScriptRuleExecutionError";
+  }
+}
 
 function patternMatches(definition: ScriptParserRuleDefinition, input: string): boolean {
   const Pattern = (globalThis as unknown as {
@@ -65,8 +85,11 @@ export async function executeScriptRule(
   const primary = applications.find((item) => item.id === primaryApplicationId) ?? applications[0];
   if (!primary) throw new Error("页面脚本没有可用的投递数据");
   const startedAt = Date.now();
+  const logCollector = new ScriptRuleLogCollector();
+  const logBridgeName = `${SCRIPT_LOG_BRIDGE}_${randomUUID().replaceAll("-", "")}`;
+  await page.exposeFunction(logBridgeName, (entry: unknown) => logCollector.add(entry));
   let timer: NodeJS.Timeout | undefined;
-  const evaluation = page.evaluate(async ({ source, application, allApplications }) => {
+  const evaluation = page.evaluate(async ({ source, application, allApplications, logBridgeName, formatLogSource, scriptStartedAt }) => {
     const freeze = <T>(input: T): T => {
       if (input && typeof input === "object") {
         Object.freeze(input);
@@ -79,7 +102,39 @@ export async function executeScriptRule(
       if (!element) throw new Error(`未找到页面元素：${selector}`);
       return element;
     };
+    const logEntries: ScriptRuleLogPayload[] = [];
+    let logBytes = 0;
+    let logsTruncated = false;
+    const logBridge = (globalThis as unknown as Record<string, (entry: unknown) => Promise<void>>)[logBridgeName];
+    if (typeof logBridge !== "function") throw new Error("页面脚本调试日志桥不可用");
+    const formatLog = new Function(`return (${formatLogSource})`)() as (values: unknown[]) => string;
+    const markLogsTruncated = (): void => {
+      if (logsTruncated) return;
+      logsTruncated = true;
+      void logBridge({ truncated: true });
+    };
     const helpers = Object.freeze({
+      log(...values: unknown[]): void {
+        if (logsTruncated || logEntries.length >= 100) {
+          markLogsTruncated();
+          return;
+        }
+        const original = formatLog(values);
+        const encoded = new TextEncoder().encode(original);
+        const suffix = new TextEncoder().encode("…");
+        const message = encoded.byteLength <= 2_048 ? original
+          : `${new TextDecoder().decode(encoded.slice(0, Math.max(0, 2_048 - suffix.byteLength)))}…`;
+        const bytes = new TextEncoder().encode(message).byteLength;
+        if (logBytes + bytes > 32_768) {
+          markLogsTruncated();
+          return;
+        }
+        const entry = { index: logEntries.length, atMs: Date.now() - scriptStartedAt, message };
+        logEntries.push(entry);
+        logBytes += bytes;
+        if (message !== original) markLogsTruncated();
+        void logBridge(entry);
+      },
       exists(selector: string): boolean {
         return document.querySelector(selector) !== null;
       },
@@ -182,27 +237,68 @@ export async function executeScriptRule(
       ...parameters: string[]
     ) => (...values: unknown[]) => Promise<unknown>;
     const runnable = new AsyncFunction("application", "applications", "helpers", `"use strict";\n${source}`);
-    return runnable(freeze(application), freeze(allApplications), helpers);
+    try {
+      const output = await runnable(freeze(application), freeze(allApplications), helpers);
+      return { ok: true as const, output, logs: logEntries, logsTruncated };
+    } catch (error) {
+      return {
+        ok: false as const,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        logs: logEntries,
+        logsTruncated,
+      };
+    }
   }, {
     source: definition.script,
     application: structuredClone(primary),
     allApplications: structuredClone(applications),
+    logBridgeName,
+    formatLogSource: formatScriptLogValues.toString(),
+    scriptStartedAt: startedAt,
   });
   const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
       void page.close().catch(() => {});
-      reject(new Error(`页面脚本执行超过 ${definition.timeoutMs}ms`));
+      const snapshot = logCollector.snapshot();
+      reject(new ScriptRuleExecutionError(
+        `页面脚本执行超过 ${definition.timeoutMs}ms`,
+        Date.now() - startedAt,
+        snapshot.logs,
+        snapshot.logsTruncated,
+      ));
     }, definition.timeoutMs);
   });
   try {
-    const output = await Promise.race([evaluation, timeout]);
+    const envelope = await Promise.race([evaluation, timeout]);
+    logCollector.merge(envelope.logs, envelope.logsTruncated);
+    const snapshot = logCollector.snapshot();
+    if (!envelope.ok) {
+      throw new ScriptRuleExecutionError(
+        envelope.error,
+        Date.now() - startedAt,
+        snapshot.logs,
+        snapshot.logsTruncated,
+      );
+    }
     return {
       ruleId: rule.id,
       ruleVersion: rule.version,
       durationMs: Date.now() - startedAt,
-      results: normalizeScriptOutput(output, applications),
+      results: normalizeScriptOutput(envelope.output, applications),
+      logs: snapshot.logs,
+      logsTruncated: snapshot.logsTruncated,
     };
+  } catch (error) {
+    if (error instanceof ScriptRuleExecutionError) throw error;
+    const snapshot = logCollector.snapshot();
+    throw new ScriptRuleExecutionError(
+      error instanceof Error ? error.message : "页面脚本执行失败",
+      Date.now() - startedAt,
+      snapshot.logs,
+      snapshot.logsTruncated,
+    );
   } finally {
     if (timer) clearTimeout(timer);
+    await page.removeExposedFunction(logBridgeName).catch(() => {});
   }
 }

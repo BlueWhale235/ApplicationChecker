@@ -24,14 +24,14 @@ defineEmits<{ change: [value: Page] }>();
       <button :class="{ active: active === 'profiles' }" @click="$emit('change', 'profiles')">
         <i class="mdi mdi-cookie-outline"></i><span>浏览器状态</span>
       </button>
+      <button :class="{ active: active === 'rule_studio' }" @click="$emit('change', 'rule_studio')">
+        <i class="mdi mdi-vector-square"></i><span>规则工作台</span>
+      </button>
       <button :class="{ active: active === 'settings' }" @click="$emit('change', 'settings')">
         <i class="mdi mdi-cog-outline"></i><span>设置</span>
       </button>
       <button v-if="debugEnabled" :class="{ active: active === 'debug' }" @click="$emit('change', 'debug')">
         <i class="mdi mdi-bug-outline"></i><span>识别调试</span>
-      </button>
-      <button :class="{ active: active === 'rule_studio' }" @click="$emit('change', 'rule_studio')">
-        <i class="mdi mdi-vector-square"></i><span>规则工作台</span>
       </button>
     </nav>
     <div class="leaf-mark" aria-hidden="true">❧</div>

@@ -57,7 +57,13 @@ import type {
   RunnerLoginJob,
   RunsTable,
 } from "./shared.js";
-import type { LocalPageSnapshot, RecognitionSource, RunnerRecognitionPreviewJob, ScriptRuleExecution } from "@application-checker/contracts";
+import type {
+  LocalPageSnapshot,
+  RecognitionSource,
+  RunnerRecognitionPreviewJob,
+  RunnerRecognitionPreviewReleaseJob,
+  ScriptRuleExecution,
+} from "@application-checker/contracts";
 import { LOCAL_AUTO_APPLY_THRESHOLD, recognizeLocalPage, recognizeScriptExecution } from "@application-checker/local-status";
 import { parseStatusMappings } from "@application-checker/status-mapping";
 import { listParserRules } from "../parser-rules.js";
@@ -84,7 +90,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     return { status: row.status };
   });
 
-  app.post("/internal/claim", async (): Promise<RunnerLoginJob | RunnerJob | RunnerRecognitionPreviewJob | { kind: "idle" }> => {
+  app.post("/internal/claim", async (): Promise<RunnerLoginJob | RunnerJob | RunnerRecognitionPreviewJob | RunnerRecognitionPreviewReleaseJob | { kind: "idle" }> => {
     const login = await context.db.selectFrom("login_sessions")
       .innerJoin("applications", "applications.id", "login_sessions.application_id")
       .leftJoin("check_groups", "check_groups.id", "applications.check_group_id")
@@ -623,10 +629,43 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     return result;
   });
 
+  app.post("/internal/recognition-previews/:id/complete-script-test", async (request) => {
+    if (!recognitionPreviewStore) throw httpError(503, "规则预览服务未启用");
+    const id = (request.params as { id: string }).id;
+    const body = request.body as {
+      finalUrl: string;
+      pageTitle: string;
+      needsLogin?: boolean;
+      loginReason?: string | null;
+      scriptExecution: ScriptRuleExecution | null;
+    };
+    const result = recognitionPreviewStore.completeScriptTest(id, {
+      finalUrl: body.finalUrl,
+      pageTitle: body.pageTitle,
+      needsLogin: Boolean(body.needsLogin),
+      loginReason: body.loginReason ?? null,
+      scriptExecution: body.scriptExecution,
+    }, parseStatusMappings((await appSettings(context)).status_mappings));
+    if (!result) throw httpError(404, "脚本测试预览不存在或状态无效");
+    return result;
+  });
+
   app.post("/internal/recognition-previews/:id/fail", async (request) => {
     if (!recognitionPreviewStore) throw httpError(503, "规则预览服务未启用");
     const id = (request.params as { id: string }).id;
-    recognitionPreviewStore.fail(id, (request.body as { message?: string }).message ?? "Preview failed");
+    const body = request.body as {
+      message?: string;
+      scriptDurationMs?: number | null;
+      scriptRuleId?: string | null;
+      scriptLogs?: ScriptRuleExecution["logs"];
+      scriptLogsTruncated?: boolean;
+    };
+    recognitionPreviewStore.fail(id, body.message ?? "Preview failed", {
+      ...(body.scriptDurationMs !== undefined ? { durationMs: body.scriptDurationMs } : {}),
+      ...(body.scriptRuleId !== undefined ? { ruleId: body.scriptRuleId } : {}),
+      ...(body.scriptLogs !== undefined ? { logs: body.scriptLogs } : {}),
+      ...(body.scriptLogsTruncated !== undefined ? { logsTruncated: body.scriptLogsTruncated } : {}),
+    });
     return { ok: true };
   });
 

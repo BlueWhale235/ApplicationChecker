@@ -170,11 +170,18 @@ export interface ScriptRuleOutputItem {
   evidence?: string;
 }
 
+export interface ScriptRuleLogEntry {
+  atMs: number;
+  message: string;
+}
+
 export interface ScriptRuleExecution {
   ruleId: string;
   ruleVersion: number;
   durationMs: number;
   results: ScriptRuleOutputItem[];
+  logs: ScriptRuleLogEntry[];
+  logsTruncated: boolean;
 }
 
 export interface AssistedRuleTestResult {
@@ -626,6 +633,9 @@ export interface RunnerLoginJob {
 export interface RunnerRecognitionPreviewJob {
   kind: "recognition_preview";
   previewId: string;
+  purpose: "capture" | "script_test";
+  sourcePreviewId: string | null;
+  keepAlive: boolean;
   groupId: string;
   applicationId: string;
   url: string;
@@ -636,6 +646,11 @@ export interface RunnerRecognitionPreviewJob {
   proxyUrl: string | null;
   userAgent: string;
   scriptRule?: AssistedParserRule | null;
+}
+
+export interface RunnerRecognitionPreviewReleaseJob {
+  kind: "recognition_preview_release";
+  previewId: string;
 }
 
 export interface RecognitionPreviewSummary {
@@ -673,6 +688,8 @@ export interface RecognitionPreviewDetail extends RecognitionPreviewSummary {
   screenshotTruncated: boolean;
   scriptDurationMs: number | null;
   scriptRuleId: string | null;
+  scriptLogs: ScriptRuleLogEntry[];
+  scriptLogsTruncated: boolean;
 }
 
 export interface RecognitionPreviewSnapshot {

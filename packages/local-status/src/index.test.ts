@@ -188,6 +188,8 @@ describe("page script recognition", () => {
       ruleVersion: 3,
       durationMs: 125,
       results: [{ applicationId: "job-1", rawStatus: "当前状态：待面试", evidence: "查询结果区域" }],
+      logs: [],
+      logsTruncated: false,
     }, [
       { id: "job-1", jobTitle: "后端工程师" },
       { id: "job-2", jobTitle: "产品经理" },

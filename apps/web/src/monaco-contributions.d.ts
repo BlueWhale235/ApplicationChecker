@@ -1,0 +1,12 @@
+declare module "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching";
+declare module "monaco-editor/editor/contrib/codelens/browser/codeLensCache";
+declare module "monaco-editor/editor/common/services/treeViewsDndService";
+declare module "monaco-editor/editor/contrib/comment/browser/comment";
+declare module "monaco-editor/editor/contrib/find/browser/findController";
+declare module "monaco-editor/editor/contrib/folding/browser/folding";
+declare module "monaco-editor/editor/contrib/format/browser/formatActions";
+declare module "monaco-editor/editor/contrib/hover/browser/hoverContribution";
+declare module "monaco-editor/editor/contrib/snippet/browser/snippetController2";
+declare module "monaco-editor/editor/contrib/suggest/browser/suggestController";
+declare module "monaco-editor/editor/standalone/browser/quickAccess/standaloneCommandsQuickAccess";
+declare module "monaco-editor/editor/standalone/browser/quickAccess/standaloneHelpQuickAccess";

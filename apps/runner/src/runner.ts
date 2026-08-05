@@ -2,14 +2,21 @@ import "dotenv/config";
 import puppeteer, { type Page } from "puppeteer-core";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import type { RunnerJob, RunnerLoginJob, RunnerRecognitionPreviewJob, ScriptRuleExecution } from "@application-checker/contracts";
+import type {
+  RunnerJob,
+  RunnerLoginJob,
+  RunnerRecognitionPreviewJob,
+  RunnerRecognitionPreviewReleaseJob,
+  ScriptRuleExecution,
+} from "@application-checker/contracts";
 import { BrowserPool, type BrowserLease } from "./browser-pool.js";
 import { collectBrowserState, installBrowserState, restoreIndexedDbState } from "./browser-state.js";
 import { classifyPage } from "./detection.js";
 import { captureFullPage } from "./full-page-capture.js";
 import { captureLocalPageSnapshot } from "./dom-snapshot.js";
 import { withNavigationRetry } from "./page-stability.js";
-import { executeScriptRule, selectScriptRule } from "./script-rule.js";
+import { executeScriptRule, ScriptRuleExecutionError, selectScriptRule } from "./script-rule.js";
+import { PreviewPageSessionManager, type PreviewPageResource } from "./preview-page-session.js";
 
 const apiBase = (process.env.APP_INTERNAL_URL ?? "http://127.0.0.1:8080/api").replace(/\/$/, "");
 const token = process.env.RUNNER_INTERNAL_TOKEN ?? "development-runner-token-change-me-123456";
@@ -96,6 +103,8 @@ const loginBrowserPool = new BrowserPool({
     args: [...launchArgs(), "--no-startup-window", "--start-maximized"],
   }),
 });
+
+const previewPageSessions = new PreviewPageSessionManager(600_000);
 
 async function settle(page: Page): Promise<void> {
   await page.waitForNetworkIdle({ idleTime: 1000, timeout: 12_000 }).catch(() => {});
@@ -252,10 +261,9 @@ async function login(job: RunnerLoginJob): Promise<void> {
   }
 }
 
-async function recognitionPreview(job: RunnerRecognitionPreviewJob): Promise<void> {
-  let lease: BrowserLease | null = null;
+async function openPreviewPage(job: RunnerRecognitionPreviewJob): Promise<PreviewPageResource> {
+  const lease = await automatedBrowserPool.acquire(job.proxyUrl);
   try {
-    lease = await automatedBrowserPool.acquire(job.proxyUrl);
     const page = await lease.context.newPage();
     await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
     await page.setUserAgent(job.userAgent);
@@ -265,13 +273,64 @@ async function recognitionPreview(job: RunnerRecognitionPreviewJob): Promise<voi
       response = await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
     }
     await settle(page);
-    let scriptExecution: ScriptRuleExecution | null = null;
-    const initialDetection = classifyPage(await signals(page, response?.status() ?? null));
-    if (job.scriptRule && !initialDetection.requiresLogin) {
-      scriptExecution = await executeScriptRule(page, job.scriptRule, job.applicationId, job.applications);
-      await settle(page);
+    return { lease, page, responseStatus: response?.status() ?? null };
+  } catch (error) {
+    await lease.release();
+    throw error;
+  }
+}
+
+async function completeScriptPreview(job: RunnerRecognitionPreviewJob, resource: PreviewPageResource): Promise<boolean> {
+  if (!job.scriptRule) throw new Error("Script preview job is missing its rule");
+  const initialObserved = await signals(resource.page, resource.responseStatus);
+  const initialDetection = classifyPage(initialObserved);
+  if (initialDetection.requiresLogin) {
+    await api(`/internal/recognition-previews/${job.previewId}/complete-script-test`, {
+      method: "POST",
+      body: JSON.stringify({
+        finalUrl: initialObserved.url,
+        pageTitle: initialObserved.title,
+        needsLogin: true,
+        loginReason: initialDetection.reason,
+        scriptExecution: null,
+      }),
+    });
+    return false;
+  }
+
+  const scriptExecution = await executeScriptRule(resource.page, job.scriptRule, job.applicationId, job.applications);
+  const observed = await withNavigationRetry(resource.page, () => signals(resource.page, resource.responseStatus));
+  const detection = classifyPage(observed);
+  await api(`/internal/recognition-previews/${job.previewId}/complete-script-test`, {
+    method: "POST",
+    body: JSON.stringify({
+      finalUrl: observed.url,
+      pageTitle: observed.title,
+      needsLogin: detection.requiresLogin,
+      loginReason: detection.requiresLogin ? detection.reason : null,
+      scriptExecution,
+    }),
+  });
+  return !detection.requiresLogin && Boolean(selectScriptRule([job.scriptRule], observed.url));
+}
+
+async function recognitionPreview(job: RunnerRecognitionPreviewJob): Promise<void> {
+  const sessionId = job.sourcePreviewId ?? job.previewId;
+  let resource: PreviewPageResource | null = null;
+  try {
+    if (job.purpose === "script_test") resource = previewPageSessions.take(sessionId);
+    resource ??= await openPreviewPage(job);
+
+    if (job.purpose === "script_test") {
+      const reusable = await completeScriptPreview(job, resource);
+      if (job.keepAlive && reusable) {
+        await previewPageSessions.retain(sessionId, resource);
+        resource = null;
+      }
+      return;
     }
-    const { detection, image, snapshot } = await captureStablePage(page, response?.status() ?? null, true);
+
+    const { detection, image, snapshot } = await captureStablePage(resource.page, resource.responseStatus, true);
     if (!snapshot) throw new Error("Recognition preview snapshot was not captured");
     await api(`/internal/recognition-previews/${job.previewId}/complete`, {
       method: "POST",
@@ -283,16 +342,28 @@ async function recognitionPreview(job: RunnerRecognitionPreviewJob): Promise<voi
         screenshotTruncated: image.truncated,
         needsLogin: detection.requiresLogin,
         loginReason: detection.requiresLogin ? detection.reason : null,
-        scriptExecution,
       }),
     });
+    if (job.keepAlive && !detection.requiresLogin) {
+      await previewPageSessions.retain(sessionId, resource);
+      resource = null;
+    }
   } catch (error) {
+    const scriptFailure = error instanceof ScriptRuleExecutionError ? error : null;
     await api(`/internal/recognition-previews/${job.previewId}/fail`, {
       method: "POST",
-      body: JSON.stringify({ message: error instanceof Error ? error.message : "Unknown preview error" }),
+      body: JSON.stringify({
+        message: error instanceof Error ? error.message : "Unknown preview error",
+        ...(scriptFailure ? {
+          scriptDurationMs: scriptFailure.durationMs,
+          scriptRuleId: job.scriptRule?.id ?? null,
+          scriptLogs: scriptFailure.logs,
+          scriptLogsTruncated: scriptFailure.logsTruncated,
+        } : {}),
+      }),
     }).catch(() => {});
   } finally {
-    await lease?.release();
+    await resource?.lease.release();
   }
 }
 
@@ -309,10 +380,11 @@ try {
   while (!stopping) {
     try {
       await api("/internal/heartbeat", { method: "POST", body: "{}" });
-      const job = await api<RunnerJob | RunnerLoginJob | RunnerRecognitionPreviewJob | { kind: "idle" }>("/internal/claim", { method: "POST", body: "{}" });
+      const job = await api<RunnerJob | RunnerLoginJob | RunnerRecognitionPreviewJob | RunnerRecognitionPreviewReleaseJob | { kind: "idle" }>("/internal/claim", { method: "POST", body: "{}" });
       if (job.kind === "capture") await capture(job);
       else if (job.kind === "login") await login(job);
       else if (job.kind === "recognition_preview") await recognitionPreview(job);
+      else if (job.kind === "recognition_preview_release") await previewPageSessions.release(job.previewId);
       else await new Promise((resolve) => setTimeout(resolve, 1500));
     } catch (error) {
       console.error(error);
@@ -321,5 +393,6 @@ try {
   }
 } finally {
   clearInterval(heartbeat);
+  await previewPageSessions.close();
   await Promise.all([automatedBrowserPool.close(), loginBrowserPool.close()]);
 }

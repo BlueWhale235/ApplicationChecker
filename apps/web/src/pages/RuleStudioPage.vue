@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import type {
   AssistedParserRule,
   AssistedParserRuleDefinition,
@@ -13,9 +13,18 @@ import type {
 } from "@application-checker/contracts";
 import { progressLabels } from "@application-checker/contracts";
 import { api } from "../api";
+import ScriptApiDocsDialog from "../components/ScriptApiDocsDialog.vue";
 import { isSelectableRuleNode, pickRuleNodeAtPoint } from "./rule-studio-selection";
 import { parseSelectorRuleJson } from "./rule-studio-json";
+import {
+  canSaveScriptRule,
+  matchingCheckGroupApplicationId,
+  scriptRuleDefinitionSignature,
+  scriptRuleDialogSignature,
+} from "./rule-studio-script";
 import { highlightJavaScript } from "./rule-studio-syntax";
+
+const ScriptRuleEditorDialog = defineAsyncComponent(() => import("../components/ScriptRuleEditorDialog.vue"));
 
 defineProps<{ busy: boolean }>();
 const emit = defineEmits<{
@@ -65,12 +74,6 @@ return {
   },
 } as const;
 
-const APPLICATION_FIELDS = [
-  ["id", "岗位 ID"], ["company", "公司"], ["jobTitle", "岗位名称"], ["checkUrl", "检查链接"],
-  ["postingUrl", "投递链接"], ["appliedAt", "投递时间"], ["location", "地点"], ["notes", "备注"],
-  ["site", "站点"], ["progressStatus", "当前状态"],
-] as const;
-
 const rules = ref<AssistedParserRule[]>([]);
 const ruleQuery = ref("");
 const selectedApplicationId = ref("");
@@ -87,13 +90,15 @@ const hoveredNodeId = ref<number | null>(null);
 const testResult = ref<AssistedRuleTestResult | null>(null);
 const scriptTestResult = ref<RecognitionPreviewDetail | null>(null);
 const scriptTesting = ref(false);
+const scriptApiDocsOpen = ref(false);
+const scriptDialogOpen = ref(false);
+const initialScriptDialogSignature = ref("");
 const lastTestedScriptSignature = ref("");
+const initialScriptSignature = ref("");
 const draftDefinition = ref<SelectorParserRuleDefinition | null>(null);
 const draftErrors = ref<string[]>([]);
 const editingRuleId = ref<string | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
-const scriptEditor = ref<HTMLTextAreaElement | null>(null);
-const scriptHighlight = ref<HTMLElement | null>(null);
 const selectorJsonHighlight = ref<HTMLElement | null>(null);
 const selectorJsonMode = ref(false);
 const selectorJson = ref("");
@@ -120,6 +125,7 @@ const editor = reactive<{
 let previewTimer: number | undefined;
 let scriptTestTimer: number | undefined;
 let checkGroupTimer: number | undefined;
+let syncingRuleCheckGroup = false;
 
 const applicationItems = computed(() => checkGroupOptions.value.map((item) => ({
   title: `${item.company} · ${item.jobTitle}${item.memberCount > 1 ? ` · ${item.memberCount} 个岗位` : ""} · ${item.site}`,
@@ -139,13 +145,12 @@ const selectedNodes = computed(() => new Set([
 const selectableNodes = computed(() => (previewData.value?.snapshot.nodes ?? []).filter((node) =>
   isSelectableRuleNode(node, previewData.value?.screenshotWidth ?? 1, previewData.value?.screenshotHeight ?? 1)));
 const canGenerate = computed(() => Boolean(previewData.value && selectedTitleNodeId.value && selectedStatusNodeId.value));
-const scriptSignature = computed(() => JSON.stringify({
+const scriptSignature = computed(() => scriptRuleDefinitionSignature({
   script: editor.script,
   hostname: editor.hostname,
   pathname: editor.pathname,
   timeoutMs: editor.timeoutMs,
 }));
-const highlightedScript = computed(() => highlightJavaScript(editor.script));
 const highlightedSelectorJson = computed(() => highlightJavaScript(selectorJson.value));
 const selectorJsonResult = computed(() => parseSelectorRuleJson(selectorJson.value));
 const scriptTimeoutValid = computed(() => Number.isInteger(editor.timeoutMs)
@@ -154,8 +159,19 @@ const canSave = computed(() => editor.mode === "selector"
   ? (selectorJsonMode.value
     ? Boolean(editor.name.trim() && selectorJsonResult.value.definition)
     : Boolean(draftDefinition.value && !draftErrors.value.length && testResult.value?.valid))
-  : Boolean(editor.script.trim() && scriptTimeoutValid.value && scriptTestResult.value?.status === "succeeded"
-    && scriptTestResult.value.matchedCount > 0 && lastTestedScriptSignature.value === scriptSignature.value));
+  : canSaveScriptRule({
+    draft: editor,
+    editing: Boolean(editingRuleId.value),
+    initialDefinitionSignature: initialScriptSignature.value,
+    lastTestedDefinitionSignature: lastTestedScriptSignature.value,
+    testPassed: scriptTestResult.value?.status === "succeeded" && scriptTestResult.value.matchedCount > 0,
+  }));
+const scriptDefinitionChanged = computed(() => Boolean(editingRuleId.value)
+  && initialScriptSignature.value !== scriptSignature.value);
+const currentScriptDialogSignature = computed(() => scriptRuleDialogSignature(editor));
+const scriptDialogDirty = computed(() => Boolean(scriptDialogOpen.value
+  && initialScriptDialogSignature.value
+  && initialScriptDialogSignature.value !== currentScriptDialogSignature.value));
 
 function describeNode(node: LocalDomNode | undefined): string {
   if (!node) return "尚未选择";
@@ -179,14 +195,24 @@ function clearSelectorDraft(): void {
   draftDefinition.value = null;
   testResult.value = null;
 }
+async function releasePreviewSession(previewId = preview.value?.id): Promise<void> {
+  if (!previewId) return;
+  await api.releaseRecognitionPreview(previewId).catch(() => {});
+}
 function resetEditor(): void {
+  void releasePreviewSession();
   clearSelectorDraft();
   clearAuthoringTest();
+  initialScriptSignature.value = "";
   editingRuleId.value = null;
   selectorJsonMode.value = false;
   selectorJson.value = "";
   preview.value = null;
   previewData.value = null;
+  selectedApplicationId.value = "";
+  checkGroupSearch.value = "";
+  scriptDialogOpen.value = false;
+  initialScriptDialogSignature.value = "";
   Object.assign(editor, {
     mode: "selector", name: "", hostname: "", pathname: "", priority: 100, enabled: true,
     script: SCRIPT_EXAMPLES.query.code, timeoutMs: 10_000,
@@ -229,9 +255,9 @@ async function loadRules(): Promise<void> {
   try { rules.value = await api.parserRules(); }
   catch (value) { emit("failure", value instanceof Error ? value.message : "加载规则失败"); }
 }
-async function loadCheckGroups(query = ""): Promise<void> {
+async function loadCheckGroups(query = "", limit = 30): Promise<void> {
   loadingCheckGroups.value = true;
-  try { checkGroupOptions.value = await api.parserRuleCheckGroups(query, 30); }
+  try { checkGroupOptions.value = await api.parserRuleCheckGroups(query, limit); }
   catch (value) { emit("failure", value instanceof Error ? value.message : "加载检查组失败"); }
   finally { loadingCheckGroups.value = false; }
 }
@@ -261,6 +287,7 @@ async function pollPreview(): Promise<void> {
 async function createPreview(): Promise<void> {
   if (!selectedApplicationId.value) return;
   if (previewTimer) clearTimeout(previewTimer);
+  await releasePreviewSession();
   clearAuthoringTest();
   if (editor.mode === "selector") {
     selectedTitleNodeId.value = null;
@@ -272,7 +299,7 @@ async function createPreview(): Promise<void> {
   previewData.value = null;
   loadingPreview.value = true;
   try {
-    preview.value = await api.createRecognitionPreview(selectedApplicationId.value);
+    preview.value = await api.createRecognitionPreview(selectedApplicationId.value, editor.mode === "script");
     await pollPreview();
   } catch (value) {
     loadingPreview.value = false;
@@ -284,10 +311,9 @@ async function confirmAction(options: { title: string; message: string; confirmL
   return new Promise((resolve) => emit("confirm", options, resolve));
 }
 async function switchMode(mode: RuleMode): Promise<void> {
-  if (editor.mode === mode) return;
+  if (editor.mode === mode && !(mode === "script" && !scriptDialogOpen.value)) return;
   const hasSelectorWork = Boolean(selectedTitleNodeId.value || selectedStatusNodeId.value || draftDefinition.value);
-  const hasScriptWork = editor.script.trim() && editor.script !== SCRIPT_EXAMPLES.query.code;
-  if ((editor.mode === "selector" && hasSelectorWork) || (editor.mode === "script" && hasScriptWork)) {
+  if ((editor.mode === "selector" && hasSelectorWork) || (editor.mode === "script" && scriptDialogDirty.value)) {
     const confirmed = await confirmAction({
       title: mode === "script" ? "改用页面脚本" : "改回点选规则",
       message: "切换规则类型会清除当前类型的草稿和测试结果，且一条规则不能同时使用两种方式。",
@@ -298,11 +324,34 @@ async function switchMode(mode: RuleMode): Promise<void> {
   }
   clearSelectorDraft();
   clearAuthoringTest();
+  initialScriptSignature.value = "";
   selectorJsonMode.value = false;
   selectorJson.value = "";
   editor.mode = mode;
-  if (mode === "script") editor.script ||= SCRIPT_EXAMPLES.query.code;
-  else editor.script = SCRIPT_EXAMPLES.query.code;
+  if (mode === "script") {
+    editor.script ||= SCRIPT_EXAMPLES.query.code;
+    scriptDialogOpen.value = true;
+    await nextTick();
+    initialScriptDialogSignature.value = currentScriptDialogSignature.value;
+  } else {
+    await releasePreviewSession();
+    scriptDialogOpen.value = false;
+    initialScriptDialogSignature.value = "";
+    editor.script = SCRIPT_EXAMPLES.query.code;
+  }
+}
+
+async function closeScriptDialog(): Promise<void> {
+  if (scriptDialogDirty.value) {
+    const confirmed = await confirmAction({
+      title: "放弃脚本修改",
+      message: "页面脚本或规则设置尚未保存，关闭后本次修改将丢失。",
+      confirmLabel: "放弃修改",
+      danger: false,
+    });
+    if (!confirmed) return;
+  }
+  resetEditor();
 }
 
 async function generateRule(): Promise<void> {
@@ -363,7 +412,7 @@ async function pollScriptTest(id: string, testedSignature: string): Promise<void
     const result = await api.recognitionPreview(id);
     scriptTestResult.value = result;
     if (["queued", "running"].includes(result.status)) {
-      scriptTestTimer = window.setTimeout(() => void pollScriptTest(id, testedSignature), 1_000);
+      scriptTestTimer = window.setTimeout(() => void pollScriptTest(id, testedSignature), 250);
       return;
     }
     scriptTesting.value = false;
@@ -401,14 +450,20 @@ async function saveRule(): Promise<void> {
       name: editor.name, enabled: editor.enabled, priority: editor.priority, definition: rule.definition,
       tested: editor.mode === "selector" ? !selectorJsonMode.value : true,
     };
-    if (editingRuleId.value) await api.updateParserRule(editingRuleId.value, body);
-    else await api.createParserRule(body);
+    const savedRule = editingRuleId.value
+      ? await api.updateParserRule(editingRuleId.value, body)
+      : await api.createParserRule(body);
     await loadRules();
-    resetEditor();
+    if (editor.mode === "script") {
+      editingRuleId.value = savedRule.id;
+      initialScriptSignature.value = scriptSignature.value;
+      await nextTick();
+      initialScriptDialogSignature.value = currentScriptDialogSignature.value;
+    } else resetEditor();
     emit("notice", wasEditing ? "解析规则已更新" : "解析规则已保存");
   } catch (value) { emit("failure", value instanceof Error ? value.message : "保存规则失败"); }
 }
-function editRule(rule: AssistedParserRule): void {
+async function editRule(rule: AssistedParserRule): Promise<void> {
   resetEditor();
   editingRuleId.value = rule.id;
   Object.assign(editor, {
@@ -421,6 +476,20 @@ function editRule(rule: AssistedParserRule): void {
     script: rule.definition.kind === "script" ? rule.definition.script : SCRIPT_EXAMPLES.query.code,
     timeoutMs: rule.definition.kind === "script" ? rule.definition.timeoutMs : 10_000,
   });
+  syncingRuleCheckGroup = true;
+  if (checkGroupTimer) clearTimeout(checkGroupTimer);
+  checkGroupOptions.value = [];
+  const hostnameQuery = rule.definition.hostname.replaceAll("*", "").replace(/^\./, "");
+  await loadCheckGroups(hostnameQuery, 50);
+  selectedApplicationId.value = matchingCheckGroupApplicationId(rule, checkGroupOptions.value);
+  await nextTick();
+  syncingRuleCheckGroup = false;
+  if (rule.definition.kind === "script") {
+    initialScriptSignature.value = scriptSignature.value;
+    scriptDialogOpen.value = true;
+    await nextTick();
+    initialScriptDialogSignature.value = currentScriptDialogSignature.value;
+  }
   if (rule.definition.kind === "selector") {
     selectorJsonMode.value = true;
     selectorJson.value = JSON.stringify(rule.definition, null, 2);
@@ -447,33 +516,12 @@ function applyExample(): void {
   scriptTestResult.value = null;
   lastTestedScriptSignature.value = "";
 }
-function syncScriptScroll(event: Event): void {
-  const editorElement = event.currentTarget as HTMLTextAreaElement;
-  if (!scriptHighlight.value) return;
-  scriptHighlight.value.scrollTop = editorElement.scrollTop;
-  scriptHighlight.value.scrollLeft = editorElement.scrollLeft;
-}
 function syncSelectorJsonScroll(event: Event): void {
   const editorElement = event.currentTarget as HTMLTextAreaElement;
   if (!selectorJsonHighlight.value) return;
   selectorJsonHighlight.value.scrollTop = editorElement.scrollTop;
   selectorJsonHighlight.value.scrollLeft = editorElement.scrollLeft;
 }
-async function insertApplicationField(field: string): Promise<void> {
-  const insertion = `application.${field}`;
-  const element = scriptEditor.value;
-  if (!element) {
-    editor.script += insertion;
-    return;
-  }
-  const start = element.selectionStart;
-  const end = element.selectionEnd;
-  editor.script = `${editor.script.slice(0, start)}${insertion}${editor.script.slice(end)}`;
-  await nextTick();
-  element.focus();
-  element.setSelectionRange(start + insertion.length, start + insertion.length);
-}
-
 async function exportRules(): Promise<void> {
   try { downloadRules(await api.exportParserRules(), `application-checker-parser-rules-${new Date().toISOString().slice(0, 10)}.json`); }
   catch (value) { emit("failure", value instanceof Error ? value.message : "导出规则失败"); }
@@ -510,6 +558,7 @@ async function importRules(event: Event): Promise<void> {
 }
 
 watch(checkGroupSearch, (query) => {
+  if (syncingRuleCheckGroup) return;
   const selectedTitle = applicationItems.value.find((item) => item.value === selectedApplicationId.value)?.title;
   if (query === selectedTitle) return;
   if (checkGroupTimer) clearTimeout(checkGroupTimer);
@@ -520,6 +569,7 @@ onBeforeUnmount(() => {
   if (previewTimer) clearTimeout(previewTimer);
   if (scriptTestTimer) clearTimeout(scriptTestTimer);
   if (checkGroupTimer) clearTimeout(checkGroupTimer);
+  void releasePreviewSession();
 });
 </script>
 
@@ -534,11 +584,10 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div class="security-note" :class="{ advanced: editor.mode === 'script' }">
-      <i class="mdi" :class="editor.mode === 'script' ? 'mdi-code-braces' : 'mdi-shield-lock-outline'"></i>
-      <span v-if="editor.mode === 'selector' && !selectorJsonMode">点选规则只保存路径与稳定 DOM 特征，不保存页面输入值、Cookie、完整 HTML 或截图。</span>
-      <span v-else-if="editor.mode === 'selector'">正在直接编辑点选规则 JSON；保存前会检查格式和规则类型。</span>
-      <span v-else>页面脚本会在匹配的 Edge 页面内运行，可以读取和操作当前页面；不会开放 Node.js、本地文件或应用密钥。</span>
+    <div class="security-note">
+      <i class="mdi mdi-shield-lock-outline"></i>
+      <span v-if="!selectorJsonMode">点选规则只保存路径与稳定 DOM 特征，不保存页面输入值、Cookie、完整 HTML 或截图。</span>
+      <span v-else>正在直接编辑点选规则 JSON；保存前会检查格式和规则类型。</span>
     </div>
 
     <div class="studio-layout">
@@ -569,9 +618,8 @@ onBeforeUnmount(() => {
       </aside>
 
       <main class="editor">
-        <div class="mode-heading" :class="{ script: editor.mode === 'script' }">
-          <div><strong>{{ editor.mode === "script" ? "页面脚本" : selectorJsonMode ? "点选规则 JSON" : "点选规则" }}</strong><small>{{ editor.mode === "script" ? "高级" : selectorJsonMode ? "直接编辑" : "默认" }}</small></div>
-          <button v-if="editor.mode === 'script'" @click="switchMode('selector')">← 改回点选规则</button>
+        <div class="mode-heading">
+          <div><strong>{{ selectorJsonMode ? "点选规则 JSON" : "点选规则" }}</strong><small>{{ selectorJsonMode ? "直接编辑" : "默认" }}</small></div>
         </div>
         <div v-if="!selectorJsonMode" class="preview-toolbar">
           <v-autocomplete v-model="selectedApplicationId" v-model:search="checkGroupSearch" :items="applicationItems"
@@ -640,38 +688,6 @@ onBeforeUnmount(() => {
           </aside>
         </div>
 
-        <div v-else-if="editor.mode === 'script'" class="script-grid">
-          <section class="script-panel">
-            <div class="script-toolbar"><label>示例脚本<select v-model="selectedExample" @change="applyExample"><option v-for="(item, key) in SCRIPT_EXAMPLES" :key="key" :value="key">{{ item.label }}</option></select></label>
-              <span>最长执行 {{ editor.timeoutMs / 1000 }} 秒</span></div>
-            <div class="script-editor-shell">
-              <pre ref="scriptHighlight" class="script-highlight" aria-hidden="true" v-html="highlightedScript"></pre>
-              <textarea ref="scriptEditor" v-model="editor.script" class="script-editor" spellcheck="false" aria-label="页面脚本" @scroll="syncScriptScroll" />
-            </div>
-            <div class="script-foot"><span>可用对象：<code>application</code>、<code>applications</code>、<code>helpers</code></span><small>helpers：text · texts · textsWithin · value · attr · nextText · closestText · exists · count · fill · select · click · waitForSelector · waitForText · waitForTextChange · scrollIntoView · sleep</small></div>
-          </section>
-          <aside class="script-side">
-            <v-text-field v-model="editor.name" label="规则名称" density="compact" />
-            <div class="field-block"><strong>投递字段</strong><p>点击插入当前投递的只读字段</p><div class="field-buttons">
-              <button v-for="field in APPLICATION_FIELDS" :key="field[0]" @click="insertApplicationField(field[0])"><code>{{ field[0] }}</code><span>{{ field[1] }}</span></button>
-            </div></div>
-            <div class="field-block"><strong>当前页面投递</strong><p v-if="!previewData">加载页面后显示该检查组的投递数据</p><article v-for="item in previewData?.applications ?? []" :key="item.id">
-              <span>{{ item.jobTitle }}</span><small>{{ item.company }} · {{ item.appliedAt || "未填投递时间" }}</small></article></div>
-            <v-text-field v-model="editor.hostname" label="Hostname URLPattern" density="compact" />
-            <v-text-field v-model="editor.pathname" label="Pathname URLPattern" density="compact" />
-            <div class="number-row"><v-text-field v-model.number="editor.priority" type="number" label="优先级" density="compact" />
-              <v-text-field v-model.number="editor.timeoutMs" type="number" min="1000" max="60000" step="1000" label="超时毫秒（最多 60000）"
-                :error-messages="scriptTimeoutValid ? [] : ['请输入 1000 到 60000 之间的整数']" density="compact" /></div>
-            <v-switch v-model="editor.enabled" label="保存后启用" color="primary" hide-details />
-            <div class="editor-actions"><v-btn variant="outlined" prepend-icon="mdi-play" :loading="scriptTesting" :disabled="!preview || !editor.script.trim() || !scriptTimeoutValid" @click="testScriptRule">运行测试</v-btn>
-              <v-btn color="primary" :disabled="!canSave" @click="saveRule">{{ editingRuleId ? "更新规则" : "保存规则" }}</v-btn></div>
-            <div v-if="scriptTestResult" class="test-results script-test"><strong>{{ scriptTestResult.status === "succeeded" && scriptTestResult.matchedCount ? "测试通过" : "测试未通过" }}<small v-if="scriptTestResult.scriptDurationMs !== null">{{ scriptTestResult.scriptDurationMs }}ms</small></strong>
-              <article v-for="item in scriptTestResult.results" :key="item.applicationId"><span>{{ previewData?.applications.find((candidate) => candidate.id === item.applicationId)?.jobTitle }}</span>
-                <b>{{ item.status ? progressLabels[item.status] : "未匹配" }}</b><small>原始状态：{{ item.rawStatus || "无" }}</small><small>{{ item.evidence }}</small></article>
-              <p v-if="scriptTestResult.error" class="error-text">{{ scriptTestResult.error }}</p></div>
-          </aside>
-        </div>
-
         <div v-else class="preview-empty"><i class="mdi mdi-vector-square"></i>
           <h2>{{ editingRuleId ? `正在编辑“${editor.name}”` : "选择岗位并加载页面" }}</h2>
           <p>预览任务不会新增检查任务、修改岗位状态或发送通知。</p>
@@ -680,23 +696,68 @@ onBeforeUnmount(() => {
       </main>
     </div>
   </section>
+  <Suspense v-if="scriptDialogOpen">
+    <ScriptRuleEditorDialog
+      :open="scriptDialogOpen"
+    v-model:script="editor.script"
+    v-model:name="editor.name"
+    v-model:hostname="editor.hostname"
+    v-model:pathname="editor.pathname"
+    v-model:priority="editor.priority"
+    v-model:timeout-ms="editor.timeoutMs"
+    v-model:enabled="editor.enabled"
+    v-model:selected-application-id="selectedApplicationId"
+    v-model:check-group-search="checkGroupSearch"
+    v-model:selected-example="selectedExample"
+    :application-items="applicationItems"
+    :loading-check-groups="loadingCheckGroups"
+    :loading-preview="loadingPreview"
+    :preview-available="Boolean(preview)"
+    :preview-data="previewData"
+    :test-result="scriptTestResult"
+    :testing="scriptTesting"
+    :can-save="canSave"
+      :editing="Boolean(editingRuleId)"
+      :definition-changed="scriptDefinitionChanged"
+      :dirty="scriptDialogDirty"
+      :timeout-valid="scriptTimeoutValid"
+    :examples="SCRIPT_EXAMPLES"
+    @close="closeScriptDialog"
+    @switch-selector="switchMode('selector')"
+    @load-preview="createPreview"
+    @apply-example="applyExample"
+    @open-docs="scriptApiDocsOpen = true"
+    @test="testScriptRule"
+      @save="saveRule"
+    />
+    <template #fallback>
+      <v-dialog :model-value="true" fullscreen persistent>
+        <v-card class="script-dialog-loading">
+          <v-progress-circular indeterminate color="orange-darken-1" size="36" width="3" />
+          <strong>正在打开页面脚本编辑器</strong>
+          <span>首次使用正在加载本地编辑器资源。</span>
+        </v-card>
+      </v-dialog>
+    </template>
+  </Suspense>
+  <ScriptApiDocsDialog :open="scriptApiDocsOpen" @close="scriptApiDocsOpen = false" />
 </template>
 
 <style scoped>
 .rule-studio { max-width: 1500px; }
-.page-heading, .heading-actions, .panel-title, .rule-actions, .preview-toolbar, .canvas-tools, .editor-actions, .mode-heading, .script-toolbar, .number-row { display: flex; align-items: center; gap: 10px; }
+.page-heading, .heading-actions, .panel-title, .rule-actions, .preview-toolbar, .canvas-tools, .editor-actions, .mode-heading { display: flex; align-items: center; gap: 10px; }
 .page-heading { justify-content: space-between; }
 .page-heading p { margin-top: 4px; color: #77847e; }
 .security-note { margin: 14px 0; padding: 11px 14px; border: 1px solid #cfe2da; border-radius: 10px; background: #eef7f2; color: #356454; }
-.security-note.advanced { border-color: #e3d1b4; background: #fbf3e6; color: #7d5b2d; }
 .security-note i { margin-right: 8px; }
 .studio-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: calc(100vh - 180px); min-height: 700px; overflow: hidden; border: 1px solid #ded5c6; border-radius: 16px; background: #fffdf9; }
 .rule-list { display: flex; min-height: 0; padding: 16px; overflow: hidden; flex-direction: column; border-right: 1px solid #e4ddcf; background: #f7f3ea; }
 .panel-title { justify-content: space-between; margin-bottom: 12px; }
 .panel-title span { padding: 2px 7px; border-radius: 12px; background: #e5ded1; font-size: 12px; }
 .panel-title button { margin-left: auto; border: 0; background: transparent; color: #28735c; }
-.rule-search { margin-bottom: 14px; }
-.rule-items { min-height: 0; padding-right: 4px; overflow-y: auto; scrollbar-gutter: stable; }
+.rule-search { flex: 0 0 auto; align-self: stretch; margin-bottom: 14px; }
+.rule-search :deep(.v-input__control), .rule-search :deep(.v-field) { min-height: 40px; max-height: 40px; }
+.rule-items { min-height: 0; padding-right: 4px; overflow-y: auto; flex: 1 1 auto; scrollbar-gutter: stable; }
 .rule-items::-webkit-scrollbar { width: 7px; }
 .rule-items::-webkit-scrollbar-thumb { border-radius: 999px; background: #b8c7c0; }
 .rule-items::-webkit-scrollbar-track { background: transparent; }
@@ -724,12 +785,10 @@ onBeforeUnmount(() => {
 .mode-heading { justify-content: space-between; margin-bottom: 12px; }
 .mode-heading div { display: flex; align-items: center; gap: 8px; }
 .mode-heading small { padding: 2px 7px; border-radius: 10px; background: #eee8dd; color: #796d5b; }
-.mode-heading.script > div > strong { color: #a9521d; }
-.mode-heading.script small { background: #fff0df; color: #b65e20; }
 .mode-heading button, .advanced-link { border: 0; background: transparent; color: #28735c; }
 .preview-toolbar { margin-bottom: 16px; }
 .preview-toolbar .v-input { max-width: 720px; }
-.authoring-grid, .script-grid, .selector-json-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; }
+.authoring-grid, .selector-json-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; }
 .canvas-column { min-width: 0; }
 .canvas-tools { margin-bottom: 10px; flex-wrap: wrap; }
 .canvas-tools button { padding: 7px 10px; border: 1px solid #d6cec0; border-radius: 8px; background: #fff; color: #5d6d66; }
@@ -749,7 +808,7 @@ onBeforeUnmount(() => {
 .advanced-link i { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; background: #f9e4d1; color: #b65e20; font-size: 18px; transition: background .16s ease, transform .16s ease; }
 .advanced-link:hover { border-color: #dfa978; background: #fff1e2; transform: translateY(-1px); }
 .advanced-link:hover i { background: #f3d4b8; transform: translateX(2px); }
-.rule-editor, .script-side { min-width: 0; }
+.rule-editor { min-width: 0; }
 .selection-card, .field-block { margin: 8px 0 16px; padding: 12px; border-radius: 10px; background: #f6f2e9; }
 .selection-card { display: grid; gap: 5px; }
 .selection-card small, .field-block p, .field-block article small { color: #75827c; }
@@ -761,21 +820,6 @@ onBeforeUnmount(() => {
 .test-results > strong { display: flex; justify-content: space-between; }
 .test-results article { padding: 9px; border: 1px solid #e3dccf; border-radius: 8px; display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; }
 .test-results article small { grid-column: 1 / -1; color: #78857f; }
-.script-panel { min-width: 0; align-self: start; overflow: hidden; border: 1px solid #dca673; border-radius: 10px; background: #18231f; box-shadow: 0 0 0 1px #fff4e8 inset; }
-.script-toolbar, .script-foot { padding: 10px 12px; background: #f6f2e9; color: #65746d; }
-.script-toolbar { justify-content: space-between; }
-.script-toolbar label { display: flex; align-items: center; gap: 8px; }
-.script-toolbar select { padding: 5px 8px; border: 1px solid #d4ccbe; border-radius: 6px; background: white; }
-.script-editor-shell { position: relative; height: clamp(480px, calc(100vh - 330px), 720px); background: #18231f; }
-.script-highlight, .script-editor { width: 100%; height: 100%; min-height: 0; margin: 0; padding: 16px; border: 0; font: 13px/1.65 Consolas, monospace; tab-size: 2; white-space: pre; overflow: auto; }
-.script-highlight { position: absolute; inset: 0; overflow: hidden; color: #d9e8e2; pointer-events: none; }
-.script-editor { position: relative; display: block; resize: none; outline-offset: -2px; background: transparent; color: transparent; caret-color: #fff3e8; -webkit-text-fill-color: transparent; }
-.script-editor::selection { background: #d9793655; }
-.script-highlight :deep(.syntax-keyword) { color: #f6a65f; font-weight: 600; }
-.script-highlight :deep(.syntax-string) { color: #b8d98c; }
-.script-highlight :deep(.syntax-comment) { color: #7d938a; font-style: italic; }
-.script-highlight :deep(.syntax-number) { color: #e6c07b; }
-.script-highlight :deep(.syntax-api) { color: #7ec8d9; font-weight: 600; }
 .json-panel { min-width: 0; overflow: hidden; border: 1px solid #8eb7a8; border-radius: 10px; background: #18231f; box-shadow: 0 0 0 1px #edf8f3 inset; }
 .json-toolbar, .json-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 14px; background: #eff6f2; color: #45685c; }
 .json-toolbar div { display: flex; align-items: center; gap: 8px; }
@@ -794,24 +838,19 @@ onBeforeUnmount(() => {
 .scope-summary { display: grid; gap: 7px; }
 .scope-summary code { overflow: hidden; padding: 7px 9px; border-radius: 6px; background: #fff; color: #47665b; text-overflow: ellipsis; white-space: nowrap; }
 .json-help { margin: 12px 0 16px; color: #75827c; font-size: 12px; line-height: 1.6; }
-.script-foot { display: grid; gap: 4px; font-size: 12px; }
-.script-foot small { color: #849089; line-height: 1.5; }
-.script-foot code { color: #8a572f; }
 .field-block p { margin: 4px 0 10px; font-size: 12px; }
-.field-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.field-buttons button { display: grid; padding: 7px; border: 1px solid #ded6c8; border-radius: 7px; background: #fff; text-align: left; }
-.field-buttons span { color: #7b8882; font-size: 11px; }
 .field-block article { display: grid; padding: 8px 0; border-bottom: 1px solid #e3dccf; }
 .field-block article:last-child { border-bottom: 0; }
-.number-row > * { min-width: 0; }
 .error-text { color: #b74f42; }
+.script-dialog-loading { display: grid; min-height: 100vh; place-content: center; justify-items: center; gap: 12px; background: #fffaf4; color: #7d5b2d; }
+.script-dialog-loading span { color: #9a8170; }
 .preview-empty { min-height: 560px; display: grid; place-content: center; justify-items: center; color: #7e8b85; text-align: center; }
 .preview-empty > i { font-size: 54px; color: #9eb7ad; }
 .preview-empty h2 { color: #31554b; }
 .empty-small { padding: 35px 0; color: #87938d; text-align: center; }
 @media (max-width: 1180px) {
   .studio-layout { grid-template-columns: 250px minmax(0, 1fr); }
-  .authoring-grid, .script-grid, .selector-json-grid { grid-template-columns: 1fr; }
+  .authoring-grid, .selector-json-grid { grid-template-columns: 1fr; }
   .rule-editor { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .selection-card, .errors, .editor-actions, .test-results { grid-column: 1 / -1; }
 }

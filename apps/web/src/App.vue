@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import type {
   AiSettingsUpdate, AppSettings, ApplicationDetail, ApplicationSummary, BrowserProfileSummary, BrowserStorageUsage,
@@ -21,10 +21,11 @@ import ProgressPage from "./pages/ProgressPage.vue";
 import BrowserProfilesPage from "./pages/BrowserProfilesPage.vue";
 import SettingsPage from "./pages/SettingsPage.vue";
 import AiDebugPage from "./pages/AiDebugPage.vue";
-import RuleStudioPage from "./pages/RuleStudioPage.vue";
 import type { AssistedParserRule } from "@application-checker/contracts";
 import { pagePaths, type AppPage } from "./router";
 import { sortApplicationsByAppliedAt, type AppliedAtSort } from "./application-sorting";
+
+const RuleStudioPage = defineAsyncComponent(() => import("./pages/RuleStudioPage.vue"));
 
 const route = useRoute();
 const router = useRouter();
