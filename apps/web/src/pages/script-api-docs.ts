@@ -30,6 +30,11 @@ const applicationFields: ScriptApiEntry[] = [
 ];
 
 const helperMethods: ScriptApiEntry[] = [
+  { signature: "helpers.currentUrl(): string", description: "获取当前页面的完整 URL", example: "if (!helpers.currentUrl().endsWith('/result')) await helpers.goto('/result');" },
+  { signature: "await helpers.goto(url)", description: "跳转到规则 hostname 范围内的页面", detail: "页面加载后会从脚本开头重新执行；总计最多跳转 3 次，请使用 currentUrl() 避免循环。", example: "if (!helpers.currentUrl().includes('/history')) await helpers.goto('/history');" },
+  { signature: "await helpers.axios(config)", description: "发送 Axios 风格的 HTTP 请求", detail: "支持 method、baseURL、params、headers、data、timeout、responseType 和 withCredentials。仅支持 HTTP(S)，并遵循页面的 CORS、CSP、Cookie 与 SameSite 策略。" },
+  { signature: "await helpers.axios.get(url, config?)", description: "发送 GET 请求", example: "const { data } = await helpers.axios.get('/api/status', { params: { id: application.id } });" },
+  { signature: "await helpers.axios.post(url, data?, config?)", description: "发送 POST 请求", detail: "同时提供 put、patch 和 delete；请求体最多 256KB，响应体最多 2MB，单次超时为 1000–60000ms。", example: "const response = await helpers.axios.post('/api/query', { jobId: application.id });" },
   { signature: "helpers.log(...values): void", description: "记录仅在运行测试结果中显示的调试信息", detail: "最多 100 条、单条 2KB、总量 32KB；不会写入应用日志或长期保存。", example: "helpers.log('读取状态', { rawStatus });" },
   { signature: "helpers.exists(selector): boolean", description: "判断元素是否存在", example: "if (!helpers.exists('.result')) return null;" },
   { signature: "helpers.count(selector): number", description: "统计匹配元素数量" },
@@ -62,7 +67,7 @@ const resultEntries: ScriptApiEntry[] = [
 
 export const SCRIPT_API_SECTIONS: ScriptApiSection[] = [
   { id: "data", title: "投递数据", subtitle: "application 与 applications", entries: applicationFields },
-  { id: "helpers", title: "页面操作", subtitle: "helpers 提供的安全 DOM API", entries: helperMethods },
+  { id: "helpers", title: "页面操作", subtitle: "helpers 提供的页面、网络与 DOM API", entries: helperMethods },
   { id: "result", title: "返回结果", subtitle: "脚本必须返回的结构", entries: resultEntries },
 ];
 

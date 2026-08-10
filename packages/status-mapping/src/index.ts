@@ -50,6 +50,7 @@ export const EMPTY_STATUS_MAPPINGS: StatusMappings = {
 
 export const BUILTIN_STATUS_MAPPINGS: StatusMappings = {
   screening: [
+    "\u6295\u9012\u6210\u529f",
     "待处理",
     "简历筛选", "简历初筛", "简历投递", "待评估", "投递简历", "申请成功", "已投递", "初筛", "筛选阶段",
     "resume screening", "CV screening", "application submitted", "application received",

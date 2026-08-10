@@ -15,6 +15,9 @@ import {
 } from "./script-rule-log.js";
 
 const MAX_RESULT_BYTES = 64 * 1024;
+const MAX_HTTP_REQUEST_BYTES = 256 * 1024;
+const MAX_HTTP_RESPONSE_BYTES = 2 * 1024 * 1024;
+const MAX_SCRIPT_NAVIGATIONS = 3;
 const SCRIPT_LOG_BRIDGE = "__applicationCheckerScriptLog";
 
 export class ScriptRuleExecutionError extends Error {
@@ -35,6 +38,14 @@ function patternMatches(definition: ScriptParserRuleDefinition, input: string): 
   }).URLPattern;
   if (!Pattern) throw new Error("URLPattern requires Node.js 24 or newer");
   return new Pattern({ hostname: definition.hostname, pathname: definition.pathname }).test(input);
+}
+
+function hostnameMatches(definition: ScriptParserRuleDefinition, input: string): boolean {
+  const Pattern = (globalThis as unknown as {
+    URLPattern?: new (value: { hostname: string; pathname: string }) => { test(value: string | URL): boolean };
+  }).URLPattern;
+  if (!Pattern) throw new Error("URLPattern requires Node.js 24 or newer");
+  return new Pattern({ hostname: definition.hostname, pathname: "/*" }).test(input);
 }
 
 export function selectScriptRule(rules: AssistedParserRule[], url: string): AssistedParserRule | null {
@@ -89,7 +100,13 @@ export async function executeScriptRule(
   const logBridgeName = `${SCRIPT_LOG_BRIDGE}_${randomUUID().replaceAll("-", "")}`;
   await page.exposeFunction(logBridgeName, (entry: unknown) => logCollector.add(entry));
   let timer: NodeJS.Timeout | undefined;
-  const evaluation = page.evaluate(async ({ source, application, allApplications, logBridgeName, formatLogSource, scriptStartedAt }) => {
+  const evaluateOnce = (logIndexOffset: number) => page.evaluate(async ({
+    source, application, allApplications, logBridgeName, formatLogSource, scriptStartedAt,
+    logIndexOffset, maxRequestBytes, maxResponseBytes,
+  }) => {
+    class NavigationRequest extends Error {
+      constructor(readonly url: string) { super("页面脚本请求跳转"); }
+    }
     const freeze = <T>(input: T): T => {
       if (input && typeof input === "object") {
         Object.freeze(input);
@@ -113,55 +130,140 @@ export async function executeScriptRule(
       logsTruncated = true;
       void logBridge({ truncated: true });
     };
-    const helpers = Object.freeze({
-      log(...values: unknown[]): void {
-        if (logsTruncated || logEntries.length >= 100) {
-          markLogsTruncated();
-          return;
+    type AxiosConfig = {
+      url?: string; method?: string; baseURL?: string; params?: Record<string, unknown>;
+      headers?: Record<string, unknown>; data?: unknown; timeout?: number;
+      responseType?: "json" | "text"; withCredentials?: boolean;
+    };
+    type AxiosResponse = {
+      data: unknown; status: number; statusText: string; headers: Record<string, string>; url: string;
+    };
+    const forbiddenHeader = (name: string): boolean => {
+      const normalized = name.trim().toLowerCase();
+      return ["cookie", "host", "origin", "referer"].includes(normalized) || normalized.startsWith("sec-");
+    };
+    const axios = async (config: AxiosConfig): Promise<AxiosResponse> => {
+      if (!config || typeof config !== "object") throw new Error("helpers.axios 需要请求配置");
+      const rawUrl = typeof config.url === "string" ? config.url.trim() : "";
+      if (!rawUrl) throw new Error("helpers.axios 缺少 url");
+      const base = config.baseURL ? new URL(config.baseURL, location.href) : new URL(location.href);
+      const url = new URL(rawUrl, base);
+      if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("helpers.axios 仅支持 HTTP(S) 地址");
+      for (const [name, value] of Object.entries(config.params ?? {})) {
+        if (value === null || value === undefined) continue;
+        if (Array.isArray(value)) value.forEach((item) => url.searchParams.append(name, String(item)));
+        else url.searchParams.set(name, String(value));
+      }
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(config.headers ?? {})) {
+        if (forbiddenHeader(name)) throw new Error(`helpers.axios 不允许设置请求头：${name}`);
+        if (value !== null && value !== undefined) headers.set(name, String(value));
+      }
+      let body: BodyInit | undefined;
+      if (config.data !== null && config.data !== undefined) {
+        if (typeof config.data === "string" || config.data instanceof Blob
+          || config.data instanceof FormData || config.data instanceof URLSearchParams) body = config.data;
+        else {
+          body = JSON.stringify(config.data);
+          if (!headers.has("content-type")) headers.set("content-type", "application/json");
         }
+        const size = typeof body === "string" ? new TextEncoder().encode(body).byteLength
+          : body instanceof Blob ? body.size
+            : body instanceof URLSearchParams ? new TextEncoder().encode(body.toString()).byteLength
+              : body instanceof FormData ? (await new Response(body).arrayBuffer()).byteLength : null;
+        if (size !== null && size > maxRequestBytes) throw new Error("helpers.axios 请求体超过 256KB 限制");
+      }
+      const method = String(config.method ?? (body === undefined ? "GET" : "POST")).toUpperCase();
+      const timeout = Math.max(1_000, Math.min(60_000, Number(config.timeout) || 10_000));
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      try {
+        const response = await fetch(url, {
+          method, headers, ...(body === undefined ? {} : { body }), signal: controller.signal,
+          credentials: config.withCredentials ? "include" : "same-origin",
+        });
+        const reader = response.body?.getReader();
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            total += value.byteLength;
+            if (total > maxResponseBytes) {
+              await reader.cancel();
+              throw new Error("helpers.axios 响应体超过 2MB 限制");
+            }
+            chunks.push(value);
+          }
+        }
+        const bytes = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+        const text = new TextDecoder().decode(bytes);
+        let data: unknown = text;
+        if (config.responseType === "json" || (!config.responseType && response.headers.get("content-type")?.includes("json"))) {
+          data = text ? JSON.parse(text) : null;
+        }
+        const result = {
+          data, status: response.status, statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()), url: response.url,
+        };
+        if (!response.ok) {
+          const error = new Error(`helpers.axios 请求失败：HTTP ${response.status}`) as Error & { response?: AxiosResponse };
+          error.response = result;
+          throw error;
+        }
+        return result;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") throw new Error(`helpers.axios 请求超过 ${timeout}ms`);
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    };
+    const axiosApi = Object.freeze(Object.assign(axios, {
+      get: (url: string, config: AxiosConfig = {}) => axios({ ...config, url, method: "GET" }),
+      delete: (url: string, config: AxiosConfig = {}) => axios({ ...config, url, method: "DELETE" }),
+      post: (url: string, data?: unknown, config: AxiosConfig = {}) => axios({ ...config, url, data, method: "POST" }),
+      put: (url: string, data?: unknown, config: AxiosConfig = {}) => axios({ ...config, url, data, method: "PUT" }),
+      patch: (url: string, data?: unknown, config: AxiosConfig = {}) => axios({ ...config, url, data, method: "PATCH" }),
+    }));
+    const helpers = Object.freeze({
+      currentUrl(): string { return location.href; },
+      async goto(url: string): Promise<never> {
+        const target = new URL(String(url), location.href);
+        if (target.protocol !== "http:" && target.protocol !== "https:") throw new Error("helpers.goto 仅支持 HTTP(S) 地址");
+        throw new NavigationRequest(target.href);
+      },
+      axios: axiosApi,
+      log(...values: unknown[]): void {
+        if (logsTruncated || logEntries.length >= 100) { markLogsTruncated(); return; }
         const original = formatLog(values);
         const encoded = new TextEncoder().encode(original);
         const suffix = new TextEncoder().encode("…");
         const message = encoded.byteLength <= 2_048 ? original
           : `${new TextDecoder().decode(encoded.slice(0, Math.max(0, 2_048 - suffix.byteLength)))}…`;
         const bytes = new TextEncoder().encode(message).byteLength;
-        if (logBytes + bytes > 32_768) {
-          markLogsTruncated();
-          return;
-        }
-        const entry = { index: logEntries.length, atMs: Date.now() - scriptStartedAt, message };
-        logEntries.push(entry);
-        logBytes += bytes;
+        if (logBytes + bytes > 32_768) { markLogsTruncated(); return; }
+        const entry = { index: logIndexOffset + logEntries.length, atMs: Date.now() - scriptStartedAt, message };
+        logEntries.push(entry); logBytes += bytes;
         if (message !== original) markLogsTruncated();
         void logBridge(entry);
       },
-      exists(selector: string): boolean {
-        return document.querySelector(selector) !== null;
-      },
-      count(selector: string): number {
-        return document.querySelectorAll(selector).length;
-      },
-      text(selector: string): string {
-        return (requireElement(selector).textContent ?? "").trim();
-      },
-      texts(selector: string): string[] {
-        return [...document.querySelectorAll(selector)].map((element) => (element.textContent ?? "").trim());
-      },
-      textsWithin(containerSelector: string, childSelector: string): string[][] {
-        return [...document.querySelectorAll(containerSelector)].map((container) =>
-          [...container.querySelectorAll(childSelector)].map((element) => (element.textContent ?? "").trim()),
-        );
-      },
+      exists: (selector: string): boolean => document.querySelector(selector) !== null,
+      count: (selector: string): number => document.querySelectorAll(selector).length,
+      text: (selector: string): string => (requireElement(selector).textContent ?? "").trim(),
+      texts: (selector: string): string[] => [...document.querySelectorAll(selector)].map((element) => (element.textContent ?? "").trim()),
+      textsWithin: (containerSelector: string, childSelector: string): string[][] =>
+        [...document.querySelectorAll(containerSelector)].map((container) =>
+          [...container.querySelectorAll(childSelector)].map((element) => (element.textContent ?? "").trim())),
       value(selector: string): string {
         const element = requireElement(selector);
-        if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement)) {
-          throw new Error(`元素不支持读取值：${selector}`);
-        }
+        if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement)) throw new Error(`元素不支持读取值：${selector}`);
         return element.value;
       },
-      attr(selector: string, name: string): string | null {
-        return requireElement(selector).getAttribute(String(name));
-      },
+      attr: (selector: string, name: string): string | null => requireElement(selector).getAttribute(String(name)),
       nextText(selector: string): string {
         const sibling = requireElement(selector).nextElementSibling;
         if (!sibling) throw new Error(`元素没有下一个同级元素：${selector}`);
@@ -174,15 +276,12 @@ export async function executeScriptRule(
       },
       async fill(selector: string, value: unknown): Promise<void> {
         const element = requireElement(selector);
-        if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement)) {
-          throw new Error(`元素不支持填写：${selector}`);
-        }
+        if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement)) throw new Error(`元素不支持填写：${selector}`);
         const text = value === null || value === undefined ? "" : String(value);
         const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype
           : element instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
         const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
-        if (setter) setter.call(element, text);
-        else element.value = text;
+        if (setter) setter.call(element, text); else element.value = text;
         element.dispatchEvent(new Event("input", { bubbles: true }));
         element.dispatchEvent(new Event("change", { bubbles: true }));
         element.dispatchEvent(new FocusEvent("blur", { bubbles: false }));
@@ -200,62 +299,57 @@ export async function executeScriptRule(
         element.click();
       },
       async waitForSelector(selector: string, timeoutMs = 5_000): Promise<void> {
-        const timeout = Math.max(100, Math.min(60_000, Number(timeoutMs) || 5_000));
-        const start = Date.now();
-        while (!document.querySelector(selector)) {
-          if (Date.now() - start >= timeout) throw new Error(`等待页面元素超时：${selector}`);
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
+        const timeout = Math.max(100, Math.min(60_000, Number(timeoutMs) || 5_000)); const start = Date.now();
+        while (!document.querySelector(selector)) { if (Date.now() - start >= timeout) throw new Error(`等待页面元素超时：${selector}`); await new Promise((resolve) => setTimeout(resolve, 100)); }
       },
       async waitForText(selector: string, expected: unknown, timeoutMs = 5_000): Promise<void> {
-        const target = String(expected);
-        const timeout = Math.max(100, Math.min(60_000, Number(timeoutMs) || 5_000));
-        const start = Date.now();
-        while (((document.querySelector(selector)?.textContent ?? "").trim()).includes(target) === false) {
-          if (Date.now() - start >= timeout) throw new Error(`等待页面文本超时：${selector}`);
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
+        const target = String(expected); const timeout = Math.max(100, Math.min(60_000, Number(timeoutMs) || 5_000)); const start = Date.now();
+        while (!((document.querySelector(selector)?.textContent ?? "").trim()).includes(target)) { if (Date.now() - start >= timeout) throw new Error(`等待页面文本超时：${selector}`); await new Promise((resolve) => setTimeout(resolve, 100)); }
       },
       async waitForTextChange(selector: string, previousText: unknown, timeoutMs = 5_000): Promise<void> {
-        const previous = String(previousText ?? "").trim();
-        const timeout = Math.max(100, Math.min(60_000, Number(timeoutMs) || 5_000));
-        const start = Date.now();
-        while (((document.querySelector(selector)?.textContent ?? "").trim()) === previous) {
-          if (Date.now() - start >= timeout) throw new Error(`等待页面文本变化超时：${selector}`);
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
+        const previous = String(previousText ?? "").trim(); const timeout = Math.max(100, Math.min(60_000, Number(timeoutMs) || 5_000)); const start = Date.now();
+        while (((document.querySelector(selector)?.textContent ?? "").trim()) === previous) { if (Date.now() - start >= timeout) throw new Error(`等待页面文本变化超时：${selector}`); await new Promise((resolve) => setTimeout(resolve, 100)); }
       },
-      scrollIntoView(selector: string): void {
-        requireElement(selector).scrollIntoView({ block: "center", inline: "nearest" });
-      },
-      async sleep(milliseconds: number): Promise<void> {
-        const delay = Math.max(0, Math.min(3_000, Number(milliseconds) || 0));
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      },
+      scrollIntoView: (selector: string): void => requireElement(selector).scrollIntoView({ block: "center", inline: "nearest" }),
+      async sleep(milliseconds: number): Promise<void> { await new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.min(3_000, Number(milliseconds) || 0)))); },
     });
-    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (
-      ...parameters: string[]
-    ) => (...values: unknown[]) => Promise<unknown>;
+    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (...parameters: string[]) => (...values: unknown[]) => Promise<unknown>;
     const runnable = new AsyncFunction("application", "applications", "helpers", `"use strict";\n${source}`);
     try {
       const output = await runnable(freeze(application), freeze(allApplications), helpers);
-      return { ok: true as const, output, logs: logEntries, logsTruncated };
+      return { kind: "success" as const, output, logs: logEntries, logsTruncated };
     } catch (error) {
-      return {
-        ok: false as const,
-        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-        logs: logEntries,
-        logsTruncated,
-      };
+      if (error instanceof NavigationRequest) return { kind: "navigate" as const, url: error.url, logs: logEntries, logsTruncated };
+      return { kind: "failure" as const, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error), logs: logEntries, logsTruncated };
     }
   }, {
-    source: definition.script,
-    application: structuredClone(primary),
-    allApplications: structuredClone(applications),
-    logBridgeName,
-    formatLogSource: formatScriptLogValues.toString(),
-    scriptStartedAt: startedAt,
+    source: definition.script, application: structuredClone(primary), allApplications: structuredClone(applications),
+    logBridgeName, formatLogSource: formatScriptLogValues.toString(), scriptStartedAt: startedAt,
+    logIndexOffset, maxRequestBytes: MAX_HTTP_REQUEST_BYTES, maxResponseBytes: MAX_HTTP_RESPONSE_BYTES,
   });
+  const workflow = async (): Promise<ScriptRuleExecution> => {
+    let navigationCount = 0;
+    while (true) {
+      const envelope = await evaluateOnce(logCollector.snapshot().logs.length);
+      logCollector.merge(envelope.logs, envelope.logsTruncated);
+      if (envelope.kind === "navigate") {
+        if (navigationCount >= MAX_SCRIPT_NAVIGATIONS) throw new Error(`页面脚本跳转超过 ${MAX_SCRIPT_NAVIGATIONS} 次限制`);
+        if (!hostnameMatches(definition, envelope.url)) throw new Error(`helpers.goto 不允许跳转到规则范围外的域名：${new URL(envelope.url).hostname}`);
+        const remaining = definition.timeoutMs - (Date.now() - startedAt);
+        if (remaining <= 0) throw new Error(`页面脚本执行超过 ${definition.timeoutMs}ms`);
+        await page.goto(envelope.url, { waitUntil: "domcontentloaded", timeout: remaining });
+        if (!hostnameMatches(definition, page.url())) throw new Error(`helpers.goto 跳转后离开了规则范围：${page.url()}`);
+        navigationCount += 1;
+        continue;
+      }
+      const snapshot = logCollector.snapshot();
+      if (envelope.kind === "failure") throw new ScriptRuleExecutionError(envelope.error, Date.now() - startedAt, snapshot.logs, snapshot.logsTruncated);
+      return {
+        ruleId: rule.id, ruleVersion: rule.version, durationMs: Date.now() - startedAt,
+        results: normalizeScriptOutput(envelope.output, applications), logs: snapshot.logs, logsTruncated: snapshot.logsTruncated,
+      };
+    }
+  };
   const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
       void page.close().catch(() => {});
@@ -269,25 +363,7 @@ export async function executeScriptRule(
     }, definition.timeoutMs);
   });
   try {
-    const envelope = await Promise.race([evaluation, timeout]);
-    logCollector.merge(envelope.logs, envelope.logsTruncated);
-    const snapshot = logCollector.snapshot();
-    if (!envelope.ok) {
-      throw new ScriptRuleExecutionError(
-        envelope.error,
-        Date.now() - startedAt,
-        snapshot.logs,
-        snapshot.logsTruncated,
-      );
-    }
-    return {
-      ruleId: rule.id,
-      ruleVersion: rule.version,
-      durationMs: Date.now() - startedAt,
-      results: normalizeScriptOutput(envelope.output, applications),
-      logs: snapshot.logs,
-      logsTruncated: snapshot.logsTruncated,
-    };
+    return await Promise.race([workflow(), timeout]);
   } catch (error) {
     if (error instanceof ScriptRuleExecutionError) throw error;
     const snapshot = logCollector.snapshot();

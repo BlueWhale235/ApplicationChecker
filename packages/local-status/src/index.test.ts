@@ -94,6 +94,33 @@ describe("local recognition", () => {
     expect(result.results[0]).toMatchObject({ matched: false, status: null });
   });
 
+  it("scopes Mokahr preference cards and recognizes multiple applications independently", () => {
+    const result = recognizeLocalPage(snapshot("https://app.mokahr.com/campus-recruitment/sungrow/94416", [
+      node(1, "", 0, null, ["preference-card"]),
+      node(2, "\u56fd\u5185\u5ba2\u6237\u7ecf\u7406", 10, 1, ["preference-top"]),
+      node(3, "\u6295\u9012\u6210\u529f", 50, 1),
+      node(4, "", 120, null, ["preference-card"]),
+      node(5, "\u3010\u63d0\u524d\u6279\u3011\u6d77\u5916\u6218\u7565\u5927\u5ba2\u6237\u670d\u52a1\u4e13\u5458", 130, 4, ["preference-top"]),
+      node(6, "\u6682\u4e0d\u5339\u914d", 170, 4),
+    ]), [
+      { id: "job-1", jobTitle: "\u56fd\u5185\u5ba2\u6237\u7ecf\u7406" },
+      { id: "job-2", jobTitle: "\u3010\u63d0\u524d\u6279\u3011\u6d77\u5916\u6218\u7565\u5927\u5ba2\u6237\u670d\u52a1\u4e13\u5458" },
+    ], {
+      screening: [],
+      screening_passed: [],
+      interview_pending: [],
+      interviewed: [],
+      signing_pending: [],
+      offer: [],
+      rejected: ["\u4e0d\u5339\u914d"],
+    });
+
+    expect(result.results).toMatchObject([
+      { applicationId: "job-1", matched: true, rawStatus: "\u6295\u9012\u6210\u529f", status: "screening" },
+      { applicationId: "job-2", matched: true, rawStatus: "\u4e0d\u5339\u914d", status: "rejected" },
+    ]);
+  });
+
   it("reports blank pages as unmatched without changing the application status", () => {
     const result = recognizeLocalPage(snapshot("https://app.zhiye.com/", [], " "), [{ id: "job-1", jobTitle: "产品经理" }]);
     expect(result).toMatchObject({ pageType: "blank" });

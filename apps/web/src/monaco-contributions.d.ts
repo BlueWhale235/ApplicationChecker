@@ -10,3 +10,4 @@ declare module "monaco-editor/editor/contrib/snippet/browser/snippetController2"
 declare module "monaco-editor/editor/contrib/suggest/browser/suggestController";
 declare module "monaco-editor/editor/standalone/browser/quickAccess/standaloneCommandsQuickAccess";
 declare module "monaco-editor/editor/standalone/browser/quickAccess/standaloneHelpQuickAccess";
+declare module "monaco-editor/language/json/monaco.contribution";

@@ -22,9 +22,9 @@ import {
   scriptRuleDefinitionSignature,
   scriptRuleDialogSignature,
 } from "./rule-studio-script";
-import { highlightJavaScript } from "./rule-studio-syntax";
 
 const ScriptRuleEditorDialog = defineAsyncComponent(() => import("../components/ScriptRuleEditorDialog.vue"));
+const MonacoJsonEditor = defineAsyncComponent(() => import("../components/MonacoJsonEditor.vue"));
 
 defineProps<{ busy: boolean }>();
 const emit = defineEmits<{
@@ -99,9 +99,9 @@ const draftDefinition = ref<SelectorParserRuleDefinition | null>(null);
 const draftErrors = ref<string[]>([]);
 const editingRuleId = ref<string | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
-const selectorJsonHighlight = ref<HTMLElement | null>(null);
 const selectorJsonMode = ref(false);
 const selectorJson = ref("");
+const initialSelectorSignature = ref("");
 const selectedExample = ref<keyof typeof SCRIPT_EXAMPLES>("query");
 const editor = reactive<{
   mode: RuleMode;
@@ -133,9 +133,9 @@ const applicationItems = computed(() => checkGroupOptions.value.map((item) => ({
 })));
 const filteredRules = computed(() => {
   const query = ruleQuery.value.trim().toLocaleLowerCase();
-  if (!query) return rules.value;
-  return rules.value.filter((rule) =>
-    `${rule.name} ${rule.definition.hostname} ${rule.definition.pathname}`.toLocaleLowerCase().includes(query));
+  const filtered = query ? rules.value.filter((rule) =>
+    `${rule.name} ${rule.definition.hostname} ${rule.definition.pathname}`.toLocaleLowerCase().includes(query)) : rules.value;
+  return [...filtered].sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
 });
 const selectedNodes = computed(() => new Set([
   selectedTitleNodeId.value,
@@ -151,8 +151,16 @@ const scriptSignature = computed(() => scriptRuleDefinitionSignature({
   pathname: editor.pathname,
   timeoutMs: editor.timeoutMs,
 }));
-const highlightedSelectorJson = computed(() => highlightJavaScript(selectorJson.value));
 const selectorJsonResult = computed(() => parseSelectorRuleJson(selectorJson.value));
+const selectorSignature = computed(() => JSON.stringify({
+  name: editor.name,
+  priority: editor.priority,
+  enabled: editor.enabled,
+  definition: selectorJsonMode.value ? selectorJson.value : draftDefinition.value,
+}));
+const selectorDirty = computed(() => Boolean(editingRuleId.value
+  && initialSelectorSignature.value
+  && initialSelectorSignature.value !== selectorSignature.value));
 const scriptTimeoutValid = computed(() => Number.isInteger(editor.timeoutMs)
   && editor.timeoutMs >= 1_000 && editor.timeoutMs <= 60_000);
 const canSave = computed(() => editor.mode === "selector"
@@ -177,6 +185,14 @@ function describeNode(node: LocalDomNode | undefined): string {
   if (!node) return "尚未选择";
   const marker = [node.tag, node.role, ...node.classes, node.dataStatus, node.ariaCurrent].filter(Boolean).join(".");
   return `${node.text || "(无文本)"} · ${marker}`;
+}
+function formatRuleUpdatedAt(value: string): string {
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(new Date(value));
+}
+function fullRuleUpdatedAt(value: string): string {
+  return new Date(value).toLocaleString("zh-CN", { hour12: false });
 }
 function nodeById(id: number | null): LocalDomNode | undefined {
   return previewData.value?.snapshot.nodes.find((node) => node.id === id);
@@ -204,6 +220,7 @@ function resetEditor(): void {
   clearSelectorDraft();
   clearAuthoringTest();
   initialScriptSignature.value = "";
+  initialSelectorSignature.value = "";
   editingRuleId.value = null;
   selectorJsonMode.value = false;
   selectorJson.value = "";
@@ -454,12 +471,16 @@ async function saveRule(): Promise<void> {
       ? await api.updateParserRule(editingRuleId.value, body)
       : await api.createParserRule(body);
     await loadRules();
+    editingRuleId.value = savedRule.id;
     if (editor.mode === "script") {
-      editingRuleId.value = savedRule.id;
       initialScriptSignature.value = scriptSignature.value;
       await nextTick();
       initialScriptDialogSignature.value = currentScriptDialogSignature.value;
-    } else resetEditor();
+    } else {
+      if (!selectorJsonMode.value && savedRule.definition.kind === "selector") draftDefinition.value = savedRule.definition;
+      await nextTick();
+      initialSelectorSignature.value = selectorSignature.value;
+    }
     emit("notice", wasEditing ? "解析规则已更新" : "解析规则已保存");
   } catch (value) { emit("failure", value instanceof Error ? value.message : "保存规则失败"); }
 }
@@ -493,6 +514,8 @@ async function editRule(rule: AssistedParserRule): Promise<void> {
   if (rule.definition.kind === "selector") {
     selectorJsonMode.value = true;
     selectorJson.value = JSON.stringify(rule.definition, null, 2);
+    await nextTick();
+    initialSelectorSignature.value = selectorSignature.value;
   }
 }
 async function toggleRule(rule: AssistedParserRule): Promise<void> {
@@ -515,12 +538,6 @@ function applyExample(): void {
   editor.script = SCRIPT_EXAMPLES[selectedExample.value].code;
   scriptTestResult.value = null;
   lastTestedScriptSignature.value = "";
-}
-function syncSelectorJsonScroll(event: Event): void {
-  const editorElement = event.currentTarget as HTMLTextAreaElement;
-  if (!selectorJsonHighlight.value) return;
-  selectorJsonHighlight.value.scrollTop = editorElement.scrollTop;
-  selectorJsonHighlight.value.scrollLeft = editorElement.scrollLeft;
 }
 async function exportRules(): Promise<void> {
   try { downloadRules(await api.exportParserRules(), `application-checker-parser-rules-${new Date().toISOString().slice(0, 10)}.json`); }
@@ -604,7 +621,10 @@ onBeforeUnmount(() => {
             <p class="rule-scope"><i class="mdi mdi-link-variant"></i><span>{{ rule.definition.hostname }}{{ rule.definition.pathname }}</span></p>
             <div class="rule-meta-row">
               <span>优先级 <b>{{ rule.priority }}</b></span>
-              <span class="rule-state" :class="{ off: !rule.enabled }"><i class="mdi mdi-circle"></i>{{ rule.enabled ? "已启用" : "已停用" }}</span>
+              <span class="rule-meta-end">
+                <time :datetime="rule.updatedAt" :title="`更新时间：${fullRuleUpdatedAt(rule.updatedAt)}`">{{ formatRuleUpdatedAt(rule.updatedAt) }}</time>
+                <span class="rule-state" :class="{ off: !rule.enabled }"><i class="mdi mdi-circle"></i>{{ rule.enabled ? "已启用" : "已停用" }}</span>
+              </span>
             </div>
             <div class="rule-actions">
               <button @click="editRule(rule)">编辑</button><button @click="exportRule(rule)">导出</button>
@@ -620,6 +640,9 @@ onBeforeUnmount(() => {
       <main class="editor">
         <div class="mode-heading">
           <div><strong>{{ selectorJsonMode ? "点选规则 JSON" : "点选规则" }}</strong><small>{{ selectorJsonMode ? "直接编辑" : "默认" }}</small></div>
+          <span v-if="editingRuleId && editor.mode === 'selector'" class="save-state-pill" :class="{ dirty: selectorDirty }">
+            <i class="mdi" :class="selectorDirty ? 'mdi-circle-medium' : 'mdi-check-circle-outline'"></i>{{ selectorDirty ? "未保存" : "已保存" }}
+          </span>
         </div>
         <div v-if="!selectorJsonMode" class="preview-toolbar">
           <v-autocomplete v-model="selectedApplicationId" v-model:search="checkGroupSearch" :items="applicationItems"
@@ -632,8 +655,12 @@ onBeforeUnmount(() => {
           <section class="json-panel">
             <div class="json-toolbar"><div><i class="mdi mdi-code-json"></i><strong>规则定义 JSON</strong></div><span>修改后直接保存</span></div>
             <div class="json-editor-shell">
-              <pre ref="selectorJsonHighlight" class="json-highlight" aria-hidden="true" v-html="highlightedSelectorJson"></pre>
-              <textarea v-model="selectorJson" class="json-editor" spellcheck="false" aria-label="点选规则 JSON" @scroll="syncSelectorJsonScroll" />
+              <Suspense>
+                <MonacoJsonEditor v-model="selectorJson" @save="saveRule" />
+                <template #fallback>
+                  <div class="json-editor-loading"><v-progress-circular indeterminate color="primary" size="30" width="3" /><span>正在加载编辑器…</span></div>
+                </template>
+              </Suspense>
             </div>
             <div class="json-status" :class="{ invalid: selectorJsonResult.error }">
               <i class="mdi" :class="selectorJsonResult.error ? 'mdi-alert-circle-outline' : 'mdi-check-circle-outline'"></i>
@@ -773,6 +800,8 @@ onBeforeUnmount(() => {
 .rule-scope span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rule-meta-row { display: flex; align-items: center; justify-content: space-between; color: #839089; font-size: 11px; }
 .rule-meta-row b { color: #5f6f68; font-weight: 500; }
+.rule-meta-end { display: inline-flex; align-items: center; gap: 9px; }
+.rule-meta-end time { color: #8b958f; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rule-state { display: inline-flex; align-items: center; gap: 4px; color: #388066; }
 .rule-state i { font-size: 7px; }
 .rule-state.off { color: #99938a; }
@@ -785,6 +814,8 @@ onBeforeUnmount(() => {
 .mode-heading { justify-content: space-between; margin-bottom: 12px; }
 .mode-heading div { display: flex; align-items: center; gap: 8px; }
 .mode-heading small { padding: 2px 7px; border-radius: 10px; background: #eee8dd; color: #796d5b; }
+.save-state-pill { display: inline-flex; align-items: center; gap: 4px; padding: 4px 9px; border: 1px solid #b9d4c9; border-radius: 999px; background: #edf6f2; color: #2e725c; font-size: 11px; }
+.save-state-pill.dirty { border-color: #e0c69e; background: #fff6e8; color: #a16722; }
 .mode-heading button, .advanced-link { border: 0; background: transparent; color: #28735c; }
 .preview-toolbar { margin-bottom: 16px; }
 .preview-toolbar .v-input { max-width: 720px; }
@@ -825,13 +856,7 @@ onBeforeUnmount(() => {
 .json-toolbar div { display: flex; align-items: center; gap: 8px; }
 .json-toolbar span { color: #7b8a84; font-size: 12px; }
 .json-editor-shell { position: relative; height: clamp(480px, calc(100vh - 330px), 720px); background: #18231f; }
-.json-highlight, .json-editor { width: 100%; height: 100%; min-height: 0; margin: 0; padding: 16px; border: 0; font: 13px/1.65 Consolas, monospace; tab-size: 2; white-space: pre; overflow: auto; }
-.json-highlight { position: absolute; inset: 0; overflow: hidden; color: #d9e8e2; pointer-events: none; }
-.json-editor { position: relative; display: block; resize: none; outline-offset: -2px; background: transparent; color: transparent; caret-color: #e9fff5; -webkit-text-fill-color: transparent; }
-.json-editor::selection { background: #4a9d7a55; }
-.json-highlight :deep(.syntax-keyword) { color: #f6a65f; font-weight: 600; }
-.json-highlight :deep(.syntax-string) { color: #b8d98c; }
-.json-highlight :deep(.syntax-number) { color: #e6c07b; }
+.json-editor-loading { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; flex-direction: column; gap: 10px; color: #9bb0a7; font-size: 12px; }
 .json-status { justify-content: flex-start; border-top: 1px solid #d5e6de; font-size: 12px; }
 .json-status.invalid { background: #fff0ed; color: #a8483b; }
 .json-side { min-width: 0; }

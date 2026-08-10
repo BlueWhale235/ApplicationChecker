@@ -189,13 +189,13 @@ API Key 使用 AES-256-GCM 加密保存。未配置 AI 或模型调用失败时�
 - **点选规则**：新建时加载招聘页面截图，依次点选岗位标题和当前状态，生成稳定的 DOM 定位规则。
 - **页面脚本**：适合需要填写姓名/手机号、点击查询，或同页包含多个岗位等复杂页面。脚本可读取只读的 `application`、`applications`，并使用 `helpers` 操作页面。
 
-已有点选规则点击“编辑”后会直接打开规则定义 JSON，可修改 `hostname`、`pathname`、`container`、`title` 和 `status` 等字段。编辑器会即时检查 JSON 格式、规则版本和必填字段；保存时 API 还会校验 URLPattern、定位器长度及不安全内容。直接编辑 JSON 不会重新执行页面测试。
+已有点选规则点击“编辑”后会直接使用绿色主题的 Monaco Editor 打开规则定义 JSON，可修改 `hostname`、`pathname`、`container`、`title` 和 `status` 等字段。编辑器支持行号、搜索、折叠、格式化、括号匹配和 JSON 语法诊断；现有规则解析器仍会检查规则版本和必填字段，保存时 API 还会校验 URLPattern、定位器长度及不安全内容。直接编辑 JSON 不会重新执行页面测试。点选规则保存后会保持当前编辑状态，并显示“已保存”，由用户手动关闭或切换规则。
 
 ### 编辑页面脚本规则
 
 点击脚本规则卡片中的“编辑”后，会打开覆盖整个应用的脚本工作区：左侧使用 Monaco Editor 编辑 JavaScript，测试结果、岗位映射和调试输出固定在编辑器下方；右侧集中显示规则设置、投递字段和当前页面投递。点击投递字段会在当前光标位置插入 `application.<field>`。Monaco 支持行号、搜索替换、括号配对、格式化和错误提示；命令面板等内置界面使用中文，`application`、`applications`、`helpers` 会以专用颜色高亮，并提供中文自动补全与悬浮说明。
 
-规则工作台和脚本工作区均按需加载。Monaco 的 JavaScript、CSS、语言服务 Worker 随便携版发布，仅在当前 WebView 会话首次打开脚本工作区时加载，因此离线也能使用，访问首页、使用点选规则或编辑点选 JSON 时不会加载 Monaco。关闭脚本工作区会销毁当前 editor、model、类型声明和监听器；已经下载到 WebView 会话中的异步分包可以在下次打开时复用。
+规则工作台和编辑器均按需加载。Monaco 的 JavaScript、JSON、CSS 与语言服务 Worker 随便携版发布，仅在当前 WebView 会话首次打开相应编辑器时加载，因此离线也能使用；访问首页或只使用页面点选流程时不会加载 Monaco。关闭编辑区域会销毁当前 editor、model、类型声明和监听器；已经下载到 WebView 会话中的异步分包可以在下次打开时复用。
 
 脚本模式加载页面后会在 Runner 中保留一个隐藏的 Edge 页面，连续点击“运行测试”将复用当前页面状态，不再重复启动浏览器、导航、截图或提取整页快照。需要恢复页面初始状态时可再次点击“加载页面”。关闭脚本工作区、切回点选规则、离开规则工作台，或页面空闲 10 分钟后会自动释放该页面；脚本异常、超时、跳转到规则域名之外或进入登录页时也会立即释放。应用同时最多保留一个脚本预览页面，以限制内存占用。保存脚本规则后编辑器会保持打开，方便继续测试和调整。
 
@@ -223,6 +223,23 @@ API Key 使用 AES-256-GCM 加密保存。未配置 AI 或模型调用失败时�
 右侧“规则设置”区域会提示当前修改能否直接保存，或是否需要重新测试。这样既方便修改展示名称等普通信息，也避免未经验证的脚本或执行范围直接生效。
 
 脚本编辑器工具栏提供“API 文档”入口。弹窗可搜索并查看 `application`、`applications` 的全部只读字段，所有 `helpers` 方法的调用签名、等待限制和使用示例，以及脚本返回值结构与大小限制，无需离开规则工作台查询源码。
+
+页面脚本可通过 `helpers.currentUrl()` 获取当前完整地址，并使用 `helpers.goto(url)` 跳转到同一规则 hostname 范围内的其他页面。跳转完成后脚本会从开头重新执行，因此应先判断当前地址以避免循环；单次执行最多允许 3 次跳转，跳转与重新执行共同受规则总超时限制。
+
+`helpers.axios` 提供 Axios 风格的 `get`、`post`、`put`、`patch`、`delete` 和配置对象调用方式，支持查询参数、请求头、JSON 请求体、超时、响应类型及 `withCredentials`。请求在当前 Edge 页面网络环境中发出，可以访问任意 HTTP(S) 地址，但仍遵循浏览器的 CORS、CSP、Cookie 与 SameSite 策略；默认只向同源请求携带 Cookie。禁止脚本主动设置 `Cookie`、`Host`、`Origin`、`Referer` 和 `Sec-*` 请求头，请求体最多 256KB，响应体最多 2MB。
+
+```js
+if (!helpers.currentUrl().includes("/history")) {
+  await helpers.goto("/history");
+}
+
+const { data } = await helpers.axios.get("/api/application/status", {
+  params: { id: application.id },
+  timeout: 8000
+});
+```
+
+规则工作台左侧列表在搜索过滤后按更新时间降序展示，并在启用状态左侧显示更新时间。该展示顺序不会改变正式检查时按规则优先级进行的匹配顺序。
 
 页面脚本可以通过 `helpers.log(...values)` 输出临时调试信息：
 

@@ -8,12 +8,14 @@ describe("Monaco script API declarations", () => {
     expect(SCRIPT_EDITOR_EXTRA_LIB).toContain("declare const helpers");
 
     for (const helper of [
-      "log", "text", "texts", "textsWithin", "value", "attr", "nextText",
+      "currentUrl", "goto", "log", "text", "texts", "textsWithin", "value", "attr", "nextText",
       "closestText", "exists", "count", "fill", "select", "click",
       "waitForSelector", "waitForText", "waitForTextChange", "scrollIntoView", "sleep",
     ]) {
       expect(SCRIPT_EDITOR_EXTRA_LIB).toContain(`${helper}(`);
     }
+    expect(SCRIPT_EDITOR_EXTRA_LIB).toContain("readonly axios: ScriptAxios");
+    expect(SCRIPT_EDITOR_EXTRA_LIB).toContain("get<T = unknown>");
   });
 
   it("provides Chinese hover documentation for fields and helpers", () => {

@@ -18,7 +18,7 @@ import {
   type StatusMappingRule,
 } from "@application-checker/status-mapping";
 
-export const LOCAL_PARSER_VERSION = "1.0.0";
+export const LOCAL_PARSER_VERSION = "1.0.2";
 export const LOCAL_AUTO_APPLY_THRESHOLD = 0.9;
 export const ASSISTED_RULE_SCHEMA_VERSION = 2;
 
@@ -69,7 +69,7 @@ const adapters: ParserAdapter[] = [
       { hostname: "*.mokahr.com", pathname: "/*" },
     ],
     domFeatures: ["mokahr", "moka", "Moka"],
-    containerHints: ["application", "delivery", "process", "progress", "resume"],
+    containerHints: ["preference", "application", "delivery", "process", "progress", "resume"],
   },
 ];
 
@@ -471,9 +471,8 @@ function contextForTitle(
     const marker = normalizeRecognitionText(`${node.classes.join(" ")} ${node.role ?? ""}`);
     return adapter.containerHints.some((hint) => marker.includes(normalizeRecognitionText(hint)));
   });
-  const rootId = hintedAncestors[0];
-  const descendants = new Set<number>();
-  if (rootId !== undefined) {
+  for (const rootId of hintedAncestors) {
+    const descendants = new Set<number>();
     descendants.add(rootId);
     let changed = true;
     while (changed && descendants.size < 400) {
@@ -485,14 +484,34 @@ function contextForTitle(
         }
       }
     }
+    const sameContainer = snapshot.nodes.filter((node) => descendants.has(node.id));
+    const root = byId.get(rootId);
+    const rootMarker = normalizeRecognitionText(`${root?.classes.join(" ") ?? ""} ${root?.role ?? ""}`);
+    const isMokahrPreferenceCard = adapter.id === "mokahr"
+      && rootMarker.includes("preference")
+      && sameContainer.some((node) => normalizeRecognitionText(node.text) === normalizeRecognitionText("\u72b6\u6001"));
+    if (sameContainer.length > 1 && sameContainer.length < 400
+      && (isMokahrPreferenceCard || statusMatches(sameContainer, statusRules).length)) {
+      return sameContainer;
+    }
   }
-  const sameContainer = snapshot.nodes.filter((node) => descendants.has(node.id));
-  if (sameContainer.length > 1 && sameContainer.length < 400 && statusMatches(sameContainer, statusRules).length) return sameContainer;
   return snapshot.nodes.filter((node) =>
     node.y >= titleNode.y - 30
     && node.y <= titleNode.y + Math.max(260, titleNode.height * 8)
     && node.x < titleNode.x + Math.max(900, titleNode.width * 5)
     && node.x + node.width > titleNode.x - 100);
+}
+
+function statusRulesForAdapter(adapter: ParserAdapter, configured?: StatusMappings | null): StatusMappingRule[] {
+  const rules = createStatusMappingRules(configured).map((rule) => ({ ...rule, terms: [...rule.terms] }));
+  if (adapter.id === "mokahr") {
+    const screening = rules.find((rule) => rule.id === "screening");
+    const submitted = "\u6295\u9012\u6210\u529f";
+    if (screening && !screening.terms.some((term) => normalizeRecognitionText(term) === normalizeRecognitionText(submitted))) {
+      screening.terms.unshift(submitted);
+    }
+  }
+  return rules;
 }
 
 function statusMatches(
@@ -649,7 +668,8 @@ export function recognizeLocalPage(
       fallbackReason: classification.evidence,
     };
   }
-  const results = candidates.map((candidate) => parseCandidate(snapshot, adapter, candidate, statusRules));
+  const adapterStatusRules = statusRulesForAdapter(adapter, customStatusMappings);
+  const results = candidates.map((candidate) => parseCandidate(snapshot, adapter, candidate, adapterStatusRules));
   return {
     adapterId: adapter.id,
     adapterVersion: adapter.version,

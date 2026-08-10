@@ -31,7 +31,45 @@ interface ScriptRuleResult {
   evidence?: string;
 }
 
+interface ScriptAxiosConfig {
+  /** 请求地址；支持相对当前页面的地址和 HTTP(S) 绝对地址。 */
+  url?: string;
+  method?: string;
+  baseURL?: string;
+  params?: Record<string, unknown>;
+  headers?: Record<string, unknown>;
+  data?: unknown;
+  /** 单次请求超时，范围 1000–60000ms，且不能突破规则总超时。 */
+  timeout?: number;
+  responseType?: "json" | "text";
+  /** 是否按浏览器规则向跨域请求携带凭据。 */
+  withCredentials?: boolean;
+}
+
+interface ScriptAxiosResponse<T = unknown> {
+  readonly data: T;
+  readonly status: number;
+  readonly statusText: string;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly url: string;
+}
+
+interface ScriptAxios {
+  <T = unknown>(config: ScriptAxiosConfig): Promise<ScriptAxiosResponse<T>>;
+  get<T = unknown>(url: string, config?: ScriptAxiosConfig): Promise<ScriptAxiosResponse<T>>;
+  delete<T = unknown>(url: string, config?: ScriptAxiosConfig): Promise<ScriptAxiosResponse<T>>;
+  post<T = unknown>(url: string, data?: unknown, config?: ScriptAxiosConfig): Promise<ScriptAxiosResponse<T>>;
+  put<T = unknown>(url: string, data?: unknown, config?: ScriptAxiosConfig): Promise<ScriptAxiosResponse<T>>;
+  patch<T = unknown>(url: string, data?: unknown, config?: ScriptAxiosConfig): Promise<ScriptAxiosResponse<T>>;
+}
+
 interface ScriptRuleHelpers {
+  /** 获取当前页面的完整 URL。 */
+  currentUrl(): string;
+  /** 跳转到规则 hostname 范围内的页面；加载后从脚本开头重新执行。 */
+  goto(url: string): Promise<never>;
+  /** Axios 风格 HTTP 请求；使用当前页面的浏览器网络环境。 */
+  readonly axios: ScriptAxios;
   /** 输出临时调试信息，仅在规则工作台测试结果中显示，不写入应用日志。 */
   log(...values: unknown[]): void;
   /** 判断当前页面是否存在匹配 CSS 选择器的元素。 */
