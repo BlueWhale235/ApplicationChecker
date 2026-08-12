@@ -167,6 +167,7 @@ export interface ScriptRuleApplication {
 export interface ScriptRuleOutputItem {
   applicationId: string;
   rawStatus: string;
+  directStatus?: ProgressStatus | "needs_login";
   evidence?: string;
 }
 

@@ -8,7 +8,7 @@ describe("Monaco script API declarations", () => {
     expect(SCRIPT_EDITOR_EXTRA_LIB).toContain("declare const helpers");
 
     for (const helper of [
-      "currentUrl", "goto", "log", "text", "texts", "textsWithin", "value", "attr", "nextText",
+      "currentUrl", "goto", "log", "status", "statusAll", "runSelectorRule", "text", "texts", "textsWithin", "value", "attr", "nextText",
       "closestText", "exists", "count", "fill", "select", "click",
       "waitForSelector", "waitForText", "waitForTextChange", "scrollIntoView", "sleep",
     ]) {

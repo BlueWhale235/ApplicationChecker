@@ -8,6 +8,8 @@ import {
   resolveParserAdapter,
   testAssistedRule,
   validateParserAdapters,
+  LOCAL_PARSER_VERSION,
+  MOKAHR_PARSER_VERSION,
   type ParserAdapter,
 } from "./index.js";
 
@@ -35,6 +37,13 @@ describe("path registry", () => {
     ["https://candidate.mokahr.com/applications/123", "mokahr"],
   ])("routes %s to %s without query/hash participation", (url, expected) => {
     expect(resolveParserAdapter(snapshot(url, [])).adapter?.id).toBe(expected);
+  });
+
+  it("uses an independent MokaHR 1.0.1 adapter version", () => {
+    expect(resolveParserAdapter(snapshot("https://app.mokahr.com/candidate/applications/deliver-query/sunnyoptical", [])).adapter?.version)
+      .toBe(MOKAHR_PARSER_VERSION);
+    expect(MOKAHR_PARSER_VERSION).toBe("1.0.1");
+    expect(resolveParserAdapter(snapshot("https://app.zhiye.com/personal/delivery", [])).adapter?.version).toBe(LOCAL_PARSER_VERSION);
   });
 
   it("returns no adapter for unsupported websites", () => {
@@ -119,6 +128,66 @@ describe("local recognition", () => {
       { applicationId: "job-1", matched: true, rawStatus: "\u6295\u9012\u6210\u529f", status: "screening" },
       { applicationId: "job-2", matched: true, rawStatus: "\u4e0d\u5339\u914d", status: "rejected" },
     ]);
+  });
+
+  it("uses only the current MokaHR timeline step and ignores future OFFER steps", () => {
+    const result = recognizeLocalPage(snapshot("https://app.mokahr.com/campus-recruitment/sunnyoptical/45602#/candidateHome/applications", [
+      node(1, "", 0, null, ["application-card"]),
+      node(2, "销售-国内客户", 20, 1),
+      node(3, "", 80, 1, ["timeline-step", "active"]),
+      node(4, "投递成功", 80, 3),
+      node(5, "简历分配", 80, 1, ["timeline-step"]),
+      node(6, "初筛", 80, 1, ["timeline-step"]),
+      node(7, "OFFER", 80, 1, ["timeline-step"]),
+      node(8, "拟录用", 80, 1, ["timeline-step"]),
+      node(9, "", 220, null, ["application-card"]),
+      node(10, "舜宇集团2027届校园大使", 240, 9),
+      node(11, "状态", 280, 9),
+      node(12, "暂不匹配", 280, 9),
+    ]), [
+      { id: "sales", jobTitle: "销售-国内客户" },
+      { id: "ambassador", jobTitle: "舜宇集团2027届校园大使" },
+    ]);
+    expect(result).toMatchObject({ adapterId: "mokahr", adapterVersion: "1.0.1" });
+    expect(result.results).toMatchObject([
+      { applicationId: "sales", matched: true, rawStatus: "投递成功", status: "screening" },
+      { applicationId: "ambassador", matched: true, rawStatus: "不匹配", status: "rejected" },
+    ]);
+  });
+
+  it("recognizes MokaHR target-view as the current timeline node", () => {
+    const result = recognizeLocalPage(snapshot("https://app.mokahr.com/campus-recruitment/sunnyoptical/45602#/candidateHome/applications", [
+      node(1, "", 0, null, ["application-card"]),
+      node(2, "销售-国内客户", 20, 1),
+      node(3, "1 投递成功", 80, 1, ["flow-container", "target-view"]),
+      node(4, "投递成功", 100, 3, ["flow-box-name"]),
+      node(5, "3 初筛", 80, 1, ["flow-container"]),
+      node(6, "初筛", 100, 5, ["flow-box-name"]),
+      node(7, "8 OFFER", 80, 1, ["flow-container"]),
+      node(8, "OFFER", 100, 7, ["flow-box-name"]),
+    ]), [{ id: "sales", jobTitle: "销售-国内客户" }]);
+    expect(result.results[0]).toMatchObject({ matched: true, rawStatus: "投递成功", status: "screening" });
+  });
+
+  it("recognizes the compact MokaHR deliver-query card", () => {
+    const result = recognizeLocalPage(snapshot("https://app.mokahr.com/candidate/applications/deliver-query/nuvoltatech", [
+      node(1, "", 100, null, ["application-card"]),
+      node(2, "【2027秋招】销售工程师", 120, 1),
+      node(3, "初筛", 120, 1),
+      node(4, "投递时间：2026-08-07", 160, 1),
+    ]), [{ id: "job-1", jobTitle: "【2027秋招】销售工程师" }]);
+    expect(result).toMatchObject({ adapterId: "mokahr", adapterVersion: "1.0.1" });
+    expect(result.results[0]).toMatchObject({ matched: true, rawStatus: "初筛", status: "screening" });
+  });
+
+  it("does not guess from an unmarked MokaHR future timeline", () => {
+    const result = recognizeLocalPage(snapshot("https://app.mokahr.com/campus-recruitment/example/1#/candidateHome/applications", [
+      node(1, "", 0, null, ["application-card"]),
+      node(2, "产品经理", 20, 1),
+      node(3, "初筛", 80, 1, ["timeline-step"]),
+      node(4, "OFFER", 80, 1, ["timeline-step"]),
+    ]), [{ id: "job-1", jobTitle: "产品经理" }]);
+    expect(result.results[0]).toMatchObject({ matched: false, status: null });
   });
 
   it("reports blank pages as unmatched without changing the application status", () => {
@@ -228,6 +297,26 @@ describe("page script recognition", () => {
         { applicationId: "job-1", matched: true, status: "interview_pending", confidence: 0.99 },
         { applicationId: "job-2", matched: false, status: null },
       ],
+    });
+  });
+
+  it("accepts direct progress and login statuses without text mapping", () => {
+    const direct = recognizeScriptExecution({
+      ruleId: "script-direct", ruleVersion: 1, durationMs: 5,
+      results: [{ applicationId: "job-1", rawStatus: "未设置", directStatus: "unset" }],
+      logs: [], logsTruncated: false,
+    }, [{ id: "job-1", jobTitle: "工程师" }]);
+    expect(direct.results[0]).toMatchObject({
+      matched: true, status: "unset", confidence: 1, statusRule: "script_direct:unset",
+    });
+
+    const login = recognizeScriptExecution({
+      ruleId: "script-login", ruleVersion: 1, durationMs: 5,
+      results: [{ applicationId: "job-1", rawStatus: "login_required", directStatus: "needs_login" }],
+      logs: [], logsTruncated: false,
+    }, [{ id: "job-1", jobTitle: "工程师" }]);
+    expect(login.results[0]).toMatchObject({
+      matched: false, rawStatus: "login_required", status: null, statusRule: "script_direct:needs_login",
     });
   });
 });

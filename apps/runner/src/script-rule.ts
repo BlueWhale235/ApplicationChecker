@@ -13,12 +13,17 @@ import {
   ScriptRuleLogCollector,
   type ScriptRuleLogPayload,
 } from "./script-rule-log.js";
+import { runSelectorRuleInPage } from "./script-selector-rule.js";
 
 const MAX_RESULT_BYTES = 64 * 1024;
 const MAX_HTTP_REQUEST_BYTES = 256 * 1024;
 const MAX_HTTP_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_SCRIPT_NAVIGATIONS = 3;
 const SCRIPT_LOG_BRIDGE = "__applicationCheckerScriptLog";
+const SCRIPT_DIRECT_STATUSES = new Set([
+  "unset", "screening", "screening_passed", "interview_pending", "interviewed",
+  "signing_pending", "offer", "rejected", "needs_login",
+]);
 
 export class ScriptRuleExecutionError extends Error {
   constructor(
@@ -70,11 +75,20 @@ export function normalizeScriptOutput(
     const source = item as Record<string, unknown>;
     const applicationId = typeof source.applicationId === "string" ? source.applicationId.trim() : "";
     const rawStatus = typeof source.rawStatus === "string" ? source.rawStatus.trim() : "";
+    const directStatus = typeof source.directStatus === "string" ? source.directStatus.trim() : "";
     if (!applicationIds.has(applicationId)) throw new Error(`脚本返回了未知岗位 ID：${applicationId || "(空)"}`);
     if (!rawStatus) throw new Error(`脚本返回的第 ${index + 1} 项缺少 rawStatus`);
     if (rawStatus.length > 500) throw new Error("脚本返回的 rawStatus 不能超过 500 个字符");
+    if (directStatus && !SCRIPT_DIRECT_STATUSES.has(directStatus)) {
+      throw new Error(`脚本返回了不支持的直接状态：${directStatus}`);
+    }
     const evidence = typeof source.evidence === "string" ? source.evidence.trim().slice(0, 2_000) : undefined;
-    return { applicationId, rawStatus, ...(evidence ? { evidence } : {}) };
+    return {
+      applicationId,
+      rawStatus,
+      ...(directStatus ? { directStatus: directStatus as NonNullable<ScriptRuleOutputItem["directStatus"]> } : {}),
+      ...(evidence ? { evidence } : {}),
+    };
   });
   if (new Set(normalized.map((item) => item.applicationId)).size !== normalized.length) {
     throw new Error("脚本不能为同一个岗位返回多条结果");
@@ -102,7 +116,7 @@ export async function executeScriptRule(
   let timer: NodeJS.Timeout | undefined;
   const evaluateOnce = (logIndexOffset: number) => page.evaluate(async ({
     source, application, allApplications, logBridgeName, formatLogSource, scriptStartedAt,
-    logIndexOffset, maxRequestBytes, maxResponseBytes,
+    logIndexOffset, maxRequestBytes, maxResponseBytes, selectorRuleSource,
   }) => {
     class NavigationRequest extends Error {
       constructor(readonly url: string) { super("页面脚本请求跳转"); }
@@ -125,6 +139,8 @@ export async function executeScriptRule(
     const logBridge = (globalThis as unknown as Record<string, (entry: unknown) => Promise<void>>)[logBridgeName];
     if (typeof logBridge !== "function") throw new Error("页面脚本调试日志桥不可用");
     const formatLog = new Function(`return (${formatLogSource})`)() as (values: unknown[]) => string;
+    const runSelectorRule = new Function(`return (${selectorRuleSource})`)() as
+      (definition: unknown, candidates: typeof allApplications) => ScriptRuleOutputItem[];
     const markLogsTruncated = (): void => {
       if (logsTruncated) return;
       logsTruncated = true;
@@ -251,6 +267,47 @@ export async function executeScriptRule(
         if (message !== original) markLogsTruncated();
         void logBridge(entry);
       },
+      status(status: string, options: { applicationId?: string; evidence?: string } = {}): ScriptRuleOutputItem {
+        const labels: Record<string, string> = {
+          unset: "未设置",
+          screening: "初筛",
+          screening_passed: "已过初筛",
+          interview_pending: "待面试",
+          interviewed: "已面试",
+          signing_pending: "待签约",
+          offer: "已收 OFFER",
+          rejected: "淘汰",
+          needs_login: "login_required",
+        };
+        if (!(status in labels)) throw new Error(`helpers.status 不支持状态：${status}`);
+        const applicationId = String(options.applicationId ?? application.id).trim();
+        if (!allApplications.some((item) => item.id === applicationId)) {
+          throw new Error(`helpers.status 收到未知岗位 ID：${applicationId || "(空)"}`);
+        }
+        const evidence = typeof options.evidence === "string" ? options.evidence.trim().slice(0, 2_000) : "";
+        return {
+          applicationId,
+          rawStatus: labels[status]!,
+          directStatus: status as NonNullable<ScriptRuleOutputItem["directStatus"]>,
+          ...(evidence ? { evidence } : {}),
+        };
+      },
+      statusAll(status: string, options: { evidence?: string } = {}): ScriptRuleOutputItem[] {
+        const labels: Record<string, string> = {
+          unset: "未设置", screening: "初筛", screening_passed: "已过初筛", interview_pending: "待面试",
+          interviewed: "已面试", signing_pending: "待签约", offer: "已收 OFFER", rejected: "淘汰", needs_login: "login_required",
+        };
+        if (!(status in labels)) throw new Error(`helpers.statusAll 不支持状态：${status}`);
+        const evidence = typeof options.evidence === "string" ? options.evidence.trim().slice(0, 2_000) : "";
+        return allApplications.map((item) => ({
+          applicationId: item.id,
+          rawStatus: labels[status]!,
+          directStatus: status as NonNullable<ScriptRuleOutputItem["directStatus"]>,
+          ...(evidence ? { evidence } : {}),
+        }));
+      },
+      runSelectorRule: (selectorDefinition: unknown): ScriptRuleOutputItem[] =>
+        runSelectorRule(selectorDefinition, allApplications),
       exists: (selector: string): boolean => document.querySelector(selector) !== null,
       count: (selector: string): number => document.querySelectorAll(selector).length,
       text: (selector: string): string => (requireElement(selector).textContent ?? "").trim(),
@@ -326,6 +383,7 @@ export async function executeScriptRule(
     source: definition.script, application: structuredClone(primary), allApplications: structuredClone(applications),
     logBridgeName, formatLogSource: formatScriptLogValues.toString(), scriptStartedAt: startedAt,
     logIndexOffset, maxRequestBytes: MAX_HTTP_REQUEST_BYTES, maxResponseBytes: MAX_HTTP_RESPONSE_BYTES,
+    selectorRuleSource: runSelectorRuleInPage.toString(),
   });
   const workflow = async (): Promise<ScriptRuleExecution> => {
     let navigationCount = 0;

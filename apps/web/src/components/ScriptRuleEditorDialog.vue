@@ -48,6 +48,20 @@ const exampleItems = computed(() => Object.entries(props.examples).map(([value, 
   title: item.label,
   value,
 })));
+const testState = computed(() => {
+  const result = props.testResult;
+  const directLogin = Boolean(result?.results.some((item) => item.statusRule === "script_direct:needs_login"));
+  if (result?.status === "needs_login" && directLogin) {
+    return { label: "登录判断通过", icon: "mdi-login", className: "login-passed" };
+  }
+  if (result?.status === "needs_login") {
+    return { label: "页面需要登录，脚本未执行", icon: "mdi-alert-circle-outline", className: "login-required" };
+  }
+  if (result?.status === "succeeded" && result.matchedCount > 0) {
+    return { label: "测试通过", icon: "mdi-check-circle-outline", className: "success" };
+  }
+  return { label: "测试未通过", icon: "mdi-alert-circle-outline", className: "failed" };
+});
 const saveState = computed(() => props.editing && !props.dirty
   ? { label: "已保存", icon: "mdi-cloud-check-outline", saved: true }
   : { label: "未保存", icon: "mdi-cloud-alert-outline", saved: false });
@@ -110,8 +124,8 @@ function insertApplicationField(field: string): void {
 
           <section v-if="testResult" class="test-drawer" :class="{ collapsed: !testPanelExpanded }">
             <header>
-              <div><i class="mdi" :class="testResult.status === 'succeeded' && testResult.matchedCount ? 'mdi-check-circle-outline' : 'mdi-alert-circle-outline'"></i>
-                <strong>{{ testResult.status === "succeeded" && testResult.matchedCount ? "测试通过" : "测试未通过" }}</strong></div>
+              <div :class="testState.className"><i class="mdi" :class="testState.icon"></i>
+                <strong>{{ testState.label }}</strong></div>
               <div class="test-drawer-actions">
                 <span v-if="testResult.scriptDurationMs !== null">{{ testResult.scriptDurationMs }}ms</span>
                 <button type="button" :aria-label="testPanelExpanded ? '收起测试结果' : '展开测试结果'" :title="testPanelExpanded ? '收起测试结果' : '展开测试结果'"
@@ -216,6 +230,9 @@ function insertApplicationField(field: string): void {
 .test-drawer.collapsed { flex-basis: 42px; min-height: 42px; }
 .test-drawer > header { height: 42px; justify-content: space-between; padding: 0 15px; border-bottom: 1px solid #e0d9cd; }
 .test-drawer > header > div { gap: 7px; }
+.test-drawer > header > div.success { color: #3f8668; }
+.test-drawer > header > div.login-passed { color: #c56b2f; }
+.test-drawer > header > div.login-required, .test-drawer > header > div.failed { color: #c35d48; }
 .test-drawer > header i { color: #c56b2f; }
 .test-drawer > header span { color: #859088; font-size: 11px; }
 .test-drawer-actions { display: flex; align-items: center; gap: 8px; }

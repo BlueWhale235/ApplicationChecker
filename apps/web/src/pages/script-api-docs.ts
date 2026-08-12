@@ -55,6 +55,27 @@ const helperMethods: ScriptApiEntry[] = [
   { signature: "await helpers.sleep(milliseconds)", description: "暂停一小段时间", detail: "单次最多暂停 3000ms；优先使用条件等待方法。" },
 ];
 
+helperMethods.splice(6, 0,
+  {
+    signature: "helpers.status(status, options?): ScriptRuleResult",
+    description: "创建一个可直接返回的岗位状态结果",
+    detail: "支持 unset、screening、screening_passed、interview_pending、interviewed、signing_pending、offer、rejected 和 needs_login。直接状态不会经过文本映射；脚本必须 return 该结果才会生效。",
+    example: "return helpers.status('screening', { evidence: '页面显示简历筛选中' });",
+  },
+  {
+    signature: "helpers.statusAll(status, options?): ScriptRuleResult[]",
+    description: "为当前检查组的全部岗位创建相同的直接状态结果",
+    detail: "适合登录判断或同页多个岗位状态一致的场景；支持与 helpers.status 相同的状态值。",
+    example: "return helpers.statusAll('needs_login', { evidence: '当前页面需要登录' });",
+  },
+  {
+    signature: "helpers.runSelectorRule(definition): ScriptRuleResult[]",
+    description: "在脚本中执行嵌入的点选规则 JSON",
+    detail: "使用当前 applications 按点选规则定位器匹配岗位和状态；没有匹配、存在歧义或 URL 范围不匹配时返回空数组。",
+    example: "const selectorResults = helpers.runSelectorRule(selectorRule); return selectorResults;",
+  },
+);
+
 const resultEntries: ScriptApiEntry[] = [
   { signature: "return null | undefined | []", description: "本脚本没有有效识别结果，继续使用内置识别和 AI 识别" },
   { signature: "return { applicationId, rawStatus, evidence? }", description: "返回一个岗位的原始状态", example: "return { applicationId: application.id, rawStatus: helpers.text('.status'), evidence: helpers.closestText('.status', '.card') };" },

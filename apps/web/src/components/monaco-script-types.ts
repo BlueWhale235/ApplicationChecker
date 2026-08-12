@@ -27,8 +27,48 @@ interface ScriptRuleResult {
   applicationId: string;
   /** 页面读取到的原始状态文本，返回后会进入状态映射。 */
   rawStatus: string;
+  /** 绕过文本映射，直接使用指定状态。通常通过 helpers.status() 生成。 */
+  directStatus?: ScriptDirectStatus;
   /** 可选的识别证据文本，最长保留 2000 个字符。 */
   evidence?: string;
+}
+
+type ScriptDirectStatus =
+  | "unset"
+  | "screening"
+  | "screening_passed"
+  | "interview_pending"
+  | "interviewed"
+  | "signing_pending"
+  | "offer"
+  | "rejected"
+  | "needs_login";
+
+interface ScriptStatusOptions {
+  /** 不填写时使用当前 application.id；同页多岗位时传入目标岗位 ID。 */
+  applicationId?: string;
+  /** 可选的判定证据，会显示在检查结果和状态通知中。 */
+  evidence?: string;
+}
+
+interface SelectorRuleLocator {
+  readonly tag: string | null;
+  readonly role: string | null;
+  readonly classes: readonly string[];
+  readonly dataStatus: string | null;
+  readonly ariaCurrent: string | null;
+  readonly ariaSelected: string | null;
+  readonly ancestorTags: readonly string[];
+}
+
+interface SelectorParserRuleDefinition {
+  readonly schemaVersion: 2;
+  readonly kind: "selector";
+  readonly hostname: string;
+  readonly pathname: string;
+  readonly container: SelectorRuleLocator | null;
+  readonly title: SelectorRuleLocator;
+  readonly status: SelectorRuleLocator;
 }
 
 interface ScriptAxiosConfig {
@@ -72,6 +112,11 @@ interface ScriptRuleHelpers {
   readonly axios: ScriptAxios;
   /** 输出临时调试信息，仅在规则工作台测试结果中显示，不写入应用日志。 */
   log(...values: unknown[]): void;
+  /** 创建一个直接状态结果；脚本必须 return 该结果才会生效。 */
+  status(status: ScriptDirectStatus, options?: ScriptStatusOptions): ScriptRuleResult;
+  /** 为当前检查组的全部岗位创建相同的直接状态结果。 */
+  statusAll(status: ScriptDirectStatus, options?: Omit<ScriptStatusOptions, "applicationId">): ScriptRuleResult[];
+  runSelectorRule(definition: SelectorParserRuleDefinition): ScriptRuleResult[];
   /** 判断当前页面是否存在匹配 CSS 选择器的元素。 */
   exists(selector: string): boolean;
   /** 统计当前页面中匹配 CSS 选择器的元素数量。 */

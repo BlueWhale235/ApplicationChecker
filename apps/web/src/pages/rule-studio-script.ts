@@ -1,3 +1,5 @@
+import type { AssistedParserRule, RuleStudioCheckGroupOption, SelectorParserRuleDefinition } from "@application-checker/contracts";
+
 export interface ScriptRuleDraft {
   name: string;
   hostname: string;
@@ -9,6 +11,14 @@ export interface ScriptRuleDraft {
 export interface ScriptRuleDialogDraft extends ScriptRuleDraft {
   priority: number;
   enabled: boolean;
+}
+
+export function selectorRuleToScript(definition: SelectorParserRuleDefinition): string {
+  return `const selectorRule = ${JSON.stringify(definition, null, 2)};
+
+const selectorResults = helpers.runSelectorRule(selectorRule);
+helpers.log("点选 JSON 结果", selectorResults);
+return selectorResults;`;
 }
 
 export function scriptRuleDefinitionSignature(draft: Omit<ScriptRuleDraft, "name">): string {
@@ -34,10 +44,10 @@ export function scriptRuleDialogSignature(draft: ScriptRuleDialogDraft): string 
 
 export function canSaveScriptRule(input: {
   draft: ScriptRuleDraft;
-  editing: boolean;
-  initialDefinitionSignature: string;
-  lastTestedDefinitionSignature: string;
-  testPassed: boolean;
+  editing?: boolean;
+  initialDefinitionSignature?: string;
+  lastTestedDefinitionSignature?: string;
+  testPassed?: boolean;
 }): boolean {
   const { draft } = input;
   const fieldsAreValid = Boolean(
@@ -51,10 +61,7 @@ export function canSaveScriptRule(input: {
   );
   if (!fieldsAreValid) return false;
 
-  const signature = scriptRuleDefinitionSignature(draft);
-  const definitionIsUnchanged = input.editing && signature === input.initialDefinitionSignature;
-  const currentDefinitionWasTested = input.testPassed && signature === input.lastTestedDefinitionSignature;
-  return definitionIsUnchanged || currentDefinitionWasTested;
+  return true;
 }
 
 export function matchingCheckGroupApplicationId(
@@ -87,4 +94,3 @@ export function matchingCheckGroupApplicationId(
     .filter((item): item is { applicationId: string; score: number; index: number } => Boolean(item))
     .sort((left, right) => right.score - left.score || left.index - right.index)[0]?.applicationId ?? "";
 }
-import type { AssistedParserRule, RuleStudioCheckGroupOption } from "@application-checker/contracts";

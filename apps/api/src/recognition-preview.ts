@@ -200,14 +200,17 @@ export class RecognitionPreviewStore {
     record.scriptRuleId = input.scriptExecution?.ruleId ?? record.scriptRuleId;
     record.scriptLogs = input.scriptExecution?.logs ?? [];
     record.scriptLogsTruncated = input.scriptExecution?.logsTruncated ?? false;
-    if (input.needsLogin) {
-      record.status = "needs_login";
-      record.error = input.loginReason;
-      return publicDetail(record);
+    if (!input.scriptExecution) {
+      if (input.needsLogin) {
+        record.status = "needs_login";
+        record.error = input.loginReason;
+        return publicDetail(record);
+      }
+      return null;
     }
-    if (!input.scriptExecution) return null;
     const result = recognizeScriptExecution(input.scriptExecution, record.job.applications, statusMappings);
-    record.status = "succeeded";
+    record.status = input.needsLogin ? "needs_login" : "succeeded";
+    record.error = input.needsLogin ? input.loginReason : null;
     record.adapterId = result.adapterId;
     record.adapterVersion = result.adapterVersion;
     record.route = result.route;

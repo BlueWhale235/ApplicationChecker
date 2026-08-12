@@ -116,6 +116,42 @@ describe("RecognitionPreviewStore", () => {
     expect(store.snapshot(created!.id)?.snapshot).toBe(snapshot);
   });
 
+  it("keeps direct login results as a valid script judgment", () => {
+    const store = new RecognitionPreviewStore();
+    const source = store.enqueue({
+      purpose: "capture", sourcePreviewId: null, keepAlive: true,
+      groupId: "group-login", applicationId: "job-1", url: snapshot.url, company: "示例公司",
+      applications: [{
+        id: "job-1", company: "示例公司", jobTitle: "后端工程师", checkUrl: snapshot.url,
+        postingUrl: null, appliedAt: null, location: null, notes: null, site: "mokahr.com", progressStatus: "screening",
+      }],
+      site: "mokahr.com", browserState: null, proxyUrl: null, userAgent: "test",
+    });
+    store.claim();
+    store.complete(source.id, {
+      snapshot, screenshotBase64: Buffer.from("png").toString("base64"), needsLogin: false, loginReason: null,
+    });
+    const created = store.enqueueScriptTest(source.id, {
+      id: "script-login", name: "登录判断", enabled: true, priority: 100, version: 1,
+      definition: { schemaVersion: 2, kind: "script", hostname: "*.mokahr.com", pathname: "/*", script: "return helpers.statusAll('needs_login')", timeoutMs: 5000 },
+      createdAt: new Date(0).toISOString(), updatedAt: new Date(0).toISOString(), lastTestedAt: null,
+    });
+    store.claim();
+    const completed = store.completeScriptTest(created!.id, {
+      finalUrl: snapshot.url, pageTitle: snapshot.title, needsLogin: true, loginReason: "login_required",
+      scriptExecution: {
+        ruleId: "script-login", ruleVersion: 1, durationMs: 12,
+        results: [{ applicationId: "job-1", rawStatus: "login_required", directStatus: "needs_login", evidence: "页面需要登录" }],
+        logs: [{ atMs: 3, message: "检测登录状态" }], logsTruncated: false,
+      },
+    });
+    expect(completed).toMatchObject({
+      status: "needs_login",
+      results: [{ applicationId: "job-1", statusRule: "script_direct:needs_login" }],
+      scriptLogs: [{ atMs: 3, message: "检测登录状态" }],
+    });
+  });
+
   it("preserves debug logs when a page script test fails", () => {
     const store = new RecognitionPreviewStore();
     const created = store.enqueue({

@@ -82,6 +82,53 @@ describe("script rules", () => {
     expect(result.logsTruncated).toBe(false);
   });
 
+  it("creates direct status results through helpers.status", async () => {
+    const scriptRule = rule("direct-status", "/query");
+    if (scriptRule.definition.kind !== "script") throw new Error("unexpected rule kind");
+    scriptRule.definition.script = `return helpers.status("screening", { evidence: "页面明确显示初筛" });`;
+    const result = await executeScriptRule(fakePage(), scriptRule, "job-1", applications);
+    expect(result.results).toEqual([{
+      applicationId: "job-1",
+      rawStatus: "初筛",
+      directStatus: "screening",
+      evidence: "页面明确显示初筛",
+    }]);
+  });
+
+  it("rejects unsupported direct statuses", () => {
+    expect(() => normalizeScriptOutput({
+      applicationId: "job-1", rawStatus: "未知", directStatus: "unknown",
+    }, applications)).toThrow(/不支持的直接状态/);
+  });
+
+  it("creates direct status results for every application through helpers.statusAll", async () => {
+    const scriptRule = rule("direct-status-all", "/query");
+    if (scriptRule.definition.kind !== "script") throw new Error("unexpected rule kind");
+    scriptRule.definition.script = `return helpers.statusAll("needs_login", { evidence: "需要登录" });`;
+    const result = await executeScriptRule(fakePage(), scriptRule, "job-1", applications);
+    expect(result.results).toHaveLength(applications.length);
+    expect(result.results.map((item) => item.applicationId)).toEqual(applications.map((item) => item.id));
+    expect(result.results.every((item) => item.directStatus === "needs_login")).toBe(true);
+  });
+
+  it("exposes embedded selector JSON through helpers.runSelectorRule", async () => {
+    const scriptRule = rule("selector-json", "/query");
+    if (scriptRule.definition.kind !== "script") throw new Error("unexpected rule kind");
+    scriptRule.definition.script = `
+      return helpers.runSelectorRule({
+        schemaVersion: 2,
+        kind: "selector",
+        hostname: "other.example.com",
+        pathname: "/*",
+        container: null,
+        title: { tag: "div", role: null, classes: [], dataStatus: null, ariaCurrent: null, ariaSelected: null, ancestorTags: [] },
+        status: { tag: "div", role: null, classes: [], dataStatus: null, ariaCurrent: null, ariaSelected: null, ancestorTags: [] }
+      });
+    `;
+    const result = await executeScriptRule(navigablePage(), scriptRule, "job-1", applications);
+    expect(result.results).toEqual([]);
+  });
+
   it("uses and cleans up a unique log bridge for each execution on a reused page", async () => {
     const exposed = new Set<string>();
     const names: string[] = [];

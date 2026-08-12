@@ -252,9 +252,10 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       source: "local" | "ai";
       adapterId: string | null;
       ruleVersion: string | null;
+      direct?: boolean;
     };
     const isRecognizedResult = (result: MergedResult | undefined): boolean => Boolean(
-      result?.matched && result.status && result.status !== "unset",
+      result?.matched && result.status && (result.status !== "unset" || result.direct),
     );
     let groupResults: MergedResult[] = [];
     const settings = await appSettings(context);
@@ -282,11 +283,12 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       source: "local" as const,
       adapterId: result.adapterId,
       ruleVersion: result.adapterVersion,
+      direct: item.statusRule?.startsWith("script_direct:") ?? false,
     })) : [];
     const scriptDiagnosticResults = diagnosticFrom(scriptResult);
     const localDiagnosticResults = diagnosticFrom(localResult);
-    groupResults = scriptDiagnosticResults.filter((result) => isRecognizedResult(result)
-      && result.confidence >= LOCAL_AUTO_APPLY_THRESHOLD);
+    groupResults = scriptDiagnosticResults.filter((result) => (isRecognizedResult(result)
+      && result.confidence >= LOCAL_AUTO_APPLY_THRESHOLD) || result.rawStatus === "login_required");
     if (localResult) {
       aiDebugStore?.recordLocal({
         runId: id,

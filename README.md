@@ -216,9 +216,9 @@ API Key 使用 AES-256-GCM 加密保存。未配置 AI 或模型调用失败时�
 保存策略会区分元数据和可执行定义：
 
 - 仅修改规则名称、优先级或启用状态时，可以直接更新，无需重新运行页面脚本；
-- 修改 JavaScript、Hostname、Pathname 或总执行超时后，必须使用当前页面和投递数据完成一次“运行测试”，测试通过后才能更新；
-- 新建脚本规则同样需要先测试通过；测试不会修改岗位状态，也不会发送通知；
-- 测试后的可执行定义再次发生变化时，之前的测试结果会失效，需要重新测试。
+- 修改 JavaScript、Hostname、Pathname 或总执行超时后，可以直接保存；“运行测试”仍可用于验证当前页面和投递数据，但不再是保存前置条件；
+- 新建脚本规则也可以先保存后测试，测试不会修改岗位状态，也不会发送通知；
+- 测试结果只用于显示当前脚本的验证时间和诊断状态，不会阻止规则更新。
 
 右侧“规则设置”区域会提示当前修改能否直接保存，或是否需要重新测试。这样既方便修改展示名称等普通信息，也避免未经验证的脚本或执行范围直接生效。
 
@@ -250,6 +250,61 @@ helpers.log("读取状态", { rawStatus });
 ```
 
 测试通过状态、岗位识别结果、调试输出和错误信息统一显示在代码编辑器下方，并按相对时间展示日志；即使脚本随后报错或超时，也会尽量保留终止前已经产生的日志。每次测试最多保留 100 条、单条 2KB、总量 32KB。调试日志只存在于内存预览记录中，不写入数据库、应用日志或通知，正常自动检查结束后会直接丢弃。
+
+### 页面脚本直接返回岗位状态
+
+不需要读取页面状态文本时，可以用 `helpers.status()` 直接生成返回结果。该结果不会再次经过状态文本映射：
+
+```js
+return helpers.status("screening", {
+  evidence: "页面显示简历正在筛选"
+});
+```
+
+支持的状态为 `unset`（未设置）、`screening`（初筛）、`screening_passed`（已过初筛）、`interview_pending`（待面试）、`interviewed`（已面试）、`signing_pending`（待签约）、`offer`（已收 OFFER）、`rejected`（淘汰）和 `needs_login`（需要登录）。`needs_login` 会把本次检查归类为需要登录；`unset` 可以把岗位状态直接改回未设置。脚本必须 `return` 返回值才会生效。
+
+同页多岗位时传入岗位 ID：
+
+```js
+return applications.map((item) => helpers.status("screening", {
+  applicationId: item.id,
+  evidence: `${item.jobTitle} 正在筛选`
+}));
+```
+
+如果同一检查组中的多个岗位需要返回相同状态，可以使用 `helpers.statusAll()`：
+
+```js
+if (helpers.currentUrl().includes("login")) {
+  return helpers.statusAll("needs_login", {
+    evidence: "当前页面需要登录"
+  });
+}
+```
+
+`statusAll()` 会为当前检查组的全部岗位生成结果；`helpers.status()` 仍然只返回一个岗位结果。
+
+### 在页面脚本中嵌入点选 JSON
+
+点选规则可以一键写入页面脚本，也可以手动把工作台导出的点选规则 JSON 交给 `helpers.runSelectorRule()`：
+
+```js
+const selectorRule = {
+  schemaVersion: 2,
+  kind: "selector",
+  hostname: "careers.example.com",
+  pathname: "/*",
+  container: null,
+  title: { tag: "div", role: null, classes: ["job-title"], dataStatus: null, ariaCurrent: null, ariaSelected: null, ancestorTags: [] },
+  status: { tag: "span", role: null, classes: ["status"], dataStatus: null, ariaCurrent: null, ariaSelected: null, ancestorTags: [] }
+};
+
+const results = helpers.runSelectorRule(selectorRule);
+helpers.log("点选 JSON 结果", results);
+return results;
+```
+
+该 API 复用点选规则的定位和岗位匹配语义，只返回标题与状态都唯一的岗位；没有匹配、存在歧义或地址范围不匹配时返回空数组，随后继续使用内置识别和 AI 回退。规则工作台中的“写入页面脚本”只创建草稿，保存时会沿用原规则 ID 将点选类型替换为脚本类型，并要求先测试通过；转换前不会修改原点选规则。
 
 ## 代理
 

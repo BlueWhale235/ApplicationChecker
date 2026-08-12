@@ -10,6 +10,7 @@ import { installBrowserState } from "./browser-state.js";
 import { classifyPage } from "./detection.js";
 import { captureLocalPageSnapshot } from "./dom-snapshot.js";
 import { captureFullPage } from "./full-page-capture.js";
+import { effectiveLoginRequired } from "./login-coordination.js";
 
 interface CandidateRow {
   group_id: string;
@@ -89,6 +90,11 @@ async function main(): Promise<void> {
     GROUP BY check_groups.id
     ORDER BY applications.site, history_count DESC, check_groups.updated_at DESC
   `).all() as unknown as CandidateRow[];
+  const requestedGroupIds = new Set((process.env.DRY_RUN_GROUP_IDS ?? "")
+    .split(",").map((value) => value.trim()).filter(Boolean));
+  const selectedCandidates = requestedGroupIds.size
+    ? candidates.filter((candidate) => requestedGroupIds.has(candidate.group_id))
+    : candidates;
   const historicalStatement = db.prepare(`
     SELECT raw_status, suggested_status, confidence, evidence
     FROM run_application_results
@@ -113,8 +119,10 @@ async function main(): Promise<void> {
   };
   const executablePath = browserBinary();
 
-  for (const site of ["zhiye.com", "mokahr.com", "feishu.cn"]) {
-    const siteCandidates = candidates.filter((item) => item.site === site);
+  const requestedSites = (process.env.DRY_RUN_SITES ?? "zhiye.com,mokahr.com,feishu.cn")
+    .split(",").map((value) => value.trim()).filter(Boolean);
+  for (const site of requestedSites) {
+    const siteCandidates = selectedCandidates.filter((item) => item.site === site);
     let accepted = 0;
     let attempted = 0;
     for (const candidate of siteCandidates) {
@@ -140,16 +148,29 @@ async function main(): Promise<void> {
         const signals = await page.evaluate(() => ({
           title: document.title,
           text: document.body?.innerText ?? "",
-          passwordFields: document.querySelectorAll('input[type="password"]').length,
-          otpFields: document.querySelectorAll('input[autocomplete="one-time-code"], input[name*="code" i], input[id*="code" i]').length,
-          captchaElements: document.querySelectorAll('iframe[src*="captcha" i], [class*="captcha" i], [id*="captcha" i], .cf-turnstile').length,
+          passwordFields: [...document.querySelectorAll('input[type="password"]')].filter((element) => {
+            const rect = element.getBoundingClientRect(); const style = getComputedStyle(element);
+            return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) > 0;
+          }).length,
+          otpFields: [...document.querySelectorAll('input[autocomplete="one-time-code"], input[name*="code" i], input[id*="code" i]')].filter((element) => {
+            const rect = element.getBoundingClientRect(); const style = getComputedStyle(element);
+            return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) > 0;
+          }).length,
+          captchaElements: [...document.querySelectorAll('iframe[src*="captcha" i], [class*="captcha" i], [id*="captcha" i], .cf-turnstile')].filter((element) => {
+            const rect = element.getBoundingClientRect(); const style = getComputedStyle(element);
+            return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) > 0;
+          }).length,
         }));
         const detection = classifyPage({ url: page.url(), status: response?.status() ?? null, ...signals });
         const snapshot = await captureLocalPageSnapshot(page);
         const image = await captureFullPage(page);
         const screenshotPath = path.join(outputDirectory, `${site.replace(".", "-")}-${accepted + 1}.png`);
         await writeFile(screenshotPath, image.data);
-        if (detection.requiresLogin) {
+        const requiresLogin = effectiveLoginRequired(detection, snapshot, members.map((member) => ({
+          id: member.id,
+          jobTitle: member.job_title,
+        })));
+        if (requiresLogin) {
           report.sites[site]!.push({
             groupId: candidate.group_id,
             applicationId: candidate.application_id,
@@ -188,6 +209,10 @@ async function main(): Promise<void> {
             nodeLimitReached: snapshot.nodeLimitReached,
             textLimitReached: snapshot.textLimitReached,
           },
+          ...(process.env.DRY_RUN_DEBUG_NODES === "1" ? {
+            debugNodes: snapshot.nodes.filter((node) => /(投递成功|申请成功|初筛|offer|拟录用|销售-国内客户|销售工程师)/i.test(node.text)
+              || /(active|current|finish|success|process|step|timeline|application)/i.test(`${node.classes.join(" ")} ${node.dataStatus ?? ""}`)),
+          } : {}),
           results: result.results,
           historicalResults: historicalStatement.all(candidate.group_id),
           screenshotPath,

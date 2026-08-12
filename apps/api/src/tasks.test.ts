@@ -309,6 +309,79 @@ describe("runtime settings and POST action routes", () => {
 });
 
 describe("task management routes", () => {
+  it("applies direct script progress and needs-login statuses", async () => {
+    const { context, config } = await setup();
+    const recognizer = {
+      configured: false,
+      model: null,
+      recognize: vi.fn(),
+    } satisfies StatusRecognizer;
+    const app = Fastify();
+    await registerRoutes(app, { context, config, recognizer, runnerHeartbeat: { at: Date.now() } });
+    const applicationId = "11111111-1111-4111-8111-111111111111";
+    const runId = await queueRun(context, applicationId, "manual");
+    await app.inject({
+      method: "POST", url: "/internal/claim",
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+    });
+    const complete = await app.inject({
+      method: "POST",
+      url: `/internal/runs/${runId}/complete`,
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+      payload: {
+        finalUrl: "https://example.com/status",
+        pageTitle: "投递记录",
+        screenshotBase64: Buffer.from("png").toString("base64"),
+        truncated: false,
+        browserState: { version: 1, cookies: [], origins: [] },
+        scriptExecution: {
+          ruleId: "direct-rule", ruleVersion: 1, durationMs: 5,
+          results: [{ applicationId, rawStatus: "未设置", directStatus: "unset", evidence: "脚本直接判定" }],
+          logs: [], logsTruncated: false,
+        },
+      },
+    });
+    expect(complete.statusCode, complete.body).toBe(200);
+    const application = await context.db.selectFrom("applications")
+      .select(["progress_status_v2", "last_run_status"])
+      .where("id", "=", applicationId).executeTakeFirstOrThrow();
+    expect(application).toEqual({ progress_status_v2: "unset", last_run_status: "succeeded" });
+    const result = await context.db.selectFrom("run_application_results")
+      .select(["matched", "suggested_status", "applied"])
+      .where("run_id", "=", runId!).executeTakeFirstOrThrow();
+    expect(result).toEqual({ matched: 1, suggested_status: "unset", applied: 1 });
+
+    const loginRunId = await queueRun(context, applicationId, "manual");
+    await app.inject({
+      method: "POST", url: "/internal/claim",
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+    });
+    const loginComplete = await app.inject({
+      method: "POST",
+      url: `/internal/runs/${loginRunId}/complete`,
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+      payload: {
+        finalUrl: "https://example.com/login",
+        pageTitle: "账号登录",
+        screenshotBase64: Buffer.from("png").toString("base64"),
+        truncated: false,
+        browserState: { version: 1, cookies: [], origins: [] },
+        scriptExecution: {
+          ruleId: "login-rule", ruleVersion: 1, durationMs: 5,
+          results: [{ applicationId, rawStatus: "login_required", directStatus: "needs_login", evidence: "登录状态过期" }],
+          logs: [], logsTruncated: false,
+        },
+      },
+    });
+    expect(loginComplete.json()).toEqual({ ok: true, needsLogin: true });
+    const loginRun = await context.db.selectFrom("runs").select("status")
+      .where("id", "=", loginRunId!).executeTakeFirstOrThrow();
+    expect(loginRun.status).toBe("needs_login");
+    await app.close();
+    await context.db.destroy();
+    context.raw.close();
+  });
+
   it("applies validated per-application AI results from one group completion", async () => {
     const { context, config } = await setup();
     const recognizeGroup = vi.fn().mockResolvedValue({

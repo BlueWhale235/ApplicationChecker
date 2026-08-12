@@ -102,6 +102,7 @@ export async function saveParserRule(
   const now = new Date().toISOString();
   if (input.id) {
     const existing = await context.db.selectFrom("parser_rules").selectAll().where("id", "=", input.id).executeTakeFirst();
+    const definitionChanged = existing ? existing.rule_json !== JSON.stringify(input.definition) : false;
     if (!existing) throw new Error("规则不存在");
     await context.db.updateTable("parser_rules").set({
       name,
@@ -112,7 +113,7 @@ export async function saveParserRule(
       pathname: input.definition.pathname,
       rule_json: JSON.stringify(input.definition),
       updated_at: now,
-      last_tested_at: input.tested ? now : existing.last_tested_at,
+      last_tested_at: input.tested ? now : definitionChanged ? null : existing.last_tested_at,
     }).where("id", "=", input.id).execute();
     return (await listParserRules(context)).find((rule) => rule.id === input.id)!;
   }

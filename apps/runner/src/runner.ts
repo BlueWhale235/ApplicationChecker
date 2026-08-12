@@ -14,6 +14,7 @@ import { collectBrowserState, installBrowserState, restoreIndexedDbState } from 
 import { classifyPage } from "./detection.js";
 import { captureFullPage } from "./full-page-capture.js";
 import { captureLocalPageSnapshot } from "./dom-snapshot.js";
+import { effectiveLoginRequired, isSoftMokahrLoginDetection } from "./login-coordination.js";
 import { withNavigationRetry } from "./page-stability.js";
 import { executeScriptRule, ScriptRuleExecutionError, selectScriptRule } from "./script-rule.js";
 import { PreviewPageSessionManager, type PreviewPageResource } from "./preview-page-session.js";
@@ -115,9 +116,18 @@ async function signals(page: Page, status: number | null) {
   const values = await page.evaluate(() => ({
     title: document.title,
     text: document.body?.innerText ?? "",
-    passwordFields: document.querySelectorAll('input[type="password"]').length,
-    otpFields: document.querySelectorAll('input[autocomplete="one-time-code"], input[name*="code" i], input[id*="code" i]').length,
-    captchaElements: document.querySelectorAll('iframe[src*="captcha" i], [class*="captcha" i], [id*="captcha" i], .cf-turnstile').length,
+    passwordFields: [...document.querySelectorAll('input[type="password"]')].filter((element) => {
+      const rect = element.getBoundingClientRect(); const style = getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) > 0;
+    }).length,
+    otpFields: [...document.querySelectorAll('input[autocomplete="one-time-code"], input[name*="code" i], input[id*="code" i]')].filter((element) => {
+      const rect = element.getBoundingClientRect(); const style = getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) > 0;
+    }).length,
+    captchaElements: [...document.querySelectorAll('iframe[src*="captcha" i], [class*="captcha" i], [id*="captcha" i], .cf-turnstile')].filter((element) => {
+      const rect = element.getBoundingClientRect(); const style = getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) > 0;
+    }).length,
   }));
   return { url: page.url(), status, ...values };
 }
@@ -162,7 +172,7 @@ async function capture(job: RunnerJob): Promise<void> {
     await settle(page);
     const initialDetection = classifyPage(await signals(page, response?.status() ?? null));
     let scriptExecution: ScriptRuleExecution | null = null;
-    if (!initialDetection.requiresLogin) {
+    if (!initialDetection.requiresLogin || isSoftMokahrLoginDetection(initialDetection, page.url())) {
       const scriptRule = selectScriptRule(job.scriptRules, page.url());
       if (scriptRule) {
         try {
@@ -179,7 +189,8 @@ async function capture(job: RunnerJob): Promise<void> {
       response?.status() ?? null,
       job.recognitionMode !== "ai_only",
     );
-    if (detection.requiresLogin) {
+    const requiresLogin = effectiveLoginRequired(detection, pageSnapshot, job.applications);
+    if (requiresLogin) {
       void loginBrowserPool.prewarm().catch((error) => {
         console.error("Unable to prewarm the login browser", error);
       });
@@ -284,7 +295,7 @@ async function completeScriptPreview(job: RunnerRecognitionPreviewJob, resource:
   if (!job.scriptRule) throw new Error("Script preview job is missing its rule");
   const initialObserved = await signals(resource.page, resource.responseStatus);
   const initialDetection = classifyPage(initialObserved);
-  if (initialDetection.requiresLogin) {
+  if (initialDetection.requiresLogin && !isSoftMokahrLoginDetection(initialDetection, initialObserved.url)) {
     await api(`/internal/recognition-previews/${job.previewId}/complete-script-test`, {
       method: "POST",
       body: JSON.stringify({
@@ -301,17 +312,19 @@ async function completeScriptPreview(job: RunnerRecognitionPreviewJob, resource:
   const scriptExecution = await executeScriptRule(resource.page, job.scriptRule, job.applicationId, job.applications);
   const observed = await withNavigationRetry(resource.page, () => signals(resource.page, resource.responseStatus));
   const detection = classifyPage(observed);
+  const scriptNeedsLogin = scriptExecution.results.some((item) =>
+    item.directStatus === "needs_login" || item.rawStatus === "login_required");
   await api(`/internal/recognition-previews/${job.previewId}/complete-script-test`, {
     method: "POST",
     body: JSON.stringify({
       finalUrl: observed.url,
       pageTitle: observed.title,
-      needsLogin: detection.requiresLogin,
-      loginReason: detection.requiresLogin ? detection.reason : null,
+      needsLogin: detection.requiresLogin || scriptNeedsLogin,
+      loginReason: detection.requiresLogin ? detection.reason : scriptNeedsLogin ? "login_required" : null,
       scriptExecution,
     }),
   });
-  return !detection.requiresLogin && Boolean(selectScriptRule([job.scriptRule], observed.url));
+  return !detection.requiresLogin && !scriptNeedsLogin && Boolean(selectScriptRule([job.scriptRule], observed.url));
 }
 
 async function recognitionPreview(job: RunnerRecognitionPreviewJob): Promise<void> {
@@ -332,6 +345,7 @@ async function recognitionPreview(job: RunnerRecognitionPreviewJob): Promise<voi
 
     const { detection, image, snapshot } = await captureStablePage(resource.page, resource.responseStatus, true);
     if (!snapshot) throw new Error("Recognition preview snapshot was not captured");
+    const requiresLogin = effectiveLoginRequired(detection, snapshot, job.applications);
     await api(`/internal/recognition-previews/${job.previewId}/complete`, {
       method: "POST",
       body: JSON.stringify({
@@ -340,11 +354,11 @@ async function recognitionPreview(job: RunnerRecognitionPreviewJob): Promise<voi
         screenshotWidth: image.width,
         screenshotHeight: image.height,
         screenshotTruncated: image.truncated,
-        needsLogin: detection.requiresLogin,
-        loginReason: detection.requiresLogin ? detection.reason : null,
+        needsLogin: requiresLogin,
+        loginReason: requiresLogin ? detection.reason : null,
       }),
     });
-    if (job.keepAlive && !detection.requiresLogin) {
+    if (job.keepAlive && !requiresLogin) {
       await previewPageSessions.retain(sessionId, resource);
       resource = null;
     }

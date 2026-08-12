@@ -4,6 +4,7 @@ import {
   matchingCheckGroupApplicationId,
   scriptRuleDefinitionSignature,
   scriptRuleDialogSignature,
+  selectorRuleToScript,
   type ScriptRuleDraft,
 } from "./rule-studio-script";
 
@@ -16,6 +17,19 @@ const draft: ScriptRuleDraft = {
 };
 
 describe("script rule editing", () => {
+  it("generates an executable script from a selector JSON definition", () => {
+    const definition = {
+      schemaVersion: 2 as const, kind: "selector" as const, hostname: "careers.example.com", pathname: "/applications/*",
+      container: null,
+      title: { tag: "div", role: null, classes: ["job-title"], dataStatus: null, ariaCurrent: null, ariaSelected: null, ancestorTags: [] },
+      status: { tag: "div", role: null, classes: ["job-status"], dataStatus: null, ariaCurrent: null, ariaSelected: null, ancestorTags: [] },
+    };
+    const script = selectorRuleToScript(definition);
+    expect(script).toContain("const selectorRule = {");
+    expect(script).toContain('helpers.runSelectorRule(selectorRule)');
+    expect(script).toContain('"hostname": "careers.example.com"');
+    expect(script).toContain('return selectorResults;');
+  });
   it("selects the matching check group instead of retaining a previous rule selection", () => {
     const scriptRule = {
       id: "rule-1", name: "乙公司 后端工程师", enabled: true, priority: 100, version: 1,
@@ -67,7 +81,7 @@ describe("script rule editing", () => {
     })).toBe(true);
   });
 
-  it("requires a successful test after executable settings change", () => {
+  it("allows saving executable settings before an optional test", () => {
     const initialDefinitionSignature = scriptRuleDefinitionSignature(draft);
     const changedDraft = { ...draft, timeoutMs: 45_000 };
     expect(canSaveScriptRule({
@@ -76,7 +90,7 @@ describe("script rule editing", () => {
       initialDefinitionSignature,
       lastTestedDefinitionSignature: "",
       testPassed: false,
-    })).toBe(false);
+    })).toBe(true);
     expect(canSaveScriptRule({
       draft: changedDraft,
       editing: true,

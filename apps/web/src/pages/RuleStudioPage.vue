@@ -21,6 +21,7 @@ import {
   matchingCheckGroupApplicationId,
   scriptRuleDefinitionSignature,
   scriptRuleDialogSignature,
+  selectorRuleToScript,
 } from "./rule-studio-script";
 
 const ScriptRuleEditorDialog = defineAsyncComponent(() => import("../components/ScriptRuleEditorDialog.vue"));
@@ -163,6 +164,13 @@ const selectorDirty = computed(() => Boolean(editingRuleId.value
   && initialSelectorSignature.value !== selectorSignature.value));
 const scriptTimeoutValid = computed(() => Number.isInteger(editor.timeoutMs)
   && editor.timeoutMs >= 1_000 && editor.timeoutMs <= 60_000);
+const scriptTestAccepted = computed(() => {
+  const result = scriptTestResult.value;
+  if (!result) return false;
+  return (result.status === "succeeded" && result.matchedCount > 0)
+    || (result.status === "needs_login"
+      && result.results.some((item) => item.statusRule === "script_direct:needs_login"));
+});
 const canSave = computed(() => editor.mode === "selector"
   ? (selectorJsonMode.value
     ? Boolean(editor.name.trim() && selectorJsonResult.value.definition)
@@ -172,7 +180,7 @@ const canSave = computed(() => editor.mode === "selector"
     editing: Boolean(editingRuleId.value),
     initialDefinitionSignature: initialScriptSignature.value,
     lastTestedDefinitionSignature: lastTestedScriptSignature.value,
-    testPassed: scriptTestResult.value?.status === "succeeded" && scriptTestResult.value.matchedCount > 0,
+    testPassed: scriptTestAccepted.value,
   }));
 const scriptDefinitionChanged = computed(() => Boolean(editingRuleId.value)
   && initialScriptSignature.value !== scriptSignature.value);
@@ -358,6 +366,43 @@ async function switchMode(mode: RuleMode): Promise<void> {
   }
 }
 
+async function convertSelectorToScript(): Promise<void> {
+  const source = selectorJsonMode.value
+    ? selectorJsonResult.value.definition
+    : draftDefinition.value
+      ? { ...draftDefinition.value, hostname: editor.hostname, pathname: editor.pathname }
+      : null;
+  if (!source) {
+    emit("failure", "请先生成或修正有效的点选规则 JSON");
+    return;
+  }
+  if (editingRuleId.value) {
+    const confirmed = await confirmAction({
+      title: "写入页面脚本",
+      message: "保存后当前点选规则会转换为页面脚本，原点选类型不会单独保留。现在只会创建脚本草稿，不会立即写入。",
+      confirmLabel: "继续转换",
+      danger: false,
+    });
+    if (!confirmed) return;
+  }
+  clearSelectorDraft();
+  clearAuthoringTest();
+  selectorJsonMode.value = false;
+  selectorJson.value = "";
+  initialSelectorSignature.value = "";
+  initialScriptSignature.value = "";
+  lastTestedScriptSignature.value = "";
+  editor.mode = "script";
+  editor.hostname = source.hostname;
+  editor.pathname = source.pathname;
+  editor.script = selectorRuleToScript(source);
+  editor.timeoutMs = 10_000;
+  scriptDialogOpen.value = true;
+  await nextTick();
+  // The conversion itself is an unsaved change, even when the source rule was saved.
+  initialScriptDialogSignature.value = `selector-conversion:${JSON.stringify(source)}`;
+}
+
 async function closeScriptDialog(): Promise<void> {
   if (scriptDialogDirty.value) {
     const confirmed = await confirmAction({
@@ -433,7 +478,9 @@ async function pollScriptTest(id: string, testedSignature: string): Promise<void
       return;
     }
     scriptTesting.value = false;
-    if (result.status === "succeeded" && result.matchedCount > 0) {
+    const directLoginPassed = result.status === "needs_login"
+      && result.results.some((item) => item.statusRule === "script_direct:needs_login");
+    if ((result.status === "succeeded" && result.matchedCount > 0) || directLoginPassed) {
       lastTestedScriptSignature.value = testedSignature;
       emit("notice", "页面脚本无写入测试通过");
     } else emit("failure", result.error || "脚本已执行，但没有返回可映射的岗位状态");
@@ -465,7 +512,9 @@ async function saveRule(): Promise<void> {
   try {
     const body = {
       name: editor.name, enabled: editor.enabled, priority: editor.priority, definition: rule.definition,
-      tested: editor.mode === "selector" ? !selectorJsonMode.value : true,
+      tested: editor.mode === "selector"
+        ? !selectorJsonMode.value
+        : (scriptTestAccepted.value && lastTestedScriptSignature.value === scriptSignature.value),
     };
     const savedRule = editingRuleId.value
       ? await api.updateParserRule(editingRuleId.value, body)
@@ -653,7 +702,9 @@ onBeforeUnmount(() => {
 
         <div v-if="editor.mode === 'selector' && selectorJsonMode" class="selector-json-grid">
           <section class="json-panel">
-            <div class="json-toolbar"><div><i class="mdi mdi-code-json"></i><strong>规则定义 JSON</strong></div><span>修改后直接保存</span></div>
+            <div class="json-toolbar"><div><i class="mdi mdi-code-json"></i><strong>规则定义 JSON</strong></div>
+              <v-btn size="small" variant="text" color="orange-darken-2" prepend-icon="mdi-code-braces" :disabled="!selectorJsonResult.definition" @click="convertSelectorToScript">写入页面脚本</v-btn>
+            </div>
             <div class="json-editor-shell">
               <Suspense>
                 <MonacoJsonEditor v-model="selectorJson" @save="saveRule" />
@@ -708,6 +759,7 @@ onBeforeUnmount(() => {
             <div v-if="draftErrors.length" class="errors"><p v-for="message in draftErrors" :key="message">{{ message }}</p></div>
             <div class="editor-actions"><v-btn variant="outlined" :disabled="!canGenerate" @click="generateRule">生成草稿</v-btn>
               <v-btn variant="outlined" :disabled="!draftDefinition" @click="testSelectorRule">无写入测试</v-btn>
+              <v-btn variant="tonal" color="orange-darken-2" :disabled="!draftDefinition || Boolean(draftErrors.length)" @click="convertSelectorToScript">写入页面脚本</v-btn>
               <v-btn color="primary" :disabled="!canSave" @click="saveRule">{{ editingRuleId ? "更新规则" : "保存规则" }}</v-btn></div>
             <div v-if="testResult" class="test-results"><strong>{{ testResult.valid ? "测试通过" : "测试未通过" }}</strong>
               <article v-for="item in testResult.result.results" :key="item.applicationId"><span>{{ previewData.applications.find((candidate) => candidate.id === item.applicationId)?.jobTitle }}</span>

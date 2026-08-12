@@ -19,6 +19,7 @@ import {
 } from "@application-checker/status-mapping";
 
 export const LOCAL_PARSER_VERSION = "1.0.2";
+export const MOKAHR_PARSER_VERSION = "1.0.1";
 export const LOCAL_AUTO_APPLY_THRESHOLD = 0.9;
 export const ASSISTED_RULE_SCHEMA_VERSION = 2;
 
@@ -62,9 +63,15 @@ const adapters: ParserAdapter[] = [
   },
   {
     id: "mokahr",
-    version: LOCAL_PARSER_VERSION,
+    version: MOKAHR_PARSER_VERSION,
     priority: 100,
     routes: [
+      { hostname: "mokahr.com", pathname: "/campus-recruitment/*" },
+      { hostname: "*.mokahr.com", pathname: "/campus-recruitment/*" },
+      { hostname: "mokahr.com", pathname: "/campus_apply/*" },
+      { hostname: "*.mokahr.com", pathname: "/campus_apply/*" },
+      { hostname: "mokahr.com", pathname: "/candidate/applications/deliver-query/*" },
+      { hostname: "*.mokahr.com", pathname: "/candidate/applications/deliver-query/*" },
       { hostname: "mokahr.com", pathname: "/*" },
       { hostname: "*.mokahr.com", pathname: "/*" },
     ],
@@ -336,6 +343,20 @@ export function recognizeScriptExecution(
         evidence: "页面脚本未返回该岗位的结果", titleMatch: "none", statusRule: null,
       };
     }
+    if (item.directStatus === "needs_login") {
+      return {
+        applicationId: candidate.id, matched: false, rawStatus: "login_required", status: null, confidence: 1,
+        evidence: item.evidence || "页面脚本判定当前页面需要登录", titleMatch: "exact",
+        statusRule: "script_direct:needs_login",
+      };
+    }
+    if (item.directStatus) {
+      return {
+        applicationId: candidate.id, matched: true, rawStatus: item.rawStatus, status: item.directStatus, confidence: 1,
+        evidence: item.evidence || `页面脚本直接返回状态“${item.rawStatus}”`, titleMatch: "exact",
+        statusRule: `script_direct:${item.directStatus}`,
+      };
+    }
     const normalized = normalizeRecognitionText(item.rawStatus);
     const matches = statusRules.flatMap((rule) => rule.terms
       .filter((term) => normalized.includes(normalizeRecognitionText(term)))
@@ -538,6 +559,67 @@ function statusMatches(
   return matches;
 }
 
+function nodeAndAncestorMarker(node: LocalDomNode, byId: Map<number, LocalDomNode>): string {
+  const markers: string[] = [];
+  let current: LocalDomNode | undefined = node;
+  for (let depth = 0; current && depth < 5; depth += 1) {
+    markers.push(`${current.classes.join(" ")} ${current.dataStatus ?? ""} ${current.role ?? ""} ${current.ariaCurrent ?? ""} ${current.ariaSelected ?? ""}`);
+    current = current.parentId === null ? undefined : byId.get(current.parentId);
+  }
+  return markers.join(" ").toLowerCase();
+}
+
+function mokahrStatusMatches(
+  snapshot: LocalPageSnapshot,
+  titleNode: LocalDomNode,
+  context: LocalDomNode[],
+  statusRules: StatusMappingRule[],
+): Array<{ rule: StatusMappingRule; term: string; node: LocalDomNode; active: boolean }> {
+  const matches = statusMatches(context, statusRules);
+  if (!matches.length) return [];
+  const path = new URL(snapshot.url).pathname;
+  if (path.startsWith("/candidate/applications/deliver-query/")) {
+    const nearestY = Math.min(...matches.map((match) => Math.abs(match.node.y - titleNode.y)));
+    return matches.filter((match) => Math.abs(match.node.y - titleNode.y) <= nearestY + 36);
+  }
+  if (matches.length === 1) return matches;
+
+  const normalizedStatusLabel = normalizeRecognitionText("状态");
+  const explicitStatusLabels = context.filter((node) => {
+    const text = normalizeRecognitionText(node.text);
+    return text === normalizedStatusLabel || text.startsWith(`${normalizedStatusLabel}:`) || text.startsWith(`${normalizedStatusLabel}：`);
+  });
+  if (explicitStatusLabels.length) {
+    const nearestDistance = Math.min(...matches.map((match) => Math.min(...explicitStatusLabels.map((label) =>
+      Math.hypot(match.node.x - label.x, match.node.y - label.y)))));
+    const explicit = matches.filter((match) => Math.min(...explicitStatusLabels.map((label) =>
+      Math.hypot(match.node.x - label.x, match.node.y - label.y))) <= nearestDistance + 48);
+    if (explicit.length) return explicit;
+  }
+
+  const byId = new Map(snapshot.nodes.map((node) => [node.id, node]));
+  const current = matches.filter((match) => {
+    const marker = nodeAndAncestorMarker(match.node, byId);
+    return Boolean(
+      (match.node.ariaCurrent && match.node.ariaCurrent !== "false")
+      || (match.node.ariaSelected && match.node.ariaSelected !== "false")
+      || /(^|\s|[-_])(active|current|selected|processing|target(?:[-_]view)?)(?=$|\s|[-_])/.test(marker),
+    );
+  });
+  if (current.length) return current;
+
+  const completed = matches.filter((match) =>
+    /(^|\s|[-_])(finished|finish|success|completed|complete|done)(?=$|\s|[-_])/.test(nodeAndAncestorMarker(match.node, byId)));
+  if (completed.length) {
+    const furthestX = Math.max(...completed.map((match) => match.node.x));
+    return completed.filter((match) => match.node.x >= furthestX - 24);
+  }
+
+  // New MokaHR timelines render future steps as ordinary visible text. Without an
+  // explicit/current/completed marker, treating the nearest label as current is unsafe.
+  return [];
+}
+
 function parseCandidate(
   snapshot: LocalPageSnapshot,
   adapter: ParserAdapter,
@@ -570,7 +652,10 @@ function parseCandidate(
       titleMatch, statusRule: null,
     };
   }
-  let matches = statusMatches(contextForTitle(chosen.node, snapshot, adapter, statusRules), statusRules);
+  const context = contextForTitle(chosen.node, snapshot, adapter, statusRules);
+  let matches = adapter.id === "mokahr"
+    ? mokahrStatusMatches(snapshot, chosen.node, context, statusRules)
+    : statusMatches(context, statusRules);
   const active = matches.filter((match) => match.active);
   if (active.length) {
     matches = active;
