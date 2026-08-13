@@ -5,7 +5,7 @@ describe("script API documentation", () => {
   it("documents every helper exposed by the runner", () => {
     const signatures = SCRIPT_API_SECTIONS.flatMap((section) => section.entries.map((entry) => entry.signature)).join("\n");
     for (const helper of [
-      "currentUrl", "goto", "axios", "log", "status", "statusAll", "runSelectorRule", "exists", "count", "text", "texts", "textsWithin", "value", "attr", "nextText", "closestText",
+      "currentUrl", "goto", "axios", "log", "status", "statusAll", "error", "errorAll", "runSelectorRule", "exists", "count", "text", "texts", "textsWithin", "value", "attr", "nextText", "closestText",
       "fill", "select", "click", "waitForSelector", "waitForText", "waitForTextChange", "scrollIntoView", "sleep",
     ]) expect(signatures).toContain(`helpers.${helper}`);
   });

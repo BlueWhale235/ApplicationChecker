@@ -69,6 +69,18 @@ helperMethods.splice(6, 0,
     example: "return helpers.statusAll('needs_login', { evidence: '当前页面需要登录' });",
   },
   {
+    signature: "helpers.error(message?, options?): ScriptRuleResult",
+    description: "让当前或指定岗位以可控错误结束",
+    detail: "错误岗位保留当前状态，不再进入内置识别或 AI；原因省略时自动显示脚本行号。数组中的其他正常结果仍会照常应用。",
+    example: "return helpers.error('官网暂时无法查询该岗位');",
+  },
+  {
+    signature: "helpers.errorAll(message?): ScriptRuleResult[]",
+    description: "让当前检查组的全部岗位以可控错误结束",
+    detail: "全部岗位保持当前状态并分别生成失败通知；检查计划不会暂停。",
+    example: "return helpers.errorAll('投递记录服务暂不可用');",
+  },
+  {
     signature: "helpers.runSelectorRule(definition): ScriptRuleResult[]",
     description: "在脚本中执行嵌入的点选规则 JSON",
     detail: "使用当前 applications 按点选规则定位器匹配岗位和状态；没有匹配、存在歧义或 URL 范围不匹配时返回空数组。",

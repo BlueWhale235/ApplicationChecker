@@ -111,6 +111,33 @@ describe("script rules", () => {
     expect(result.results.every((item) => item.directStatus === "needs_login")).toBe(true);
   });
 
+  it("creates a controlled error with the calling script line", async () => {
+    const page = fakePage();
+    const scriptRule = rule("controlled-error", "/query");
+    if (scriptRule.definition.kind !== "script") throw new Error("unexpected rule kind");
+    scriptRule.definition.script = `
+const missing = true;
+if (missing) return helpers.error();`;
+    const result = await executeScriptRule(page, scriptRule, "job-1", applications);
+    expect(result.results[0]).toMatchObject({
+      applicationId: "job-1",
+      rawStatus: "script_error",
+      errorLine: 3,
+      error: "脚本运行时错误",
+      evidence: "脚本运行时错误",
+    });
+  });
+
+  it("creates controlled errors for every application", async () => {
+    const page = fakePage();
+    const scriptRule = rule("controlled-error-all", "/query");
+    if (scriptRule.definition.kind !== "script") throw new Error("unexpected rule kind");
+    scriptRule.definition.script = `return helpers.errorAll("页面服务不可用");`;
+    const result = await executeScriptRule(page, scriptRule, "job-1", applications);
+    expect(result.results).toHaveLength(applications.length);
+    expect(result.results.every((item) => item.error === "页面服务不可用")).toBe(true);
+  });
+
   it("exposes embedded selector JSON through helpers.runSelectorRule", async () => {
     const scriptRule = rule("selector-json", "/query");
     if (scriptRule.definition.kind !== "script") throw new Error("unexpected rule kind");

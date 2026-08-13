@@ -319,4 +319,16 @@ describe("page script recognition", () => {
       matched: false, rawStatus: "login_required", status: null, statusRule: "script_direct:needs_login",
     });
   });
+
+  it("preserves controlled script errors as final unmatched results", () => {
+    const result = recognizeScriptExecution({
+      ruleId: "script-error", ruleVersion: 1, durationMs: 5,
+      results: [{ applicationId: "job-1", rawStatus: "script_error", error: "脚本运行时错误", errorLine: 4 }],
+      logs: [], logsTruncated: false,
+    }, [{ id: "job-1", jobTitle: "工程师" }]);
+    expect(result.results[0]).toMatchObject({
+      matched: false, rawStatus: "script_error", status: null,
+      evidence: "Line:4，脚本运行时错误", statusRule: "script_error",
+    });
+  });
 });

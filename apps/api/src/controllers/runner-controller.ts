@@ -270,6 +270,15 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     const scriptResult = recognitionMode !== "ai_only" && body.scriptExecution
       ? recognizeScriptExecution(body.scriptExecution, candidates, statusMappings)
       : null;
+    const memberIds = new Set(members.map((member) => member.id));
+    const acceptedScriptResults = scriptResult ? body.scriptExecution?.results ?? [] : [];
+    const scriptReturnedIds = new Set(acceptedScriptResults
+      .filter((item) => memberIds.has(item.applicationId))
+      .map((item) => item.applicationId));
+    const scriptErrors = new Map(acceptedScriptResults
+      .filter((item) => memberIds.has(item.applicationId) && Boolean(item.error))
+      .map((item) => [item.applicationId, item]));
+    const hasControlledScriptErrors = scriptErrors.size > 0;
     const localResult = recognitionMode !== "ai_only" && body.pageSnapshot
       ? recognizeLocalPage(body.pageSnapshot, candidates, statusMappings, assistedRules)
       : null;
@@ -287,9 +296,10 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     })) : [];
     const scriptDiagnosticResults = diagnosticFrom(scriptResult);
     const localDiagnosticResults = diagnosticFrom(localResult);
-    groupResults = scriptDiagnosticResults.filter((result) => (isRecognizedResult(result)
-      && result.confidence >= LOCAL_AUTO_APPLY_THRESHOLD) || result.rawStatus === "login_required");
-    if (localResult) {
+    groupResults = scriptDiagnosticResults.filter((result) => scriptReturnedIds.has(result.applicationId) && (
+      hasControlledScriptErrors || (isRecognizedResult(result)
+        && result.confidence >= LOCAL_AUTO_APPLY_THRESHOLD) || result.rawStatus === "login_required"));
+    if (localResult && !hasControlledScriptErrors) {
       aiDebugStore?.recordLocal({
         runId: id,
         company: run.company,
@@ -319,7 +329,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         })));
     }
     const locallyResolved = new Set(groupResults.map((result) => result.applicationId));
-    const aiMembers = recognitionMode === "local_only"
+    const aiMembers = hasControlledScriptErrors || recognitionMode === "local_only"
       ? []
       : recognitionMode === "local_first"
         ? members.filter((member) => !locallyResolved.has(member.id))
@@ -376,7 +386,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         aiError = error instanceof Error ? error.message.slice(0, 500) : "AI recognition failed";
       }
     }
-    for (const diagnostic of [...scriptDiagnosticResults, ...localDiagnosticResults]) {
+    for (const diagnostic of hasControlledScriptErrors ? [] : [...scriptDiagnosticResults, ...localDiagnosticResults]) {
       if (!groupResults.some((result) => result.applicationId === diagnostic.applicationId)) {
         groupResults.push(diagnostic);
       }
@@ -412,6 +422,8 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       .map((result) => [result.applicationId, result]));
     const loginRequiredResult = groupResults.find((result) => result.rawStatus === "login_required");
     const loginRequired = Boolean(loginRequiredResult);
+    const controlledErrorCount = scriptErrors.size;
+    const controlledRunStatus = controlledErrorCount === members.length ? "failed" as const : "partial" as const;
     const firstSuggestion = loginRequired ? null : groupResults.find(isRecognizedResult)?.status ?? null;
     const firstEvidence = aiError ?? groupResults.find((result) => result.evidence)?.evidence ?? null;
     const firstConfidence = loginRequired ? null : groupResults.find(isRecognizedResult)?.confidence ?? null;
@@ -423,11 +435,15 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     await context.db.transaction().execute(async (trx) => {
       for (const member of members) {
         const result = validResults.get(member.id);
+        const controlledError = scriptErrors.get(member.id);
+        const omittedByControlledScript = hasControlledScriptErrors && !scriptReturnedIds.has(member.id);
         const matched = isRecognizedResult(result);
         const blockedByPause = Boolean(member.automation_paused);
         const threshold = result?.source === "local" ? LOCAL_AUTO_APPLY_THRESHOLD : settings.ai_confidence_threshold;
         const applied = !loginRequired && matched && result!.confidence >= threshold && !member.manual_locked && !blockedByPause;
-        const notAppliedReason = loginRequired ? "unmatched"
+        const notAppliedReason = controlledError ? "script_error" as const
+          : omittedByControlledScript ? "script_skipped" as const
+          : loginRequired ? "unmatched"
           : aiStatus === "failed" && aiMemberIds.has(member.id) ? "ai_failed"
           : !matched ? "unmatched"
             : member.manual_locked ? "manual_locked"
@@ -446,13 +462,16 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
           adapter_id: result?.adapterId ?? null,
           rule_version: result?.ruleVersion ?? null,
         }).where("run_id", "=", id).where("application_id", "=", member.id).execute();
-        if (!loginRequired && (notAppliedReason === "ai_failed" || notAppliedReason === "unmatched")) {
+        if (!loginRequired && (notAppliedReason === "script_error" || notAppliedReason === "ai_failed" || notAppliedReason === "unmatched")) {
           const currentStatus = member.progress_status_v2 ?? "unset";
-          const notificationKind = notAppliedReason === "ai_failed"
+          const notificationKind = notAppliedReason === "script_error" || notAppliedReason === "ai_failed"
             ? "recognition_failed" as const
             : "recognition_unmatched" as const;
+          const controlledErrorEvidence = controlledError
+            ? `${controlledError.errorLine ? `Line:${controlledError.errorLine}，` : ""}${controlledError.error}`
+            : null;
           const evidence = notificationKind === "recognition_failed"
-            ? `识别失败：${aiError ?? result?.evidence ?? "识别服务未返回有效结果"}`
+            ? `识别失败：${controlledErrorEvidence ?? aiError ?? result?.evidence ?? "识别服务未返回有效结果"}`
             : `未命中岗位状态：${result?.evidence ?? localResult?.fallbackReason ?? "页面中没有找到可用的状态信息"}`;
           await trx.insertInto("notifications").values({
             id: randomUUID(),
@@ -514,7 +533,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         }
       }
       updated = await trx.updateTable("runs").set({
-        status: loginRequired ? "needs_login" : "succeeded",
+        status: loginRequired ? "needs_login" : hasControlledScriptErrors ? controlledRunStatus : "succeeded",
         final_url: body.finalUrl,
         page_title: body.pageTitle,
         screenshot_path: screenshotPath,
@@ -526,16 +545,17 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         ai_evidence: aiError ?? firstAiResult?.evidence ?? null,
         ai_provider: aiProvider,
         recognition_mode: recognitionMode,
-        recognition_status: recognitionStatus,
+        recognition_status: hasControlledScriptErrors ? (controlledErrorCount === members.length ? "failed" : "partial") : recognitionStatus,
         recognition_source: recognitionSource,
         recognition_suggested_status_v2: firstSuggestion,
         recognition_confidence: firstConfidence,
         recognition_evidence: firstEvidence,
         recognition_provider: recognitionProvider,
-        error_code: loginRequired ? "LOGIN_REQUIRED" : null,
+        error_code: loginRequired ? "LOGIN_REQUIRED" : hasControlledScriptErrors ? "SCRIPT_RULE_ERROR" : null,
         error_message: loginRequired
           ? (loginRequiredResult?.evidence || "AI 识别到登录或验证页面，需要登录后继续").slice(0, 500)
-          : null,
+          : hasControlledScriptErrors ? [...scriptErrors.values()].map((item) =>
+            `${item.errorLine ? `Line:${item.errorLine}，` : ""}${item.error}`).join("；").slice(0, 500) : null,
 
         completed_at: completed,
       }).where("id", "=", id).where("status", "=", "running").executeTakeFirst();
@@ -545,9 +565,13 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       return { ok: true, discarded: true };
     }
     if (pausedByRejection) await clearGroupScheduleIfFullyPaused(context, groupId);
-    await context.db.updateTable("applications").set({
-      last_run_status: loginRequired ? "needs_login" : "succeeded", last_run_at: completed, updated_at: completed,
-    }).where("check_group_id", "=", groupId).execute();
+    for (const member of members) {
+      if (hasControlledScriptErrors && !scriptReturnedIds.has(member.id)) continue;
+      await context.db.updateTable("applications").set({
+        last_run_status: loginRequired ? "needs_login" : scriptErrors.has(member.id) ? "failed" : "succeeded",
+        last_run_at: completed, updated_at: completed,
+      }).where("id", "=", member.id).execute();
+    }
     return { ok: true, needsLogin: loginRequired };
   });
 

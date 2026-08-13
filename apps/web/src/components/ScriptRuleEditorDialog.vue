@@ -50,6 +50,9 @@ const exampleItems = computed(() => Object.entries(props.examples).map(([value, 
 })));
 const testState = computed(() => {
   const result = props.testResult;
+  if (result?.results.some((item) => item.statusRule === "script_error")) {
+    return { label: "错误分支命中", icon: "mdi-alert-outline", className: "login-passed" };
+  }
   const directLogin = Boolean(result?.results.some((item) => item.statusRule === "script_direct:needs_login"));
   if (result?.status === "needs_login" && directLogin) {
     return { label: "登录判断通过", icon: "mdi-login", className: "login-passed" };
@@ -135,7 +138,7 @@ function insertApplicationField(field: string): void {
             <div v-show="testPanelExpanded" class="test-drawer-content">
               <div class="result-list">
                 <article v-for="item in testResult.results" :key="item.applicationId">
-                  <div><strong>{{ previewData?.applications.find((candidate) => candidate.id === item.applicationId)?.jobTitle }}</strong><b>{{ item.status ? progressLabels[item.status] : "未匹配" }}</b></div>
+                  <div><strong>{{ previewData?.applications.find((candidate) => candidate.id === item.applicationId)?.jobTitle }}</strong><b>{{ item.statusRule === "script_error" ? "脚本错误" : item.status ? progressLabels[item.status] : "未匹配" }}</b></div>
                   <small>原始状态：{{ item.rawStatus || "无" }}</small><p>{{ item.evidence }}</p>
                 </article>
                 <p v-if="testResult.error" class="error-text">{{ testResult.error }}</p>

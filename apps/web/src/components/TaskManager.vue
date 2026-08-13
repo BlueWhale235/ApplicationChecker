@@ -49,6 +49,8 @@ const resultReasonLabels = {
   low_confidence: "置信度不足",
   unmatched: "未匹配",
   ai_failed: "识别失败",
+  script_error: "脚本错误",
+  script_skipped: "脚本未处理",
   automation_paused: "淘汰后暂停，仅保留建议",
 } as const;
 const sourceLabels = { local: "本地", ai: "AI" } as const;
@@ -129,7 +131,7 @@ const sourceLabels = { local: "本地", ai: "AI" } as const;
               <div class="task-row-actions">
                 <button v-if="run.status === 'needs_login'" class="row-action" @click="$emit('login', run)">去登录</button>
                 <button v-if="['queued','running','needs_login'].includes(run.status)" class="danger-ghost" :disabled="busy" @click="$emit('cancel', run)">取消</button>
-                <button v-if="['failed','cancelled'].includes(run.status)" class="row-action" :disabled="busy" @click="$emit('retry', run)">重试</button>
+                <button v-if="['partial','failed','cancelled'].includes(run.status)" class="row-action" :disabled="busy" @click="$emit('retry', run)">重试</button>
               </div>
             </td>
           </tr>
@@ -226,6 +228,7 @@ const sourceLabels = { local: "本地", ai: "AI" } as const;
 .run-status-chip[data-run="queued"] i, .run-status-chip[data-run="running"] i { background: #4c83bc; }
 .run-status-chip[data-run="needs_login"] i { background: #d88b31; }
 .run-status-chip[data-run="succeeded"] i { background: #479069; }
+.run-status-chip[data-run="partial"] i { background: #d88032; }
 .run-status-chip[data-run="failed"] i, .run-status-chip[data-run="cancelled"] i { background: #c85e4c; }
 .task-screenshot-actions, .task-row-actions { display: flex; align-items: center; gap: 6px; }
 .task-screenshot-actions button { width: 29px; height: 29px; display: grid; place-items: center; border: 1px solid #d7d0c3; border-radius: 7px; background: #fffdf8; color: #315f51; font-size: 16px; }

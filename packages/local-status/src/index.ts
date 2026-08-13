@@ -343,6 +343,13 @@ export function recognizeScriptExecution(
         evidence: "页面脚本未返回该岗位的结果", titleMatch: "none", statusRule: null,
       };
     }
+    if (item.error) {
+      const evidence = item.errorLine ? `Line:${item.errorLine}，${item.error}` : item.error;
+      return {
+        applicationId: candidate.id, matched: false, rawStatus: "script_error", status: null, confidence: 1,
+        evidence, titleMatch: "exact", statusRule: "script_error",
+      };
+    }
     if (item.directStatus === "needs_login") {
       return {
         applicationId: candidate.id, matched: false, rawStatus: "login_required", status: null, confidence: 1,

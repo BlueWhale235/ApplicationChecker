@@ -95,6 +95,65 @@ describe("screenshot retention", () => {
     context.raw.close();
   });
 
+  it("migrates run statuses and script result reasons without losing rows", async () => {
+    const { context, config } = await setup();
+    const runId = await queueRun(context, "11111111-1111-4111-8111-111111111111", "manual");
+    await context.db.updateTable("runs").set({ status: "cancelled", completed_at: new Date().toISOString() }).where("id", "=", runId!).execute();
+    const before = {
+      runs: Number((context.raw.prepare("SELECT COUNT(*) count FROM runs").get() as { count: number }).count),
+      results: Number((context.raw.prepare("SELECT COUNT(*) count FROM run_application_results").get() as { count: number }).count),
+    };
+    context.raw.pragma("foreign_keys = OFF");
+    context.raw.exec(`
+      BEGIN;
+      CREATE TABLE runs_legacy (
+        id TEXT PRIMARY KEY, check_group_id TEXT,
+        application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+        trigger TEXT NOT NULL CHECK(trigger IN ('manual','bulk','cron','login_resume')),
+        status TEXT NOT NULL CHECK(status IN ('queued','running','needs_login','succeeded','failed','cancelled')),
+        final_url TEXT, page_title TEXT, screenshot_path TEXT, screenshot_truncated INTEGER NOT NULL DEFAULT 0,
+        ai_status TEXT NOT NULL DEFAULT 'skipped' CHECK(ai_status IN ('skipped','pending','succeeded','failed')),
+        ai_suggested_status TEXT, ai_suggested_status_v2 TEXT, ai_confidence REAL, ai_evidence TEXT, ai_provider TEXT,
+        recognition_mode TEXT NOT NULL DEFAULT 'local_first', recognition_status TEXT NOT NULL DEFAULT 'skipped',
+        recognition_source TEXT, recognition_suggested_status_v2 TEXT, recognition_confidence REAL,
+        recognition_evidence TEXT, recognition_provider TEXT, error_code TEXT, error_message TEXT,
+        created_at TEXT NOT NULL, started_at TEXT, completed_at TEXT
+      );
+      INSERT INTO runs_legacy SELECT * FROM runs;
+      DROP TABLE runs;
+      ALTER TABLE runs_legacy RENAME TO runs;
+      CREATE UNIQUE INDEX runs_one_active_per_application ON runs(application_id) WHERE status IN ('queued','running','needs_login');
+      CREATE INDEX runs_application_created ON runs(application_id, created_at DESC);
+
+      CREATE TABLE run_application_results_legacy (
+        id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+        application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+        job_title_snapshot TEXT NOT NULL, matched INTEGER NOT NULL DEFAULT 0, raw_status TEXT,
+        suggested_status TEXT, confidence REAL, evidence TEXT, applied INTEGER NOT NULL DEFAULT 0,
+        not_applied_reason TEXT CHECK(not_applied_reason IN ('manual_locked','low_confidence','unmatched','ai_failed')),
+        automation_paused INTEGER NOT NULL DEFAULT 0, recognition_source TEXT, adapter_id TEXT, rule_version TEXT,
+        created_at TEXT NOT NULL, UNIQUE(run_id, application_id)
+      );
+      INSERT INTO run_application_results_legacy SELECT * FROM run_application_results;
+      DROP TABLE run_application_results;
+      ALTER TABLE run_application_results_legacy RENAME TO run_application_results;
+      CREATE INDEX run_results_application ON run_application_results(application_id, created_at DESC);
+      COMMIT;
+    `);
+    context.raw.pragma("foreign_keys = ON");
+    await context.db.destroy(); context.raw.close();
+    const reopened = createDb(config.databasePath);
+    const runsSql = (reopened.raw.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='runs'").get() as { sql: string }).sql;
+    const resultsSql = (reopened.raw.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='run_application_results'").get() as { sql: string }).sql;
+    expect(runsSql).toContain("'partial'");
+    expect(resultsSql).toContain("'script_error'");
+    expect(resultsSql).toContain("'script_skipped'");
+    expect(reopened.raw.pragma("integrity_check")).toEqual([{ integrity_check: "ok" }]);
+    expect(Number((reopened.raw.prepare("SELECT COUNT(*) count FROM runs").get() as { count: number }).count)).toBe(before.runs);
+    expect(Number((reopened.raw.prepare("SELECT COUNT(*) count FROM run_application_results").get() as { count: number }).count)).toBe(before.results);
+    await reopened.db.destroy(); reopened.raw.close();
+  });
+
   it("removes only expired files and keeps run history", async () => {
     const { context, config } = await setup();
     const appFolder = path.join(config.screenshotsPath, "11111111-1111-4111-8111-111111111111");
@@ -309,6 +368,50 @@ describe("runtime settings and POST action routes", () => {
 });
 
 describe("task management routes", () => {
+  it("applies normal script results while keeping controlled error jobs unchanged", async () => {
+    const { context, config } = await setup();
+    const seedRunId = await queueRun(context, "11111111-1111-4111-8111-111111111111", "manual");
+    await context.db.updateTable("runs").set({ status: "cancelled", completed_at: new Date().toISOString() })
+      .where("id", "=", seedRunId!).execute();
+    const first = await context.db.selectFrom("applications").selectAll()
+      .where("id", "=", "11111111-1111-4111-8111-111111111111").executeTakeFirstOrThrow();
+    const secondId = "22222222-2222-4222-8222-222222222222";
+    await context.db.insertInto("applications").values({
+      ...first, id: secondId, check_group_id: first.check_group_id, job_title: "销售工程师", progress_status: "screening",
+      progress_status_v2: "screening", created_at: "2026-01-02T00:00:00.000Z", updated_at: "2026-01-02T00:00:00.000Z",
+    }).execute();
+    const app = Fastify();
+    await registerRoutes(app, { context, config, recognizer: { configured: false, model: null } as StatusRecognizer, runnerHeartbeat: { at: Date.now() } });
+    const runId = await queueRun(context, first.id, "manual");
+    await app.inject({ method: "POST", url: "/internal/claim", headers: { authorization: `Bearer ${config.runnerToken}` } });
+    const complete = await app.inject({
+      method: "POST", url: `/internal/runs/${runId}/complete`, headers: { authorization: `Bearer ${config.runnerToken}` },
+      payload: {
+        finalUrl: first.check_url, pageTitle: "投递记录", screenshotBase64: Buffer.from("png").toString("base64"), truncated: false,
+        browserState: { version: 1, cookies: [], origins: [] },
+        scriptExecution: {
+          ruleId: "controlled-error", ruleVersion: 1, durationMs: 5, logs: [], logsTruncated: false,
+          results: [
+            { applicationId: first.id, rawStatus: "已过初筛", directStatus: "screening_passed" },
+            { applicationId: secondId, rawStatus: "script_error", error: "查询接口没有返回该岗位", errorLine: 8, evidence: "查询接口没有返回该岗位" },
+          ],
+        },
+      },
+    });
+    expect(complete.statusCode, complete.body).toBe(200);
+    expect(await context.db.selectFrom("runs").select(["status", "error_code"]).where("id", "=", runId!).executeTakeFirstOrThrow())
+      .toEqual({ status: "partial", error_code: "SCRIPT_RULE_ERROR" });
+    expect(await context.db.selectFrom("applications").select(["id", "progress_status_v2", "last_run_status"])
+      .where("id", "in", [first.id, secondId]).orderBy("id").execute()).toEqual([
+      { id: first.id, progress_status_v2: "screening_passed", last_run_status: "succeeded" },
+      { id: secondId, progress_status_v2: "screening", last_run_status: "failed" },
+    ]);
+    const notifications = await context.db.selectFrom("notifications").select(["application_id", "kind", "evidence"]).execute();
+    expect(notifications.some((item) => item.application_id === secondId && item.kind === "recognition_failed" && item.evidence?.includes("Line:8"))).toBe(true);
+    expect((await app.inject({ method: "POST", url: `/runs/${runId}/retry` })).statusCode).toBe(202);
+    await app.close(); await context.db.destroy(); context.raw.close();
+  });
+
   it("applies direct script progress and needs-login statuses", async () => {
     const { context, config } = await setup();
     const recognizer = {

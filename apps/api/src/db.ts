@@ -94,7 +94,7 @@ export interface RunApplicationResultsTable {
   confidence: number | null;
   evidence: string | null;
   applied: number;
-  not_applied_reason: "manual_locked" | "low_confidence" | "unmatched" | "ai_failed" | null;
+  not_applied_reason: "manual_locked" | "low_confidence" | "unmatched" | "ai_failed" | "script_error" | "script_skipped" | null;
   automation_paused: number;
   recognition_source: Generated<Exclude<RecognitionSource, "mixed"> | null>;
   adapter_id: Generated<string | null>;
@@ -239,7 +239,7 @@ CREATE TABLE IF NOT EXISTS runs (
   check_group_id TEXT,
   application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
   trigger TEXT NOT NULL CHECK(trigger IN ('manual','bulk','cron','login_resume')),
-  status TEXT NOT NULL CHECK(status IN ('queued','running','needs_login','succeeded','failed','cancelled')),
+  status TEXT NOT NULL CHECK(status IN ('queued','running','needs_login','succeeded','partial','failed','cancelled')),
   final_url TEXT,
   page_title TEXT,
   screenshot_path TEXT,
@@ -292,7 +292,7 @@ CREATE TABLE IF NOT EXISTS run_application_results (
   confidence REAL,
   evidence TEXT,
   applied INTEGER NOT NULL DEFAULT 0,
-  not_applied_reason TEXT CHECK(not_applied_reason IN ('manual_locked','low_confidence','unmatched','ai_failed')),
+  not_applied_reason TEXT CHECK(not_applied_reason IN ('manual_locked','low_confidence','unmatched','ai_failed','script_error','script_skipped')),
   automation_paused INTEGER NOT NULL DEFAULT 0,
   recognition_source TEXT CHECK(recognition_source IN ('local','ai')),
   adapter_id TEXT,
@@ -470,6 +470,39 @@ export function createDb(filename: string): DbContext {
     recognition_evidence = COALESCE(recognition_evidence, ai_evidence),
     recognition_provider = COALESCE(recognition_provider, ai_provider)
   `);
+  const runsSql = (raw.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'runs'").get() as { sql?: string } | undefined)?.sql ?? "";
+  if (!runsSql.includes("status IN ('queued','running','needs_login','succeeded','partial'")) {
+    raw.pragma("foreign_keys = OFF");
+    try {
+      raw.exec(`
+        BEGIN;
+        CREATE TABLE runs_migrated (
+          id TEXT PRIMARY KEY, check_group_id TEXT,
+          application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+          trigger TEXT NOT NULL CHECK(trigger IN ('manual','bulk','cron','login_resume')),
+          status TEXT NOT NULL CHECK(status IN ('queued','running','needs_login','succeeded','partial','failed','cancelled')),
+          final_url TEXT, page_title TEXT, screenshot_path TEXT, screenshot_truncated INTEGER NOT NULL DEFAULT 0,
+          ai_status TEXT NOT NULL DEFAULT 'skipped' CHECK(ai_status IN ('skipped','pending','succeeded','failed')),
+          ai_suggested_status TEXT, ai_suggested_status_v2 TEXT, ai_confidence REAL, ai_evidence TEXT, ai_provider TEXT,
+          recognition_mode TEXT NOT NULL DEFAULT 'local_first', recognition_status TEXT NOT NULL DEFAULT 'skipped',
+          recognition_source TEXT, recognition_suggested_status_v2 TEXT, recognition_confidence REAL,
+          recognition_evidence TEXT, recognition_provider TEXT, error_code TEXT, error_message TEXT,
+          created_at TEXT NOT NULL, started_at TEXT, completed_at TEXT
+        );
+        INSERT INTO runs_migrated SELECT * FROM runs;
+        DROP TABLE runs;
+        ALTER TABLE runs_migrated RENAME TO runs;
+        CREATE UNIQUE INDEX runs_one_active_per_application ON runs(application_id) WHERE status IN ('queued','running','needs_login');
+        CREATE INDEX runs_application_created ON runs(application_id, created_at DESC);
+        COMMIT;
+      `);
+    } catch (error) {
+      raw.exec("ROLLBACK");
+      throw error;
+    } finally {
+      raw.pragma("foreign_keys = ON");
+    }
+  }
   const runResultColumns = raw.prepare("PRAGMA table_info(run_application_results)").all() as Array<{ name: string }>;
   if (!runResultColumns.some((column) => column.name === "automation_paused")) {
     raw.exec("ALTER TABLE run_application_results ADD COLUMN automation_paused INTEGER NOT NULL DEFAULT 0");
@@ -483,6 +516,34 @@ export function createDb(filename: string): DbContext {
   }
   if (!runResultColumns.some((column) => column.name === "rule_version")) {
     raw.exec("ALTER TABLE run_application_results ADD COLUMN rule_version TEXT");
+  }
+  const runResultsSql = (raw.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'run_application_results'").get() as { sql?: string } | undefined)?.sql ?? "";
+  if (!runResultsSql.includes("'script_skipped'")) {
+    raw.pragma("foreign_keys = OFF");
+    try {
+      raw.exec(`
+        BEGIN;
+        CREATE TABLE run_application_results_migrated (
+          id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+          application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+          job_title_snapshot TEXT NOT NULL, matched INTEGER NOT NULL DEFAULT 0, raw_status TEXT,
+          suggested_status TEXT, confidence REAL, evidence TEXT, applied INTEGER NOT NULL DEFAULT 0,
+          not_applied_reason TEXT CHECK(not_applied_reason IN ('manual_locked','low_confidence','unmatched','ai_failed','script_error','script_skipped')),
+          automation_paused INTEGER NOT NULL DEFAULT 0, recognition_source TEXT, adapter_id TEXT, rule_version TEXT,
+          created_at TEXT NOT NULL, UNIQUE(run_id, application_id)
+        );
+        INSERT INTO run_application_results_migrated SELECT * FROM run_application_results;
+        DROP TABLE run_application_results;
+        ALTER TABLE run_application_results_migrated RENAME TO run_application_results;
+        CREATE INDEX run_results_application ON run_application_results(application_id, created_at DESC);
+        COMMIT;
+      `);
+    } catch (error) {
+      raw.exec("ROLLBACK");
+      throw error;
+    } finally {
+      raw.pragma("foreign_keys = ON");
+    }
   }
   const statusEventColumns = raw.prepare("PRAGMA table_info(status_events)").all() as Array<{ name: string }>;
   if (!statusEventColumns.some((column) => column.name === "event_type")) {

@@ -31,6 +31,10 @@ interface ScriptRuleResult {
   directStatus?: ScriptDirectStatus;
   /** 可选的识别证据文本，最长保留 2000 个字符。 */
   evidence?: string;
+  /** 可控的岗位级脚本错误；该岗位保留当前状态且不会进入后续识别。 */
+  error?: string;
+  /** 对应 Monaco 编辑器中的脚本行号。 */
+  errorLine?: number;
 }
 
 type ScriptDirectStatus =
@@ -116,6 +120,10 @@ interface ScriptRuleHelpers {
   status(status: ScriptDirectStatus, options?: ScriptStatusOptions): ScriptRuleResult;
   /** 为当前检查组的全部岗位创建相同的直接状态结果。 */
   statusAll(status: ScriptDirectStatus, options?: Omit<ScriptStatusOptions, "applicationId">): ScriptRuleResult[];
+  /** 为当前或指定岗位返回可控错误；原因省略时自动包含脚本行号。 */
+  error(message?: string, options?: Pick<ScriptStatusOptions, "applicationId">): ScriptRuleResult;
+  /** 为当前检查组全部岗位返回相同的可控错误。 */
+  errorAll(message?: string): ScriptRuleResult[];
   runSelectorRule(definition: SelectorParserRuleDefinition): ScriptRuleResult[];
   /** 判断当前页面是否存在匹配 CSS 选择器的元素。 */
   exists(selector: string): boolean;

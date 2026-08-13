@@ -284,6 +284,14 @@ if (helpers.currentUrl().includes("login")) {
 
 `statusAll()` 会为当前检查组的全部岗位生成结果；`helpers.status()` 仍然只返回一个岗位结果。
 
+脚本还可以通过 `helpers.error()` 或 `helpers.errorAll()` 返回可控的岗位错误。错误岗位会保留当前状态、停止后续内置与 AI 识别，并生成失败通知；省略原因时会自动附带脚本行号。混合返回中的正常岗位结果仍会照常应用：
+
+```js
+return applications.map((item) => item.jobTitle.includes("暂停招聘")
+  ? helpers.error("该岗位暂时无法查询", { applicationId: item.id })
+  : helpers.status("screening", { applicationId: item.id }));
+```
+
 ### 在页面脚本中嵌入点选 JSON
 
 点选规则可以一键写入页面脚本，也可以手动把工作台导出的点选规则 JSON 交给 `helpers.runSelectorRule()`：

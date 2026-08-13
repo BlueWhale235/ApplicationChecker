@@ -480,7 +480,8 @@ async function pollScriptTest(id: string, testedSignature: string): Promise<void
     scriptTesting.value = false;
     const directLoginPassed = result.status === "needs_login"
       && result.results.some((item) => item.statusRule === "script_direct:needs_login");
-    if ((result.status === "succeeded" && result.matchedCount > 0) || directLoginPassed) {
+    const controlledErrorPassed = result.results.some((item) => item.statusRule === "script_error");
+    if ((result.status === "succeeded" && result.matchedCount > 0) || directLoginPassed || controlledErrorPassed) {
       lastTestedScriptSignature.value = testedSignature;
       emit("notice", "页面脚本无写入测试通过");
     } else emit("failure", result.error || "脚本已执行，但没有返回可映射的岗位状态");

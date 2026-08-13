@@ -152,6 +152,39 @@ describe("RecognitionPreviewStore", () => {
     });
   });
 
+  it("keeps controlled errors as a successful diagnostic branch", () => {
+    const store = new RecognitionPreviewStore();
+    const source = store.enqueue({
+      purpose: "capture", sourcePreviewId: null, keepAlive: true,
+      groupId: "group-error", applicationId: "job-1", url: snapshot.url, company: "示例公司",
+      applications: [{
+        id: "job-1", company: "示例公司", jobTitle: "后端工程师", checkUrl: snapshot.url,
+        postingUrl: null, appliedAt: null, location: null, notes: null, site: "mokahr.com", progressStatus: "screening",
+      }],
+      site: "mokahr.com", browserState: null, proxyUrl: null, userAgent: "test",
+    });
+    store.claim();
+    store.complete(source.id, { snapshot, screenshotBase64: Buffer.from("png").toString("base64"), needsLogin: false, loginReason: null });
+    const created = store.enqueueScriptTest(source.id, {
+      id: "script-error", name: "错误判断", enabled: true, priority: 100, version: 1,
+      definition: { schemaVersion: 2, kind: "script", hostname: "*.mokahr.com", pathname: "/*", script: "return helpers.error()", timeoutMs: 5000 },
+      createdAt: new Date(0).toISOString(), updatedAt: new Date(0).toISOString(), lastTestedAt: null,
+    });
+    store.claim();
+    const completed = store.completeScriptTest(created!.id, {
+      finalUrl: snapshot.url, pageTitle: snapshot.title, needsLogin: false, loginReason: null,
+      scriptExecution: {
+        ruleId: "script-error", ruleVersion: 1, durationMs: 4,
+        results: [{ applicationId: "job-1", rawStatus: "script_error", error: "脚本运行时错误", errorLine: 1 }],
+        logs: [], logsTruncated: false,
+      },
+    });
+    expect(completed).toMatchObject({
+      status: "succeeded", matchedCount: 0,
+      results: [{ applicationId: "job-1", statusRule: "script_error", evidence: "Line:1，脚本运行时错误" }],
+    });
+  });
+
   it("preserves debug logs when a page script test fails", () => {
     const store = new RecognitionPreviewStore();
     const created = store.enqueue({

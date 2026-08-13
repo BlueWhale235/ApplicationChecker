@@ -85,7 +85,7 @@ export async function registerRunController(app: FastifyInstance, deps: RouteDep
     const query = request.query as { scope?: string; status?: string; q?: string; limit?: string; offset?: string };
     const scope = query.scope === "active" ? "active" : "history";
     const activeStatuses = ["queued", "running", "needs_login"] as const;
-    const historyStatuses = ["succeeded", "failed", "cancelled"] as const;
+    const historyStatuses = ["succeeded", "partial", "failed", "cancelled"] as const;
     const allowed = scope === "active" ? activeStatuses : historyStatuses;
     if (query.status && !allowed.includes(query.status as never)) throw httpError(400, "任务状态与分组不匹配");
     const limit = Math.min(100, Math.max(1, Number(query.limit) || 50));
@@ -134,7 +134,7 @@ export async function registerRunController(app: FastifyInstance, deps: RouteDep
   });
 
   app.post("/runs/history/delete-all", async () => {
-    const historyStatuses = ["succeeded", "failed", "cancelled"] as const;
+    const historyStatuses = ["succeeded", "partial", "failed", "cancelled"] as const;
     const rows = await context.db.selectFrom("runs").select(["id", "screenshot_path"])
       .where("status", "in", [...historyStatuses]).execute();
     const runIds = rows.map((row) => row.id);
@@ -197,7 +197,7 @@ export async function registerRunController(app: FastifyInstance, deps: RouteDep
     const id = (request.params as { id: string }).id;
     const row = await context.db.selectFrom("runs").select(["application_id", "check_group_id", "status"]).where("id", "=", id).executeTakeFirst();
     if (!row) throw httpError(404, "任务不存在");
-    if (!["failed", "cancelled"].includes(row.status)) throw httpError(409, "只有失败或已取消任务可以重试");
+    if (!["partial", "failed", "cancelled"].includes(row.status)) throw httpError(409, "只有部分成功、失败或已取消任务可以重试");
     const runId = await queueRun(context, row.application_id, "manual", [row.application_id]);
     if (!runId) throw httpError(409, "该岗位已有进行中的任务");
     return reply.code(202).send({ runId });

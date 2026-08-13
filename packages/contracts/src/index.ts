@@ -18,6 +18,7 @@ export const RunStatusSchema = Type.Union([
   Type.Literal("running"),
   Type.Literal("needs_login"),
   Type.Literal("succeeded"),
+  Type.Literal("partial"),
   Type.Literal("failed"),
   Type.Literal("cancelled"),
 ]);
@@ -169,6 +170,8 @@ export interface ScriptRuleOutputItem {
   rawStatus: string;
   directStatus?: ProgressStatus | "needs_login";
   evidence?: string;
+  error?: string;
+  errorLine?: number;
 }
 
 export interface ScriptRuleLogEntry {
@@ -359,7 +362,7 @@ export interface ApplicationRecognitionResult {
   confidence: number | null;
   evidence: string | null;
   applied: boolean;
-  notAppliedReason: "manual_locked" | "low_confidence" | "unmatched" | "ai_failed" | "automation_paused" | null;
+  notAppliedReason: "manual_locked" | "low_confidence" | "unmatched" | "ai_failed" | "script_error" | "script_skipped" | "automation_paused" | null;
   source: Exclude<RecognitionSource, "mixed"> | null;
   adapterId: string | null;
   ruleVersion: string | null;
@@ -740,6 +743,7 @@ export const runLabels: Record<RunStatus, string> = {
   running: "检查中",
   needs_login: "需要登录",
   succeeded: "成功",
+  partial: "部分成功",
   failed: "失败",
   cancelled: "已取消",
 };

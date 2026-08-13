@@ -76,18 +76,24 @@ export function normalizeScriptOutput(
     const applicationId = typeof source.applicationId === "string" ? source.applicationId.trim() : "";
     const rawStatus = typeof source.rawStatus === "string" ? source.rawStatus.trim() : "";
     const directStatus = typeof source.directStatus === "string" ? source.directStatus.trim() : "";
+    const scriptError = typeof source.error === "string" ? source.error.trim() : "";
+    const errorLine = Number.isInteger(source.errorLine) && Number(source.errorLine) > 0 ? Number(source.errorLine) : undefined;
     if (!applicationIds.has(applicationId)) throw new Error(`脚本返回了未知岗位 ID：${applicationId || "(空)"}`);
     if (!rawStatus) throw new Error(`脚本返回的第 ${index + 1} 项缺少 rawStatus`);
     if (rawStatus.length > 500) throw new Error("脚本返回的 rawStatus 不能超过 500 个字符");
     if (directStatus && !SCRIPT_DIRECT_STATUSES.has(directStatus)) {
       throw new Error(`脚本返回了不支持的直接状态：${directStatus}`);
     }
+    if (scriptError.length > 500) throw new Error("脚本错误原因不能超过 500 个字符");
+    if (scriptError && directStatus) throw new Error("脚本结果不能同时包含 error 和 directStatus");
     const evidence = typeof source.evidence === "string" ? source.evidence.trim().slice(0, 2_000) : undefined;
     return {
       applicationId,
       rawStatus,
       ...(directStatus ? { directStatus: directStatus as NonNullable<ScriptRuleOutputItem["directStatus"]> } : {}),
       ...(evidence ? { evidence } : {}),
+      ...(scriptError ? { error: scriptError } : {}),
+      ...(errorLine ? { errorLine } : {}),
     };
   });
   if (new Set(normalized.map((item) => item.applicationId)).size !== normalized.length) {
@@ -304,6 +310,31 @@ export async function executeScriptRule(
           rawStatus: labels[status]!,
           directStatus: status as NonNullable<ScriptRuleOutputItem["directStatus"]>,
           ...(evidence ? { evidence } : {}),
+        }));
+      },
+      error(message?: unknown, options: { applicationId?: string } = {}): ScriptRuleOutputItem {
+        const applicationId = String(options.applicationId ?? application.id).trim();
+        if (!allApplications.some((item) => item.id === applicationId)) {
+          throw new Error(`helpers.error 收到未知岗位 ID：${applicationId || "(空)"}`);
+        }
+        const stack = new Error().stack ?? "";
+        const frames = [...stack.matchAll(/<anonymous>:(\d+):(\d+)/g)];
+        const runtimeLine = frames.length ? Number(frames[frames.length - 1]?.[1]) : 0;
+        const errorLine = runtimeLine > 3 ? runtimeLine - 3 : undefined;
+        const custom = typeof message === "string" ? message.trim().slice(0, 500) : "";
+        const error = custom || "脚本运行时错误";
+        return { applicationId, rawStatus: "script_error", error, ...(errorLine ? { errorLine } : {}), evidence: error };
+      },
+      errorAll(message?: unknown): ScriptRuleOutputItem[] {
+        const stack = new Error().stack ?? "";
+        const frames = [...stack.matchAll(/<anonymous>:(\d+):(\d+)/g)];
+        const runtimeLine = frames.length ? Number(frames[frames.length - 1]?.[1]) : 0;
+        const errorLine = runtimeLine > 3 ? runtimeLine - 3 : undefined;
+        const custom = typeof message === "string" ? message.trim().slice(0, 500) : "";
+        const error = custom || "脚本运行时错误";
+        return allApplications.map((item) => ({
+          applicationId: item.id, rawStatus: "script_error", error,
+          ...(errorLine ? { errorLine } : {}), evidence: error,
         }));
       },
       runSelectorRule: (selectorDefinition: unknown): ScriptRuleOutputItem[] =>
