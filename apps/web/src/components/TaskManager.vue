@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import type { TaskRunPage, TaskRunSummary } from "@application-checker/contracts";
 import { progressLabels, runLabels } from "@application-checker/contracts";
 
-defineProps<{
+const props = defineProps<{
   scope: "active" | "history";
   page: TaskRunPage;
   query: string;
@@ -11,6 +11,11 @@ defineProps<{
   currentPage: number;
   pageCount: number;
 }>();
+const activeCounts = computed(() => ({
+  running: props.page.items.filter((run) => run.status === "running").length,
+  queued: props.page.items.filter((run) => run.status === "queued").length,
+  login: props.page.items.filter((run) => run.status === "needs_login").length,
+}));
 defineEmits<{
   scope: [value: "active" | "history"];
   query: [value: string];
@@ -96,7 +101,10 @@ const sourceLabels = { local: "本地", ai: "AI" } as const;
         clearable
         @update:model-value="$emit('query', $event || '')"
       />
-      <span class="task-total">共 {{ page.total }} 个任务</span>
+      <span v-if="scope === 'active'" class="task-total">
+        {{ activeCounts.running }} 个检查中 · {{ activeCounts.queued }} 个排队 · {{ activeCounts.login }} 个待登录
+      </span>
+      <span v-else class="task-total">共 {{ page.total }} 个任务</span>
     </div>
     <div v-if="page.items.length" class="table-shell task-table-shell">
       <table class="task-table">

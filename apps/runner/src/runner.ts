@@ -18,6 +18,7 @@ import { effectiveLoginRequired, isSoftMokahrLoginDetection } from "./login-coor
 import { withNavigationRetry } from "./page-stability.js";
 import { executeScriptRule, ScriptRuleExecutionError, selectScriptRule } from "./script-rule.js";
 import { PreviewPageSessionManager, type PreviewPageResource } from "./preview-page-session.js";
+import { isLoginPageAvailable, LoginWorkspace } from "./login-workspace.js";
 
 const apiBase = (process.env.APP_INTERNAL_URL ?? "http://127.0.0.1:8080/api").replace(/\/$/, "");
 const token = process.env.RUNNER_INTERNAL_TOKEN ?? "development-runner-token-change-me-123456";
@@ -92,7 +93,7 @@ const automatedBrowserPool = new BrowserPool({
 const loginBrowserPool = new BrowserPool({
   name: "login",
   profilePath: path.join(browserDataPath, "pool-login"),
-  idleTimeoutMs: 180_000,
+  idleTimeoutMs: 30 * 60_000,
   maxUses: 30,
   launch: (profilePath) => puppeteer.launch({
     executablePath: browserBin,
@@ -101,9 +102,10 @@ const loginBrowserPool = new BrowserPool({
     headless: false,
     defaultViewport: null,
     waitForInitialPage: false,
-    args: [...launchArgs(), "--no-startup-window", "--start-maximized"],
+    args: [...launchArgs(), "--no-startup-window"],
   }),
 });
+const loginWorkspace = new LoginWorkspace(loginBrowserPool, 30 * 60_000);
 
 const previewPageSessions = new PreviewPageSessionManager(600_000);
 
@@ -214,6 +216,7 @@ async function capture(job: RunnerJob): Promise<void> {
         screenshotBase64: image.data.toString("base64"),
         truncated: image.truncated,
         browserState: state,
+        browserStateVersion: job.browserStateVersion,
         pageSnapshot,
         scriptExecution,
       }),
@@ -238,18 +241,17 @@ async function capture(job: RunnerJob): Promise<void> {
 }
 
 async function login(job: RunnerLoginJob): Promise<void> {
-  let lease: BrowserLease | null = null;
   try {
-    lease = await loginBrowserPool.acquire(job.proxyUrl);
-    const page = await lease.context.newPage();
-    await page.setUserAgent(job.userAgent);
-    await installBrowserState(page, job.browserState);
-    await page.goto(job.url, { waitUntil: "domcontentloaded", timeout: 60_000 });
-    if (await restoreIndexedDbState(page, job.browserState)) {
-      await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
-    }
+    const page = await loginWorkspace.open({
+      url: job.url,
+      site: job.site,
+      userAgent: job.userAgent,
+      proxyUrl: job.proxyUrl,
+      browserState: job.browserState,
+    });
     await api(`/internal/login/${job.sessionId}/ready`, { method: "POST", body: "{}" });
     while (true) {
+      if (!isLoginPageAvailable(page)) throw new Error("登录窗口已关闭");
       const control = await api<{ status: string; expires_at: string }>(`/internal/login/${job.sessionId}/control`);
       if (control.status === "saving") {
         const state = await collectBrowserState(page, job.site);
@@ -257,18 +259,21 @@ async function login(job: RunnerLoginJob): Promise<void> {
           method: "POST",
           body: JSON.stringify({ finalUrl: page.url(), browserState: state }),
         });
+        await loginWorkspace.park();
         return;
       }
-      if (["cancelled", "expired", "failed"].includes(control.status) || new Date(control.expires_at).getTime() <= Date.now()) return;
+      if (["cancelled", "expired", "failed"].includes(control.status) || new Date(control.expires_at).getTime() <= Date.now()) {
+        await loginWorkspace.cancel();
+        return;
+      }
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   } catch (error) {
+    await loginWorkspace.invalidate();
     await api(`/internal/login/${job.sessionId}/fail`, {
       method: "POST",
       body: JSON.stringify({ message: error instanceof Error ? error.message : "Unknown login error" }),
     }).catch(() => {});
-  } finally {
-    await lease?.release();
   }
 }
 
@@ -391,22 +396,37 @@ const heartbeat = setInterval(() => {
 heartbeat.unref();
 
 try {
-  while (!stopping) {
-    try {
-      await api("/internal/heartbeat", { method: "POST", body: "{}" });
-      const job = await api<RunnerJob | RunnerLoginJob | RunnerRecognitionPreviewJob | RunnerRecognitionPreviewReleaseJob | { kind: "idle" }>("/internal/claim", { method: "POST", body: "{}" });
-      if (job.kind === "capture") await capture(job);
-      else if (job.kind === "login") await login(job);
-      else if (job.kind === "recognition_preview") await recognitionPreview(job);
-      else if (job.kind === "recognition_preview_release") await previewPageSessions.release(job.previewId);
-      else await new Promise((resolve) => setTimeout(resolve, 1500));
-    } catch (error) {
-      console.error(error);
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+  await api("/internal/heartbeat", { method: "POST", body: "{}" });
+  const backgroundLoop = async () => {
+    while (!stopping) {
+      try {
+        const job = await api<RunnerJob | RunnerRecognitionPreviewJob | RunnerRecognitionPreviewReleaseJob | { kind: "idle" }>("/internal/claim/background", { method: "POST", body: "{}" });
+        if (job.kind === "capture") await capture(job);
+        else if (job.kind === "recognition_preview") await recognitionPreview(job);
+        else if (job.kind === "recognition_preview_release") await previewPageSessions.release(job.previewId);
+        else await new Promise((resolve) => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.error(error);
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      }
     }
-  }
+  };
+  const loginLoop = async () => {
+    while (!stopping) {
+      try {
+        const job = await api<RunnerLoginJob | { kind: "idle" }>("/internal/claim/login", { method: "POST", body: "{}" });
+        if (job.kind === "login") await login(job);
+        else await new Promise((resolve) => setTimeout(resolve, 250));
+      } catch (error) {
+        console.error(error);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+  };
+  await Promise.all([backgroundLoop(), loginLoop()]);
 } finally {
   clearInterval(heartbeat);
   await previewPageSessions.close();
+  await loginWorkspace.close();
   await Promise.all([automatedBrowserPool.close(), loginBrowserPool.close()]);
 }

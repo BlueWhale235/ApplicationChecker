@@ -16,6 +16,7 @@ import type {
   CheckPlanUpdate,
   CreateApplication,
   LoginSessionSummary,
+  NextLoginSummary,
   NotificationPage,
   ProgressStatus,
   RecognitionMode,
@@ -154,10 +155,13 @@ export const api = {
     "/settings/status-mappings/update",
     { method: "POST", body: JSON.stringify({ statusMappings }) },
   ),
-  createLogin: (runId: string) => request<{ session: LoginSessionSummary; accessUrl: string | null }>("/login-sessions", {
+  createLogin: (runId: string) => request<{ session: LoginSessionSummary; accessUrl: string | null; replacedExisting: boolean }>("/login-sessions", {
     method: "POST", body: JSON.stringify({ runId }),
   }),
   login: (id: string) => request<LoginSessionSummary>(`/login-sessions/${id}`),
+  nextLogin: (excludeRunId: string) => request<NextLoginSummary | null>(
+    `/login-sessions/next-needed?excludeRunId=${encodeURIComponent(excludeRunId)}`,
+  ),
   completeLogin: (id: string) => request<{ ok: true }>(`/login-sessions/${id}/complete`, { method: "POST" }),
   extendLogin: (id: string) => request<{ expiresAt: string }>(`/login-sessions/${id}/extend`, { method: "POST" }),
   cancelLogin: (id: string) => request<void>(`/login-sessions/${id}/cancel`, { method: "POST" }),

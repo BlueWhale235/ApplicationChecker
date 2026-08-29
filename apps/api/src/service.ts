@@ -165,6 +165,20 @@ export async function loadBrowserState(
   return decryptBrowserState(JSON.parse(row.payload_json) as EncryptedPayload, config.stateKey);
 }
 
+export async function loadBrowserStateWithVersion(
+  context: DbContext,
+  config: Config,
+  site: string,
+): Promise<{ state: BrowserStateEnvelope | null; version: number }> {
+  const row = await context.db.selectFrom("browser_profiles").select(["payload_json", "version"])
+    .where("site", "=", site).executeTakeFirst();
+  if (!row) return { state: null, version: 0 };
+  return {
+    state: decryptBrowserState(JSON.parse(row.payload_json) as EncryptedPayload, config.stateKey),
+    version: row.version,
+  };
+}
+
 export async function saveBrowserState(
   context: DbContext,
   config: Config,
@@ -186,6 +200,44 @@ export async function saveBrowserState(
     version: eb("version", "+", 1),
     updated_at: now,
   }))).execute();
+}
+
+export async function saveBrowserStateIfVersion(
+  context: DbContext,
+  config: Config,
+  site: string,
+  state: BrowserStateEnvelope,
+  expectedVersion: number,
+): Promise<boolean> {
+  const now = new Date().toISOString();
+  const payload = JSON.stringify(encryptBrowserState(state, config.stateKey));
+  return context.db.transaction().execute(async (trx) => {
+    const current = await trx.selectFrom("browser_profiles").select("version").where("site", "=", site).executeTakeFirst();
+    if ((current?.version ?? 0) !== expectedVersion) return false;
+    if (!current) {
+      try {
+        await trx.insertInto("browser_profiles").values({
+          site,
+          payload_json: payload,
+          cookie_count: state.cookies.length,
+          version: 1,
+          created_at: now,
+          updated_at: now,
+        }).execute();
+      } catch (error) {
+        if (error instanceof Error && /UNIQUE constraint failed/i.test(error.message)) return false;
+        throw error;
+      }
+      return true;
+    }
+    const updated = await trx.updateTable("browser_profiles").set({
+      payload_json: payload,
+      cookie_count: state.cookies.length,
+      version: current.version + 1,
+      updated_at: now,
+    }).where("site", "=", site).where("version", "=", expectedVersion).executeTakeFirst();
+    return Number(updated.numUpdatedRows) === 1;
+  });
 }
 
 export async function recomputeInheritedSchedules(context: DbContext): Promise<void> {

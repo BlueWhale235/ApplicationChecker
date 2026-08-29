@@ -614,6 +614,7 @@ export interface RunnerJob {
   applications: ScriptRuleApplication[];
   site: string;
   browserState: BrowserStateEnvelope | null;
+  browserStateVersion: number;
   proxyUrl: string | null;
   userAgent: string;
   recognitionMode: RecognitionMode;
@@ -629,9 +630,17 @@ export interface RunnerLoginJob {
   url: string;
   site: string;
   browserState: BrowserStateEnvelope | null;
+  browserStateVersion: number;
   expiresAt: string;
   proxyUrl: string | null;
   userAgent: string;
+}
+
+export interface NextLoginSummary {
+  runId: string;
+  company: string;
+  jobTitle: string;
+  site: string;
 }
 
 export interface RunnerRecognitionPreviewJob {

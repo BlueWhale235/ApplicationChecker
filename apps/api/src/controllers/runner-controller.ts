@@ -21,7 +21,7 @@ import {
   isActiveRunConstraint,
   isInside,
   legacyStatus,
-  loadBrowserState,
+  loadBrowserStateWithVersion,
   mapApplication,
   mapEvent,
   mapLogin,
@@ -39,6 +39,7 @@ import {
   rm,
   runnerAuthorized,
   saveBrowserState,
+  saveBrowserStateIfVersion,
   sha,
   siteForUrl,
   stat,
@@ -90,7 +91,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     return { status: row.status };
   });
 
-  app.post("/internal/claim", async (): Promise<RunnerLoginJob | RunnerJob | RunnerRecognitionPreviewJob | RunnerRecognitionPreviewReleaseJob | { kind: "idle" }> => {
+  const claimLogin = async (): Promise<RunnerLoginJob | { kind: "idle" }> => {
     const login = await context.db.selectFrom("login_sessions")
       .innerJoin("applications", "applications.id", "login_sessions.application_id")
       .leftJoin("check_groups", "check_groups.id", "applications.check_group_id")
@@ -103,20 +104,34 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     if (login) {
       const updated = await context.db.updateTable("login_sessions").set({ status: "starting", updated_at: nowIso() })
         .where("id", "=", login.id).where("status", "=", "queued").executeTakeFirst();
-      if (Number(updated.numUpdatedRows)) return {
-        kind: "login",
-        sessionId: login.id,
-        runId: login.run_id,
-        groupId: login.check_group_id ?? login.application_id,
-        applicationId: login.application_id,
-        url: login.group_resolved_url ?? login.resolved_url ?? login.group_check_url ?? login.check_url,
-        site: login.site,
-        browserState: await loadBrowserState(context, config, login.site),
-        expiresAt: login.expires_at,
-        proxyUrl: config.upstreamProxyUrl,
-        userAgent: (await appSettings(context)).default_user_agent,
-      };
+      if (Number(updated.numUpdatedRows)) {
+        const browserProfile = await loadBrowserStateWithVersion(context, config, login.site);
+        return {
+          kind: "login",
+          sessionId: login.id,
+          runId: login.run_id,
+          groupId: login.check_group_id ?? login.application_id,
+          applicationId: login.application_id,
+          url: login.group_resolved_url ?? login.resolved_url ?? login.group_check_url ?? login.check_url,
+          site: login.site,
+          browserState: browserProfile.state,
+          browserStateVersion: browserProfile.version,
+          expiresAt: login.expires_at,
+          proxyUrl: config.upstreamProxyUrl,
+          userAgent: (await appSettings(context)).default_user_agent,
+        };
+      }
     }
+    return { kind: "idle" };
+  };
+
+  const claimBackground = async (): Promise<RunnerJob | RunnerRecognitionPreviewJob | RunnerRecognitionPreviewReleaseJob | { kind: "idle" }> => {
+    const activeLogin = await context.db.selectFrom("login_sessions").select("id")
+      .where("status", "in", ["queued", "starting", "ready", "active", "saving"]).executeTakeFirst();
+    if (activeLogin) return { kind: "idle" };
+    const runningCapture = await context.db.selectFrom("runs").select("id")
+      .where("status", "=", "running").executeTakeFirst();
+    if (runningCapture) return { kind: "idle" };
     const preview = recognitionPreviewStore?.claim();
     if (preview) return preview;
     const run = await context.db.selectFrom("runs")
@@ -152,6 +167,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         "applications.site", "applications.progress_status", "applications.progress_status_v2",
       ])
       .where("run_application_results.run_id", "=", run.id).orderBy("applications.created_at").execute();
+    const browserProfile = await loadBrowserStateWithVersion(context, config, run.site);
     return {
       kind: "capture",
       runId: run.id,
@@ -173,13 +189,22 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         progressStatus: member.progress_status_v2 ?? "unset",
       })),
       site: run.site,
-      browserState: await loadBrowserState(context, config, run.site),
+      browserState: browserProfile.state,
+      browserStateVersion: browserProfile.version,
       proxyUrl: config.upstreamProxyUrl,
       userAgent: settings.default_user_agent,
       recognitionMode: settings.recognition_mode,
       scriptRules: settings.recognition_mode === "ai_only" ? []
         : (await listParserRules(context, true)).filter((rule) => rule.definition.kind === "script"),
     };
+  };
+
+  app.post("/internal/claim/login", claimLogin);
+  app.post("/internal/claim/background", claimBackground);
+  // Kept for older packaged runners during an in-place desktop upgrade.
+  app.post("/internal/claim", async (): Promise<RunnerLoginJob | RunnerJob | RunnerRecognitionPreviewJob | RunnerRecognitionPreviewReleaseJob | { kind: "idle" }> => {
+    const login = await claimLogin();
+    return login.kind === "login" ? login : claimBackground();
   });
 
   app.post("/internal/runs/:id/needs-login", async (request) => {
@@ -220,6 +245,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       screenshotBase64: string;
       truncated: boolean;
       browserState: BrowserStateEnvelope;
+      browserStateVersion: number;
       pageSnapshot?: LocalPageSnapshot | null;
       scriptExecution?: ScriptRuleExecution | null;
     };
@@ -238,7 +264,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       ])
       .where("run_application_results.run_id", "=", id).orderBy("applications.created_at").execute();
     const screenshotPath = await persistScreenshot(config, groupId, id, body.screenshotBase64);
-    await saveBrowserState(context, config, run.site, body.browserState);
+    await saveBrowserStateIfVersion(context, config, run.site, body.browserState, body.browserStateVersion);
     let aiStatus: RunsTable["ai_status"] = "skipped";
     let aiProvider: string | null = null;
     let aiError: string | null = null;

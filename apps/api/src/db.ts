@@ -355,7 +355,7 @@ CREATE TABLE IF NOT EXISTS login_sessions (
   completed_at TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS login_one_active
-  ON login_sessions(id) WHERE status IN ('queued','starting','ready','active','saving');
+  ON login_sessions((1)) WHERE status IN ('queued','starting','ready','active','saving');
 CREATE TABLE IF NOT EXISTS app_settings (
   id INTEGER PRIMARY KEY CHECK(id = 1),
   global_cron TEXT,
@@ -395,6 +395,27 @@ export function createDb(filename: string): DbContext {
   raw.pragma("foreign_keys = ON");
   raw.pragma("busy_timeout = 5000");
   raw.exec(schema);
+  const loginIndexMigratedAt = new Date().toISOString();
+  const activeLoginSessions = raw.prepare(`
+    SELECT id FROM login_sessions
+    WHERE status IN ('queued','starting','ready','active','saving')
+    ORDER BY CASE status WHEN 'saving' THEN 0 ELSE 1 END, created_at DESC, id DESC
+  `).all() as Array<{ id: string }>;
+  if (activeLoginSessions.length > 1) {
+    const cancelDuplicate = raw.prepare(`
+      UPDATE login_sessions SET status = 'cancelled', error_message = ?, updated_at = ?, completed_at = ?
+      WHERE id = ?
+    `);
+    const cancelDuplicates = raw.transaction((ids: string[]) => {
+      for (const id of ids) cancelDuplicate.run("升级时关闭了重复的登录窗口", loginIndexMigratedAt, loginIndexMigratedAt, id);
+    });
+    cancelDuplicates(activeLoginSessions.slice(1).map((session) => session.id));
+  }
+  raw.exec(`
+    DROP INDEX IF EXISTS login_one_active;
+    CREATE UNIQUE INDEX login_one_active ON login_sessions((1))
+      WHERE status IN ('queued','starting','ready','active','saving');
+  `);
   const settingsColumns = raw.prepare("PRAGMA table_info(app_settings)").all() as Array<{ name: string }>;
   if (!settingsColumns.some((column) => column.name === "screenshot_retention_days")) {
     raw.exec("ALTER TABLE app_settings ADD COLUMN screenshot_retention_days INTEGER NOT NULL DEFAULT 30 CHECK(screenshot_retention_days BETWEEN 1 AND 3650)");
@@ -489,7 +510,19 @@ export function createDb(filename: string): DbContext {
           recognition_evidence TEXT, recognition_provider TEXT, error_code TEXT, error_message TEXT,
           created_at TEXT NOT NULL, started_at TEXT, completed_at TEXT
         );
-        INSERT INTO runs_migrated SELECT * FROM runs;
+        INSERT INTO runs_migrated (
+          id, check_group_id, application_id, trigger, status, final_url, page_title, screenshot_path,
+          screenshot_truncated, ai_status, ai_suggested_status, ai_suggested_status_v2, ai_confidence,
+          ai_evidence, ai_provider, recognition_mode, recognition_status, recognition_source,
+          recognition_suggested_status_v2, recognition_confidence, recognition_evidence,
+          recognition_provider, error_code, error_message, created_at, started_at, completed_at
+        ) SELECT
+          id, check_group_id, application_id, trigger, status, final_url, page_title, screenshot_path,
+          screenshot_truncated, ai_status, ai_suggested_status, ai_suggested_status_v2, ai_confidence,
+          ai_evidence, ai_provider, recognition_mode, recognition_status, recognition_source,
+          recognition_suggested_status_v2, recognition_confidence, recognition_evidence,
+          recognition_provider, error_code, error_message, created_at, started_at, completed_at
+        FROM runs;
         DROP TABLE runs;
         ALTER TABLE runs_migrated RENAME TO runs;
         CREATE UNIQUE INDEX runs_one_active_per_application ON runs(application_id) WHERE status IN ('queued','running','needs_login');
@@ -532,7 +565,15 @@ export function createDb(filename: string): DbContext {
           automation_paused INTEGER NOT NULL DEFAULT 0, recognition_source TEXT, adapter_id TEXT, rule_version TEXT,
           created_at TEXT NOT NULL, UNIQUE(run_id, application_id)
         );
-        INSERT INTO run_application_results_migrated SELECT * FROM run_application_results;
+        INSERT INTO run_application_results_migrated (
+          id, run_id, application_id, job_title_snapshot, matched, raw_status, suggested_status,
+          confidence, evidence, applied, not_applied_reason, automation_paused, recognition_source,
+          adapter_id, rule_version, created_at
+        ) SELECT
+          id, run_id, application_id, job_title_snapshot, matched, raw_status, suggested_status,
+          confidence, evidence, applied, not_applied_reason, automation_paused, recognition_source,
+          adapter_id, rule_version, created_at
+        FROM run_application_results;
         DROP TABLE run_application_results;
         ALTER TABLE run_application_results_migrated RENAME TO run_application_results;
         CREATE INDEX run_results_application ON run_application_results(application_id, created_at DESC);

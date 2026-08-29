@@ -82,6 +82,10 @@ export class BrowserPool {
     await this.retire(true);
   }
 
+  async retireIfIdle(): Promise<void> {
+    await this.retire();
+  }
+
   private async ensureBrowser(): Promise<Browser> {
     if (this.retirePromise) await this.retirePromise;
     if (this.browser) return this.browser;

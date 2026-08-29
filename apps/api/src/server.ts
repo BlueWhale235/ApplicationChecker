@@ -1,5 +1,5 @@
 import "dotenv/config";
-import Fastify from "fastify";
+import Fastify, { LogController } from "fastify";
 import cookie from "@fastify/cookie";
 import proxy from "@fastify/http-proxy";
 import fastifyStatic from "@fastify/static";
@@ -26,7 +26,7 @@ const aiDebugStore = config.debugTools ? new AiDebugStore() : undefined;
 const recognitionPreviewStore = new RecognitionPreviewStore();
 const app = Fastify({
   logger: { level: "warn" },
-  disableRequestLogging: true,
+  logController: new LogController({ disableRequestLogging: true }),
   bodyLimit: 35 * 1024 * 1024,
 });
 await app.register(cookie);

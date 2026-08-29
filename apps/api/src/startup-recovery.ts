@@ -74,7 +74,7 @@ export async function recoverInterruptedWork(context: DbContext): Promise<Startu
       error_message: "程序重启，原登录窗口已关闭，请重新打开登录",
       updated_at: now,
       completed_at: now,
-    }).where("status", "in", ["starting", "ready", "active", "saving"]).executeTakeFirst();
+    }).where("status", "in", ["queued", "starting", "ready", "active", "saving"]).executeTakeFirst();
 
     return {
       runsRequeued: interruptedRuns.length,

@@ -107,19 +107,32 @@ describe("screenshot retention", () => {
     context.raw.exec(`
       BEGIN;
       CREATE TABLE runs_legacy (
-        id TEXT PRIMARY KEY, check_group_id TEXT,
+        id TEXT PRIMARY KEY,
         application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
         trigger TEXT NOT NULL CHECK(trigger IN ('manual','bulk','cron','login_resume')),
         status TEXT NOT NULL CHECK(status IN ('queued','running','needs_login','succeeded','failed','cancelled')),
         final_url TEXT, page_title TEXT, screenshot_path TEXT, screenshot_truncated INTEGER NOT NULL DEFAULT 0,
         ai_status TEXT NOT NULL DEFAULT 'skipped' CHECK(ai_status IN ('skipped','pending','succeeded','failed')),
-        ai_suggested_status TEXT, ai_suggested_status_v2 TEXT, ai_confidence REAL, ai_evidence TEXT, ai_provider TEXT,
+        ai_suggested_status TEXT, ai_confidence REAL, ai_evidence TEXT, ai_provider TEXT,
+        error_code TEXT, error_message TEXT, created_at TEXT NOT NULL, started_at TEXT, completed_at TEXT,
+        check_group_id TEXT, ai_suggested_status_v2 TEXT,
         recognition_mode TEXT NOT NULL DEFAULT 'local_first', recognition_status TEXT NOT NULL DEFAULT 'skipped',
         recognition_source TEXT, recognition_suggested_status_v2 TEXT, recognition_confidence REAL,
-        recognition_evidence TEXT, recognition_provider TEXT, error_code TEXT, error_message TEXT,
-        created_at TEXT NOT NULL, started_at TEXT, completed_at TEXT
+        recognition_evidence TEXT, recognition_provider TEXT
       );
-      INSERT INTO runs_legacy SELECT * FROM runs;
+      INSERT INTO runs_legacy (
+        id, application_id, trigger, status, final_url, page_title, screenshot_path, screenshot_truncated,
+        ai_status, ai_suggested_status, ai_confidence, ai_evidence, ai_provider, error_code, error_message,
+        created_at, started_at, completed_at, check_group_id, ai_suggested_status_v2, recognition_mode,
+        recognition_status, recognition_source, recognition_suggested_status_v2, recognition_confidence,
+        recognition_evidence, recognition_provider
+      ) SELECT
+        id, application_id, trigger, status, final_url, page_title, screenshot_path, screenshot_truncated,
+        ai_status, ai_suggested_status, ai_confidence, ai_evidence, ai_provider, error_code, error_message,
+        created_at, started_at, completed_at, check_group_id, ai_suggested_status_v2, recognition_mode,
+        recognition_status, recognition_source, recognition_suggested_status_v2, recognition_confidence,
+        recognition_evidence, recognition_provider
+      FROM runs;
       DROP TABLE runs;
       ALTER TABLE runs_legacy RENAME TO runs;
       CREATE UNIQUE INDEX runs_one_active_per_application ON runs(application_id) WHERE status IN ('queued','running','needs_login');
@@ -131,10 +144,16 @@ describe("screenshot retention", () => {
         job_title_snapshot TEXT NOT NULL, matched INTEGER NOT NULL DEFAULT 0, raw_status TEXT,
         suggested_status TEXT, confidence REAL, evidence TEXT, applied INTEGER NOT NULL DEFAULT 0,
         not_applied_reason TEXT CHECK(not_applied_reason IN ('manual_locked','low_confidence','unmatched','ai_failed')),
-        automation_paused INTEGER NOT NULL DEFAULT 0, recognition_source TEXT, adapter_id TEXT, rule_version TEXT,
-        created_at TEXT NOT NULL, UNIQUE(run_id, application_id)
+        created_at TEXT NOT NULL, automation_paused INTEGER NOT NULL DEFAULT 0,
+        recognition_source TEXT, adapter_id TEXT, rule_version TEXT, UNIQUE(run_id, application_id)
       );
-      INSERT INTO run_application_results_legacy SELECT * FROM run_application_results;
+      INSERT INTO run_application_results_legacy (
+        id, run_id, application_id, job_title_snapshot, matched, raw_status, suggested_status, confidence,
+        evidence, applied, not_applied_reason, created_at, automation_paused, recognition_source, adapter_id, rule_version
+      ) SELECT
+        id, run_id, application_id, job_title_snapshot, matched, raw_status, suggested_status, confidence,
+        evidence, applied, not_applied_reason, created_at, automation_paused, recognition_source, adapter_id, rule_version
+      FROM run_application_results;
       DROP TABLE run_application_results;
       ALTER TABLE run_application_results_legacy RENAME TO run_application_results;
       CREATE INDEX run_results_application ON run_application_results(application_id, created_at DESC);

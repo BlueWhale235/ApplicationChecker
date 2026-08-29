@@ -28,8 +28,9 @@ import type { DbContext, RunsTable } from "../db.js";
 import { mapApplication, mapEvent, mapLogin, mapProfile, mapRecognitionResult, mapRun } from "../mappers.js";
 import { assertPublicUrl } from "../security.js";
 import {
-  appSettings, calculateNextRun, cleanupExpiredScreenshots, clearGroupScheduleIfFullyPaused, loadBrowserState, queueRun,
-  findOrCreateCheckGroup, recomputeInheritedSchedules, saveBrowserState,
+  appSettings, calculateNextRun, cleanupExpiredScreenshots, clearGroupScheduleIfFullyPaused, loadBrowserState,
+  loadBrowserStateWithVersion, queueRun, findOrCreateCheckGroup, recomputeInheritedSchedules, saveBrowserState,
+  saveBrowserStateIfVersion,
 } from "../service.js";
 import {
   recognizerFromSettings, syncRuntimeSettingsFile, updateAiSettings,
@@ -176,6 +177,7 @@ export {
   createReadStream,
   findOrCreateCheckGroup,
   loadBrowserState,
+  loadBrowserStateWithVersion,
   mapApplication,
   mapEvent,
   mapLogin,
@@ -189,6 +191,7 @@ export {
   recomputeInheritedSchedules,
   rm,
   saveBrowserState,
+  saveBrowserStateIfVersion,
   siteForUrl,
   stat,
   syncRuntimeSettingsFile,

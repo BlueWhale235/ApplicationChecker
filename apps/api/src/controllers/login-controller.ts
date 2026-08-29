@@ -57,6 +57,7 @@ import type {
   RunnerLoginJob,
   RunsTable,
 } from "./shared.js";
+import type { NextLoginSummary } from "@application-checker/contracts";
 
 export async function registerLoginController(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   const { context, config } = deps;
@@ -68,30 +69,43 @@ export async function registerLoginController(app: FastifyInstance, deps: RouteD
       .where("runs.id", "=", runId).executeTakeFirst();
     if (!run) throw httpError(404, "运行记录不存在");
     if (run.status !== "needs_login") throw httpError(409, "该运行当前不需要登录");
-    const active = await context.db.selectFrom("login_sessions").select("id")
-      .where("status", "in", ["queued", "starting", "ready", "active", "saving"]).executeTakeFirst();
-    if (active) throw httpError(409, "已有登录窗口正在使用");
     const id = randomUUID();
     const token = randomBytes(32).toString("base64url");
     const now = new Date();
-    await context.db.insertInto("login_sessions").values({
-      id,
-      application_id: run.application_id,
-      run_id: run.id,
-      status: "queued",
-      access_token_hash: sha(token),
-      token_used_at: null,
-      expires_at: new Date(now.getTime() + 30 * 60_000).toISOString(),
-      error_message: null,
-      created_at: now.toISOString(),
-      updated_at: now.toISOString(),
-
-      completed_at: null,
-    }).execute();
+    const replacedExisting = await context.db.transaction().execute(async (trx) => {
+      const saving = await trx.selectFrom("login_sessions").select("id")
+        .where("status", "=", "saving").executeTakeFirst();
+      if (saving) throw httpError(409, "登录状态正在保存，请稍后再试");
+      const replaceable = await trx.selectFrom("login_sessions").select("id")
+        .where("status", "in", ["queued", "starting", "ready", "active"]).execute();
+      if (replaceable.length) {
+        await trx.updateTable("login_sessions").set({
+          status: "cancelled",
+          error_message: "已切换到新的登录窗口",
+          updated_at: now.toISOString(),
+          completed_at: now.toISOString(),
+        }).where("id", "in", replaceable.map((session) => session.id)).execute();
+      }
+      await trx.insertInto("login_sessions").values({
+        id,
+        application_id: run.application_id,
+        run_id: run.id,
+        status: "queued",
+        access_token_hash: sha(token),
+        token_used_at: null,
+        expires_at: new Date(now.getTime() + 30 * 60_000).toISOString(),
+        error_message: null,
+        created_at: now.toISOString(),
+        updated_at: now.toISOString(),
+        completed_at: null,
+      }).execute();
+      return replaceable.length > 0;
+    });
     const row = await context.db.selectFrom("login_sessions").selectAll().where("id", "=", id).executeTakeFirstOrThrow();
     return reply.code(201).send({
       session: mapLogin(row),
       accessUrl: config.desktopMode ? null : `/remote-login/${id}?token=${encodeURIComponent(token)}`,
+      replacedExisting,
     });
   });
 
@@ -100,6 +114,30 @@ export async function registerLoginController(app: FastifyInstance, deps: RouteD
     const row = await context.db.selectFrom("login_sessions").selectAll().where("id", "=", id).executeTakeFirst();
     if (!row) throw httpError(404, "登录会话不存在");
     return mapLogin(row);
+  });
+
+  app.get("/login-sessions/next-needed", async (request): Promise<NextLoginSummary | null> => {
+    const excludeRunId = (request.query as { excludeRunId?: string }).excludeRunId;
+    let query = context.db.selectFrom("runs")
+      .innerJoin("applications", "applications.id", "runs.application_id")
+      .leftJoin("check_groups", "check_groups.id", "runs.check_group_id")
+      .select([
+        "runs.id as run_id",
+        "applications.company",
+        "applications.job_title",
+        "applications.site",
+        "check_groups.company as group_company",
+      ])
+      .where("runs.status", "=", "needs_login")
+      .orderBy("runs.created_at");
+    if (excludeRunId) query = query.where("runs.id", "!=", excludeRunId);
+    const next = await query.executeTakeFirst();
+    return next ? {
+      runId: next.run_id,
+      company: next.group_company ?? next.company,
+      jobTitle: next.job_title,
+      site: next.site,
+    } : null;
   });
 
   app.post("/login-sessions/:id/complete", async (request) => {
