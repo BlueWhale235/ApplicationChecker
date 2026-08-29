@@ -87,6 +87,7 @@ describe("screenshot retention", () => {
     old.close();
     const context = createDb(filename);
     const row = await context.db.selectFrom("app_settings").selectAll().executeTakeFirstOrThrow();
+    expect(row.check_concurrency).toBe(1);
     expect(row.screenshot_retention_days).toBe(30);
     expect(row.default_user_agent).toContain("Mozilla/5.0");
     expect(row.ai_confidence_threshold).toBe(0.75);
@@ -316,11 +317,26 @@ describe("runtime settings and POST action routes", () => {
       payload: {
         globalCron: null,
         timezone: "Asia/Shanghai",
+        checkConcurrency: 3,
         screenshotRetentionDays: 30,
         defaultUserAgent: "ApplicationChecker-QA/1.0",
       },
     });
     expect(settings.statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/settings" })).json().checkConcurrency).toBe(3);
+
+    const legacySettings = await app.inject({
+      method: "POST",
+      url: "/settings/update",
+      payload: {
+        globalCron: null,
+        timezone: "Asia/Shanghai",
+        screenshotRetentionDays: 30,
+        defaultUserAgent: "ApplicationChecker-QA/1.0",
+      },
+    });
+    expect(legacySettings.statusCode).toBe(200);
+    expect((await context.db.selectFrom("app_settings").select("check_concurrency").executeTakeFirstOrThrow()).check_concurrency).toBe(3);
 
     const ai = await app.inject({
       method: "POST",

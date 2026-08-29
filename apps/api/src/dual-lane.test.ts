@@ -142,6 +142,7 @@ describe("dual runner lanes", () => {
 
   it("claims login immediately while an automated capture is already running", async () => {
     const { context, config } = await setup();
+    await context.db.updateTable("app_settings").set({ check_concurrency: 3 }).where("id", "=", 1).execute();
     const firstRun = await queueRun(context, "app-1", "manual");
     const secondRun = await queueRun(context, "app-2", "manual");
     await context.db.updateTable("runs").set({ status: "needs_login" }).where("id", "=", secondRun!).execute();
@@ -159,10 +160,82 @@ describe("dual runner lanes", () => {
 
     await context.db.updateTable("login_sessions").set({ status: "completed" }).execute();
     await insertApplication(context, "app-3", "丙公司", "测试工程师", "https://three.example.org/status");
-    await queueRun(context, "app-3", "manual");
+    const thirdRun = await queueRun(context, "app-3", "manual");
+    expect((await app.inject({ method: "POST", url: "/internal/claim/background", headers: auth })).json())
+      .toMatchObject({ kind: "capture", runId: thirdRun });
+
+    await app.close(); await context.db.destroy(); context.raw.close();
+  });
+
+  it("atomically enforces the live automated-check concurrency limit", async () => {
+    const { context, config } = await setup();
+    await insertApplication(context, "app-3", "丙公司", "测试工程师", "https://three.example.org/status");
+    await insertApplication(context, "app-4", "丁公司", "运营经理", "https://four.example.dev/status");
+    const runIds = await Promise.all([
+      queueRun(context, "app-1", "cron"),
+      queueRun(context, "app-2", "cron"),
+      queueRun(context, "app-3", "cron"),
+      queueRun(context, "app-4", "cron"),
+    ]);
+    await context.db.updateTable("app_settings").set({ check_concurrency: 2 }).where("id", "=", 1).execute();
+    const app = Fastify();
+    await registerRoutes(app, { context, config, runnerHeartbeat: { at: Date.now() } });
+    const auth = { authorization: `Bearer ${config.runnerToken}` };
+
+    const firstClaims = await Promise.all(Array.from({ length: 4 }, () =>
+      app.inject({ method: "POST", url: "/internal/claim/background", headers: auth })));
+    const captured = firstClaims.map((response) => response.json()).filter((job) => job.kind === "capture");
+    expect(captured).toHaveLength(2);
+    expect(new Set(captured.map((job) => job.runId)).size).toBe(2);
+    expect(firstClaims.filter((response) => response.json().kind === "idle")).toHaveLength(2);
+
+    await context.db.updateTable("app_settings").set({ check_concurrency: 1 }).where("id", "=", 1).execute();
     expect((await app.inject({ method: "POST", url: "/internal/claim/background", headers: auth })).json())
       .toEqual({ kind: "idle" });
+    await context.db.updateTable("app_settings").set({ check_concurrency: 3 }).where("id", "=", 1).execute();
+    const raised = await app.inject({ method: "POST", url: "/internal/claim/background", headers: auth });
+    expect(raised.json()).toMatchObject({ kind: "capture" });
+    expect(runIds).toContain(raised.json().runId);
 
+    await app.close(); await context.db.destroy(); context.raw.close();
+  });
+
+  it("keeps the default at one automated check", async () => {
+    const { context, config } = await setup();
+    await queueRun(context, "app-1", "cron");
+    await queueRun(context, "app-2", "cron");
+    const app = Fastify();
+    await registerRoutes(app, { context, config, runnerHeartbeat: { at: Date.now() } });
+    const auth = { authorization: `Bearer ${config.runnerToken}` };
+    const claims = await Promise.all(Array.from({ length: 3 }, () =>
+      app.inject({ method: "POST", url: "/internal/claim/background", headers: auth })));
+    expect(claims.filter((response) => response.json().kind === "capture")).toHaveLength(1);
+    expect(claims.filter((response) => response.json().kind === "idle")).toHaveLength(2);
+    await app.close(); await context.db.destroy(); context.raw.close();
+  });
+
+  it("prioritizes login resume and user-triggered checks ahead of cron", async () => {
+    const { context, config } = await setup();
+    await insertApplication(context, "app-3", "丙公司", "测试工程师", "https://three.example.org/status");
+    await insertApplication(context, "app-4", "丁公司", "运营经理", "https://four.example.dev/status");
+    const cron = await queueRun(context, "app-1", "cron");
+    const resumed = await queueRun(context, "app-2", "login_resume");
+    const manual = await queueRun(context, "app-3", "manual");
+    const bulk = await queueRun(context, "app-4", "bulk");
+    await context.db.updateTable("runs").set({ created_at: "2026-01-01T00:00:01.000Z" }).where("id", "=", manual!).execute();
+    await context.db.updateTable("runs").set({ created_at: "2026-01-01T00:00:02.000Z" }).where("id", "=", bulk!).execute();
+    const app = Fastify();
+    await registerRoutes(app, { context, config, runnerHeartbeat: { at: Date.now() } });
+    const auth = { authorization: `Bearer ${config.runnerToken}` };
+    const claimed: string[] = [];
+    for (let index = 0; index < 4; index += 1) {
+      const response = await app.inject({ method: "POST", url: "/internal/claim/background", headers: auth });
+      expect(response.json()).toMatchObject({ kind: "capture" });
+      claimed.push(response.json().runId);
+      await context.db.updateTable("runs").set({ status: "succeeded", completed_at: new Date().toISOString() })
+        .where("id", "=", response.json().runId).execute();
+    }
+    expect(claimed).toEqual([resumed, manual, bulk, cron]);
     await app.close(); await context.db.destroy(); context.raw.close();
   });
 

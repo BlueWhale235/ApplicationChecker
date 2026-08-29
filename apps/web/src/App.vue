@@ -37,6 +37,7 @@ const browserStorage = ref<BrowserStorageUsage | null>(null);
 const settings = ref<AppSettings>({
   globalCron: null,
   timezone: "Asia/Shanghai",
+  checkConcurrency: 1,
   screenshotRetentionDays: 30,
   defaultUserAgent: DEFAULT_USER_AGENT,
   aiConfigured: false,
@@ -70,6 +71,7 @@ const settings = ref<AppSettings>({
 const settingsForm = reactive({
   globalCron: "",
   timezone: "Asia/Shanghai",
+  checkConcurrency: 1 as 1 | 2 | 3,
   screenshotRetentionDays: 30,
   defaultUserAgent: DEFAULT_USER_AGENT,
 });
@@ -177,6 +179,7 @@ async function refresh(silent = false) {
     if (!silent) {
       settingsForm.globalCron = appSettings.globalCron ?? "";
       settingsForm.timezone = appSettings.timezone;
+      settingsForm.checkConcurrency = appSettings.checkConcurrency;
       settingsForm.screenshotRetentionDays = appSettings.screenshotRetentionDays;
       settingsForm.defaultUserAgent = appSettings.defaultUserAgent;
     }
@@ -529,6 +532,7 @@ async function saveSettings() {
     const result = await api.updateSettings({
       globalCron: settingsForm.globalCron.trim() || null,
       timezone: settingsForm.timezone,
+      checkConcurrency: Number(settingsForm.checkConcurrency),
       screenshotRetentionDays: Number(settingsForm.screenshotRetentionDays),
       defaultUserAgent: settingsForm.defaultUserAgent.trim(),
     });

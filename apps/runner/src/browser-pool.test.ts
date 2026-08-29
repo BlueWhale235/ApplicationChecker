@@ -77,4 +77,25 @@ describe("BrowserPool", () => {
       vi.useRealTimers();
     }
   });
+
+  it("shares one browser while concurrent jobs use isolated contexts", async () => {
+    const instance = fakeBrowser();
+    const launch = vi.fn(async () => instance.browser);
+    const pool = new BrowserPool({
+      name: "concurrent-test",
+      profilePath: path.join(tmpdir(), `application-checker-pool-${crypto.randomUUID()}`),
+      idleTimeoutMs: 60_000,
+      maxUses: 30,
+      launch,
+    });
+    try {
+      const leases = await Promise.all([pool.acquire(null), pool.acquire(null), pool.acquire(null)]);
+      expect(launch).toHaveBeenCalledTimes(1);
+      expect(instance.contexts).toHaveLength(3);
+      expect(new Set(leases.map((lease) => lease.context)).size).toBe(3);
+      await Promise.all(leases.map((lease) => lease.release()));
+    } finally {
+      await pool.close();
+    }
+  });
 });

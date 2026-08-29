@@ -423,7 +423,8 @@ try {
       }
     }
   };
-  await Promise.all([backgroundLoop(), loginLoop()]);
+  const backgroundSlots = Array.from({ length: 3 }, () => backgroundLoop());
+  await Promise.all([...backgroundSlots, loginLoop()]);
 } finally {
   clearInterval(heartbeat);
   await previewPageSessions.close();

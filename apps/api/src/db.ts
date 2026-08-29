@@ -160,6 +160,7 @@ export interface AppSettingsTable {
   id: Generated<number>;
   global_cron: string | null;
   timezone: string;
+  check_concurrency: Generated<number>;
   screenshot_retention_days: number;
   default_user_agent: string;
   ai_base_url: string | null;
@@ -360,6 +361,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
   id INTEGER PRIMARY KEY CHECK(id = 1),
   global_cron TEXT,
   timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
+  check_concurrency INTEGER NOT NULL DEFAULT 1 CHECK(check_concurrency BETWEEN 1 AND 3),
   screenshot_retention_days INTEGER NOT NULL DEFAULT 30 CHECK(screenshot_retention_days BETWEEN 1 AND 3650),
   default_user_agent TEXT NOT NULL DEFAULT '${DEFAULT_USER_AGENT}',
   ai_base_url TEXT,
@@ -417,6 +419,9 @@ export function createDb(filename: string): DbContext {
       WHERE status IN ('queued','starting','ready','active','saving');
   `);
   const settingsColumns = raw.prepare("PRAGMA table_info(app_settings)").all() as Array<{ name: string }>;
+  if (!settingsColumns.some((column) => column.name === "check_concurrency")) {
+    raw.exec("ALTER TABLE app_settings ADD COLUMN check_concurrency INTEGER NOT NULL DEFAULT 1 CHECK(check_concurrency BETWEEN 1 AND 3)");
+  }
   if (!settingsColumns.some((column) => column.name === "screenshot_retention_days")) {
     raw.exec("ALTER TABLE app_settings ADD COLUMN screenshot_retention_days INTEGER NOT NULL DEFAULT 30 CHECK(screenshot_retention_days BETWEEN 1 AND 3650)");
   }
@@ -760,9 +765,9 @@ export function createDb(filename: string): DbContext {
   `);
   raw.prepare(`
     INSERT OR IGNORE INTO app_settings(
-      id,global_cron,timezone,screenshot_retention_days,default_user_agent,
+      id,global_cron,timezone,check_concurrency,screenshot_retention_days,default_user_agent,
       ai_base_url,ai_model,ai_api_key_encrypted,ai_confidence_threshold,ai_deep_thinking,recognition_mode,updated_at
-    ) VALUES(1,NULL,'Asia/Shanghai',30,?,NULL,NULL,NULL,0.75,0,'local_first',?)
+    ) VALUES(1,NULL,'Asia/Shanghai',1,30,?,NULL,NULL,NULL,0.75,0,'local_first',?)
   `).run(DEFAULT_USER_AGENT, new Date().toISOString());
   return { db: new Kysely<Database>({ dialect: new SqliteDialect({ database: raw }) }), raw };
 }

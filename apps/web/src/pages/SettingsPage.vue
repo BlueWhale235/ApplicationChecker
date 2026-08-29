@@ -14,6 +14,7 @@ defineProps<{
   form: {
     globalCron: string;
     timezone: string;
+    checkConcurrency: 1 | 2 | 3;
     screenshotRetentionDays: number;
     defaultUserAgent: string;
   };
@@ -49,6 +50,11 @@ const recognitionModes: Array<{ title: string; value: RecognitionMode }> = [
   { title: "仅本地解析", value: "local_only" },
   { title: "仅 AI 识别", value: "ai_only" },
 ];
+const concurrencyOptions = [
+  { title: "1 路（默认，资源占用最低）", value: 1 },
+  { title: "2 路（推荐）", value: 2 },
+  { title: "3 路（速度优先）", value: 3 },
+];
 </script>
 
 <template>
@@ -59,6 +65,7 @@ const recognitionModes: Array<{ title: string; value: RecognitionMode }> = [
         <div class="card-title"><div><h2>自动检查</h2><p>岗位选择“继承全局计划”时使用此处设置。</p></div><i class="mdi mdi-calendar-clock"></i></div>
         <v-text-field v-model="form.globalCron" label="全局 Cron" variant="outlined" density="comfortable" placeholder="留空则关闭，例如：0 9 * * *" hint="使用标准五段 Cron，不包含秒。" persistent-hint />
         <v-text-field v-model="form.timezone" label="时区" variant="outlined" density="comfortable" placeholder="Asia/Shanghai" />
+        <v-select v-model="form.checkConcurrency" :items="concurrencyOptions" label="同时检查任务数" variant="outlined" density="comfortable" hint="修改后立即生效；已运行的检查不会被中断。" persistent-hint />
         <v-text-field v-model.number="form.screenshotRetentionDays" label="截图保留天数" type="number" min="1" max="3650" variant="outlined" density="comfortable" hint="到期后只删除截图，任务历史和识别结果不会删除。" persistent-hint />
         <v-textarea v-model="form.defaultUserAgent" label="默认 User-Agent" rows="3" maxlength="512" variant="outlined" density="comfortable" hint="截图和 VNC 登录浏览器都会使用此 User-Agent。" persistent-hint />
         <v-btn class="settings-save" color="secondary" variant="flat" type="submit" :loading="busy">保存设置</v-btn>

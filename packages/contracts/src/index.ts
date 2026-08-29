@@ -262,6 +262,7 @@ export type BulkRun = Static<typeof BulkRunSchema>;
 export const SettingsUpdateSchema = Type.Object({
   globalCron: Type.Union([Type.String({ maxLength: 120 }), Type.Null()]),
   timezone: Type.String({ minLength: 1, maxLength: 64 }),
+  checkConcurrency: Type.Optional(Type.Integer({ minimum: 1, maximum: 3 })),
   screenshotRetentionDays: Type.Integer({ minimum: 1, maximum: 3650 }),
   defaultUserAgent: Type.String({ minLength: 1, maxLength: 512 }),
 });
@@ -528,6 +529,7 @@ export interface LoginSessionSummary {
 export interface AppSettings {
   globalCron: string | null;
   timezone: string;
+  checkConcurrency: 1 | 2 | 3;
   screenshotRetentionDays: number;
   defaultUserAgent: string;
   aiConfigured: boolean;

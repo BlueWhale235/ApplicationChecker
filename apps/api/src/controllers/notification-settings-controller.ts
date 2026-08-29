@@ -154,6 +154,7 @@ export async function registerNotificationSettingsController(
     return {
       globalCron: settings.global_cron,
       timezone: settings.timezone,
+      checkConcurrency: settings.check_concurrency as 1 | 2 | 3,
       screenshotRetentionDays: settings.screenshot_retention_days,
       defaultUserAgent: settings.default_user_agent,
       aiConfigured: activeRecognizer.configured,
@@ -203,6 +204,7 @@ export async function registerNotificationSettingsController(
     await context.db.updateTable("app_settings").set({
       global_cron: body.globalCron,
       timezone: body.timezone,
+      check_concurrency: body.checkConcurrency ?? (await appSettings(context)).check_concurrency,
       screenshot_retention_days: body.screenshotRetentionDays,
       default_user_agent: body.defaultUserAgent.trim(),
       updated_at: nowIso(),

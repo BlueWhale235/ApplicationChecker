@@ -67,6 +67,7 @@ import type {
 } from "@application-checker/contracts";
 import { LOCAL_AUTO_APPLY_THRESHOLD, recognizeLocalPage, recognizeScriptExecution } from "@application-checker/local-status";
 import { parseStatusMappings } from "@application-checker/status-mapping";
+import { sql } from "kysely";
 import { listParserRules } from "../parser-rules.js";
 
 export async function registerRunnerController(app: FastifyInstance, deps: RouteDeps): Promise<void> {
@@ -125,13 +126,17 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     return { kind: "idle" };
   };
 
-  const claimBackground = async (): Promise<RunnerJob | RunnerRecognitionPreviewJob | RunnerRecognitionPreviewReleaseJob | { kind: "idle" }> => {
+  type BackgroundClaim = RunnerJob | RunnerRecognitionPreviewJob | RunnerRecognitionPreviewReleaseJob | { kind: "idle" };
+  const claimBackgroundUnlocked = async (): Promise<BackgroundClaim> => {
     const activeLogin = await context.db.selectFrom("login_sessions").select("id")
       .where("status", "in", ["queued", "starting", "ready", "active", "saving"]).executeTakeFirst();
     if (activeLogin) return { kind: "idle" };
-    const runningCapture = await context.db.selectFrom("runs").select("id")
-      .where("status", "=", "running").executeTakeFirst();
-    if (runningCapture) return { kind: "idle" };
+    const settings = await appSettings(context);
+    const runningCapture = await context.db.selectFrom("runs")
+      .select(({ fn }) => fn.countAll<number>().as("count"))
+      .where("status", "=", "running").executeTakeFirstOrThrow();
+    const runningPreviews = recognitionPreviewStore?.list().filter((preview) => preview.status === "running").length ?? 0;
+    if (Number(runningCapture.count) + runningPreviews >= settings.check_concurrency) return { kind: "idle" };
     const preview = recognitionPreviewStore?.claim();
     if (preview) return preview;
     const run = await context.db.selectFrom("runs")
@@ -142,10 +147,17 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         "applications.company", "applications.job_title", "applications.site", "check_groups.check_url as group_check_url",
         "check_groups.resolved_url as group_resolved_url", "check_groups.company as group_company",
       ])
-      .where("runs.status", "=", "queued").orderBy("runs.created_at").executeTakeFirst();
+      .where("runs.status", "=", "queued")
+      .orderBy(sql<number>`CASE runs.trigger
+        WHEN 'login_resume' THEN 0
+        WHEN 'manual' THEN 1
+        WHEN 'bulk' THEN 1
+        WHEN 'cron' THEN 2
+        ELSE 3 END`)
+      .orderBy("runs.created_at")
+      .executeTakeFirst();
     if (!run) return { kind: "idle" };
     const started = nowIso();
-    const settings = await appSettings(context);
     const updated = await context.db.updateTable("runs").set({
       status: "running",
       started_at: started,
@@ -197,6 +209,19 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       scriptRules: settings.recognition_mode === "ai_only" ? []
         : (await listParserRules(context, true)).filter((rule) => rule.definition.kind === "script"),
     };
+  };
+
+  let backgroundClaimTail = Promise.resolve();
+  const claimBackground = async (): Promise<BackgroundClaim> => {
+    const previous = backgroundClaimTail;
+    let release!: () => void;
+    backgroundClaimTail = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      return await claimBackgroundUnlocked();
+    } finally {
+      release();
+    }
   };
 
   app.post("/internal/claim/login", claimLogin);
