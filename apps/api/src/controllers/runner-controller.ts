@@ -41,7 +41,6 @@ import {
   saveBrowserState,
   saveBrowserStateIfVersion,
   sha,
-  siteForUrl,
   stat,
   syncAppliedEvent,
   syncRuntimeSettingsFile,
@@ -98,8 +97,8 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       .leftJoin("check_groups", "check_groups.id", "applications.check_group_id")
       .select([
         "login_sessions.id", "login_sessions.run_id", "login_sessions.application_id",
-        "login_sessions.expires_at", "applications.check_group_id", "applications.resolved_url", "applications.check_url", "applications.site",
-        "check_groups.resolved_url as group_resolved_url", "check_groups.check_url as group_check_url",
+        "login_sessions.expires_at", "applications.check_group_id", "applications.check_url", "applications.site",
+        "check_groups.check_url as group_check_url",
       ])
       .where("login_sessions.status", "=", "queued").orderBy("login_sessions.created_at").executeTakeFirst();
     if (login) {
@@ -113,7 +112,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
           runId: login.run_id,
           groupId: login.check_group_id ?? login.application_id,
           applicationId: login.application_id,
-          url: login.group_resolved_url ?? login.resolved_url ?? login.group_check_url ?? login.check_url,
+          url: login.group_check_url ?? login.check_url,
           site: login.site,
           browserState: browserProfile.state,
           browserStateVersion: browserProfile.version,
@@ -143,9 +142,9 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       .innerJoin("applications", "applications.id", "runs.application_id")
       .leftJoin("check_groups", "check_groups.id", "runs.check_group_id")
       .select([
-        "runs.id", "runs.application_id", "runs.check_group_id", "applications.resolved_url", "applications.check_url",
+        "runs.id", "runs.application_id", "runs.check_group_id", "applications.check_url",
         "applications.company", "applications.job_title", "applications.site", "check_groups.check_url as group_check_url",
-        "check_groups.resolved_url as group_resolved_url", "check_groups.company as group_company",
+        "check_groups.company as group_company",
       ])
       .where("runs.status", "=", "queued")
       .orderBy(sql<number>`CASE runs.trigger
@@ -185,7 +184,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       runId: run.id,
       groupId,
       applicationId: run.application_id,
-      url: run.group_resolved_url ?? run.resolved_url ?? run.group_check_url ?? run.check_url,
+      url: run.group_check_url ?? run.check_url,
       company: run.group_company ?? run.company,
       jobTitle: run.job_title,
       applications: members.map((member) => ({
@@ -762,16 +761,12 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
 
   app.post("/internal/login/:id/complete", async (request) => {
     const id = (request.params as { id: string }).id;
-    const body = request.body as { finalUrl: string; browserState: BrowserStateEnvelope };
+    const body = request.body as { finalUrl?: string; browserState: BrowserStateEnvelope };
     const session = await context.db.selectFrom("login_sessions").innerJoin("applications", "applications.id", "login_sessions.application_id")
       .select(["login_sessions.run_id", "login_sessions.application_id", "applications.check_group_id", "applications.site"])
       .where("login_sessions.id", "=", id).executeTakeFirst();
     if (!session) throw httpError(404, "Session not found");
     await saveBrowserState(context, config, session.site, body.browserState);
-    let resolvedUrl: string | undefined;
-    try {
-      if (siteForUrl(body.finalUrl) === session.site) resolvedUrl = body.finalUrl;
-    } catch {}
     const completed = nowIso();
     await context.db.transaction().execute(async (trx) => {
       await trx.updateTable("login_sessions").set({
@@ -786,14 +781,9 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         error_message: null,
       }).where("id", "=", session.run_id).execute();
       await trx.updateTable("applications").set({
-        ...(resolvedUrl ? { resolved_url: resolvedUrl } : {}),
         last_run_status: "queued",
         updated_at: completed,
       }).where("check_group_id", "=", session.check_group_id).execute();
-      if (session.check_group_id && resolvedUrl) {
-        await trx.updateTable("check_groups").set({ resolved_url: resolvedUrl, updated_at: completed })
-          .where("id", "=", session.check_group_id).execute();
-      }
     });
     return { ok: true };
   });

@@ -252,6 +252,37 @@ describe("dual runner lanes", () => {
     await context.db.destroy(); context.raw.close();
   });
 
+  it("uses the configured check URL after login instead of the page visited by the user", async () => {
+    const { context, config } = await setup();
+    const checkUrl = "https://one.example.com/application/status";
+    const visitedUrl = "https://one.example.com/jobs";
+    await context.db.updateTable("applications").set({ check_url: checkUrl, resolved_url: visitedUrl })
+      .where("id", "=", "app-1").execute();
+    const runId = await queueRun(context, "app-1", "manual");
+    await context.db.updateTable("runs").set({ status: "needs_login" }).where("id", "=", runId!).execute();
+    const app = Fastify();
+    await registerRoutes(app, { context, config, runnerHeartbeat: { at: Date.now() } });
+    const auth = { authorization: `Bearer ${config.runnerToken}` };
+
+    const created = await app.inject({ method: "POST", url: "/login-sessions", payload: { runId } });
+    const sessionId = created.json().session.id as string;
+    expect((await app.inject({ method: "POST", url: "/internal/claim/login", headers: auth })).json())
+      .toMatchObject({ kind: "login", url: checkUrl });
+    const completed = await app.inject({
+      method: "POST",
+      url: `/internal/login/${sessionId}/complete`,
+      headers: auth,
+      payload: { finalUrl: visitedUrl, browserState: { version: 1, cookies: [], origins: [] } },
+    });
+    expect(completed.statusCode, completed.body).toBe(200);
+    expect((await app.inject({ method: "POST", url: "/internal/claim/background", headers: auth })).json())
+      .toMatchObject({ kind: "capture", runId, url: checkUrl });
+    expect(await context.db.selectFrom("applications").select("resolved_url").where("id", "=", "app-1").executeTakeFirst())
+      .toEqual({ resolved_url: visitedUrl });
+
+    await app.close(); await context.db.destroy(); context.raw.close();
+  });
+
   it("returns the next pending login only after excluding the completed run", async () => {
     const { context, config } = await setup();
     const firstRun = await queueRun(context, "app-1", "manual");

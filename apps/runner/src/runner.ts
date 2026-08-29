@@ -257,7 +257,7 @@ async function login(job: RunnerLoginJob): Promise<void> {
         const state = await collectBrowserState(page, job.site);
         await api(`/internal/login/${job.sessionId}/complete`, {
           method: "POST",
-          body: JSON.stringify({ finalUrl: page.url(), browserState: state }),
+          body: JSON.stringify({ browserState: state }),
         });
         await loginWorkspace.park();
         return;
