@@ -1063,6 +1063,59 @@ describe("task management routes", () => {
     context.raw.close();
   });
 
+  it("paginates active tasks with live work first and reports counts for the full result set", async () => {
+    const { context, config } = await setup();
+    const app = Fastify();
+    await registerRoutes(app, { context, config, runnerHeartbeat: { at: Date.now() } });
+    const runs: string[] = [];
+    for (let index = 0; index < 24; index += 1) {
+      const created = await app.inject({
+        method: "POST",
+        url: "/applications",
+        payload: {
+          company: `分页公司${index}`,
+          jobTitle: `岗位${index}`,
+          checkUrl: `https://example.com/status/${index}`,
+        },
+      });
+      expect(created.statusCode, created.body).toBe(201);
+      const runId = await queueRun(context, created.json().id as string, "manual");
+      expect(runId).toBeTruthy();
+      runs.push(runId!);
+      await context.db.updateTable("runs").set({
+        created_at: `2026-01-01T00:00:${String(index).padStart(2, "0")}.000Z`,
+      }).where("id", "=", runId!).execute();
+    }
+    await context.db.updateTable("runs").set({
+      status: "running",
+      started_at: "2026-01-01T00:01:00.000Z",
+    }).where("id", "=", runs[23]!).execute();
+    await context.db.updateTable("runs").set({
+      status: "needs_login",
+      completed_at: "2026-01-01T00:01:01.000Z",
+    }).where("id", "=", runs[22]!).execute();
+
+    const first = await app.inject({ method: "GET", url: "/runs?scope=active&limit=20&offset=0" });
+    expect(first.statusCode, first.body).toBe(200);
+    expect(first.json()).toMatchObject({
+      total: 24,
+      limit: 20,
+      offset: 0,
+      statusCounts: { running: 1, queued: 22, needsLogin: 1 },
+    });
+    expect(first.json().items).toHaveLength(20);
+    expect(first.json().items[0]).toMatchObject({ id: runs[23], status: "running" });
+    expect(first.json().items[1]).toMatchObject({ id: runs[0], status: "queued" });
+
+    const second = await app.inject({ method: "GET", url: "/runs?scope=active&limit=20&offset=20" });
+    expect(second.json().items).toHaveLength(4);
+    expect(second.json().items.at(-1)).toMatchObject({ id: runs[22], status: "needs_login" });
+
+    await app.close();
+    await context.db.destroy();
+    context.raw.close();
+  });
+
   it("clears every notification while preserving status events", async () => {
     const { context, config } = await setup();
     await context.db.insertInto("status_events").values({

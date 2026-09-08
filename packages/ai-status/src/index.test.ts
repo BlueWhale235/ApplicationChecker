@@ -188,46 +188,48 @@ describe("recognizer configuration", () => {
     ]);
   });
 
-  it("falls back to normal mode when deep thinking is rejected", async () => {
-    const successBody = JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({ results: [] }) } }],
-    });
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response("reasoning_effort is not supported", { status: 400 }))
-      .mockResolvedValueOnce(new Response(successBody, { status: 200 }))
-      .mockResolvedValueOnce(new Response(successBody, { status: 200 }));
+  it("does not retry when deep thinking is rejected", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("reasoning_effort is not supported", { status: 400 }));
     vi.stubGlobal("fetch", fetchMock);
     const recognizer = new OpenAiCompatibleRecognizer({
-      baseUrl: "https://fallback.example/v1",
+      baseUrl: "https://no-retry.example/v1",
       apiKey: "x",
       model: "vision-without-reasoning",
       deepThinking: true,
     });
-    await recognizer.recognizeGroup({
+    await expect(recognizer.recognizeGroup({
       screenshot: Buffer.from("png"),
       company: "示例公司",
       applications: [],
       pageTitle: null,
       finalUrl: null,
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    })).rejects.toThrow("400");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     const deepBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
-    const fallbackBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as Record<string, unknown>;
     expect(deepBody).toMatchObject({ reasoning_effort: "high" });
     expect(deepBody).not.toHaveProperty("temperature");
-    expect(fallbackBody).toMatchObject({ temperature: 0 });
-    expect(fallbackBody).not.toHaveProperty("reasoning_effort");
+  });
 
-    await recognizer.recognizeGroup({
+  it("reports the network cause and makes only one request", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("fetch failed", { cause: { code: "ECONNRESET" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const observer = {
+      start: vi.fn().mockReturnValue("trace-network"), attempt: vi.fn(), complete: vi.fn(), fail: vi.fn(),
+    } satisfies AiDebugObserver;
+    const recognizer = new OpenAiCompatibleRecognizer({
+      baseUrl: "https://no-retry.example/v1", apiKey: "secret", model: "vision", debugObserver: observer,
+    });
+    await expect(recognizer.recognizeGroup({
       screenshot: Buffer.from("png"),
       company: "示例公司",
       applications: [],
       pageTitle: null,
       finalUrl: null,
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    const rememberedFallbackBody = JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body)) as Record<string, unknown>;
-    expect(rememberedFallbackBody).toMatchObject({ temperature: 0 });
-    expect(rememberedFallbackBody).not.toHaveProperty("reasoning_effort");
+    })).rejects.toThrow(/ECONNRESET.*第1次/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(observer.attempt).toHaveBeenCalledWith("trace-network", expect.objectContaining({
+      httpStatus: null,
+      error: expect.stringMatching(/ECONNRESET.*第1次/),
+    }));
   });
 });

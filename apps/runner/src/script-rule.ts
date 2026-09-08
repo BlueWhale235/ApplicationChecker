@@ -225,7 +225,14 @@ export async function executeScriptRule(
         const text = new TextDecoder().decode(bytes);
         let data: unknown = text;
         if (config.responseType === "json" || (!config.responseType && response.headers.get("content-type")?.includes("json"))) {
-          data = text ? JSON.parse(text) : null;
+          if (!text) data = null;
+          else {
+            try { data = JSON.parse(text); }
+            catch {
+              // Keep redirected login/error HTML readable so the adapter can inspect response.url/status.
+              data = text;
+            }
+          }
         }
         const result = {
           data, status: response.status, statusText: response.statusText,

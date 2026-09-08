@@ -57,6 +57,7 @@ import type {
   RunnerLoginJob,
   RunsTable,
 } from "./shared.js";
+import { sql } from "kysely";
 
 export async function registerRunController(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   const { context, config, aiDebugStore } = deps;
@@ -88,7 +89,7 @@ export async function registerRunController(app: FastifyInstance, deps: RouteDep
     const historyStatuses = ["succeeded", "partial", "failed", "cancelled"] as const;
     const allowed = scope === "active" ? activeStatuses : historyStatuses;
     if (query.status && !allowed.includes(query.status as never)) throw httpError(400, "任务状态与分组不匹配");
-    const limit = Math.min(100, Math.max(1, Number(query.limit) || 50));
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
     const offset = Math.max(0, Number(query.offset) || 0);
     const search = query.q?.trim() ?? "";
     let builder = context.db.selectFrom("runs")
@@ -115,10 +116,28 @@ export async function registerRunController(app: FastifyInstance, deps: RouteDep
       ]));
     }
     const totalRow = await builder.clearSelect().select(({ fn }) => fn.countAll<number>().as("count")).executeTakeFirstOrThrow();
-    const rows = await builder
-      .orderBy(scope === "active" ? "runs.created_at" : "runs.completed_at", "desc")
-      .limit(limit).offset(offset).execute();
+    const statusRows = scope === "active"
+      ? await builder.clearSelect()
+        .select(["runs.status"])
+        .select(({ fn }) => fn.countAll<number>().as("count"))
+        .groupBy("runs.status")
+        .execute()
+      : [];
+    let pageBuilder = builder;
+    if (scope === "active") {
+      pageBuilder = pageBuilder
+        .orderBy(sql<number>`CASE runs.status
+          WHEN 'running' THEN 0
+          WHEN 'queued' THEN 1
+          WHEN 'needs_login' THEN 2
+          ELSE 3 END`)
+        .orderBy("runs.created_at", "asc");
+    } else {
+      pageBuilder = pageBuilder.orderBy("runs.completed_at", "desc");
+    }
+    const rows = await pageBuilder.limit(limit).offset(offset).execute();
     const resultMap = await recognitionResults(context, rows.map((row) => row.id));
+    const statusCounts = Object.fromEntries(statusRows.map((row) => [row.status, Number(row.count)]));
     return {
       items: rows.map((row) => ({
         ...mapRun(row, resultMap.get(row.id) ?? [], Number(row.task_member_count ?? 1)),
@@ -130,6 +149,11 @@ export async function registerRunController(app: FastifyInstance, deps: RouteDep
       total: Number(totalRow.count),
       limit,
       offset,
+      statusCounts: {
+        queued: statusCounts.queued ?? 0,
+        running: statusCounts.running ?? 0,
+        needsLogin: statusCounts.needs_login ?? 0,
+      },
     };
   });
 

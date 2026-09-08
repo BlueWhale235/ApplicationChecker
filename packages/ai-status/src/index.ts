@@ -107,7 +107,6 @@ const nonApplicationPageLabels: Record<string, string> = {
   login: "需要登录或验证",
   blank: "空白页或无有效内容",
 };
-const deepThinkingUnsupported = new Set<string>();
 
 function createSystemPrompt(statusMappings?: StatusMappings | null): string {
   return [
@@ -234,9 +233,12 @@ export class OpenAiCompatibleRecognizer implements StatusRecognizer {
       }
     }
 
-    const send = async (deepThinking: boolean): Promise<{ response: Response; raw: string }> => {
+    let requestNumber = 0;
+    const sendOnce = async (deepThinking: boolean): Promise<{ response: Response; raw: string }> => {
       const startedAt = new Date().toISOString();
       const started = Date.now();
+      const attemptNumber = ++requestNumber;
+      let stage = "连接/发送请求";
       try {
         const response = await fetch(endpoint, {
           method: "POST",
@@ -250,6 +252,7 @@ export class OpenAiCompatibleRecognizer implements StatusRecognizer {
           }),
           signal: AbortSignal.timeout(deepThinking ? 180_000 : 90_000),
         });
+        stage = "读取响应";
         const raw = await response.text();
         if (traceId) safeObserve(() => observer?.attempt(traceId!, {
           deepThinking,
@@ -261,7 +264,9 @@ export class OpenAiCompatibleRecognizer implements StatusRecognizer {
         }));
         return { response, raw };
       } catch (error) {
-        const message = error instanceof Error ? error.message : "AI request failed";
+        const cause = error instanceof Error ? (error.cause as { code?: string } | undefined) : undefined;
+        const code = cause?.code ?? (error as { code?: string })?.code ?? (error instanceof Error ? error.name : "NETWORK_ERROR");
+        const message = redactDebugText(`AI 网络请求失败 [${code}]，阶段：${stage}，第${attemptNumber}次，耗时 ${Date.now() - started}ms：${error instanceof Error ? error.message : "AI request failed"}`, this.options.apiKey!);
         if (traceId) safeObserve(() => observer?.attempt(traceId!, {
           deepThinking,
           startedAt,
@@ -270,22 +275,15 @@ export class OpenAiCompatibleRecognizer implements StatusRecognizer {
           responseBody: null,
           error: message,
         }));
-        throw error;
+        throw Object.assign(new Error(message), { code, cause: error });
       }
     };
 
     try {
-      const supportKey = `${this.options.baseUrl}\n${this.options.model}`;
-      const tryDeepThinking = Boolean(this.options.deepThinking && !deepThinkingUnsupported.has(supportKey));
-      let attempt = await send(tryDeepThinking);
-      if (tryDeepThinking && !attempt.response.ok && [400, 422].includes(attempt.response.status)) {
-        const fallback = await send(false);
-        if (fallback.response.ok) deepThinkingUnsupported.add(supportKey);
-        attempt = fallback;
-      }
+      const attempt = await sendOnce(Boolean(this.options.deepThinking));
       if (!attempt.response.ok) {
         const detail = attempt.raw.trim().slice(0, 500);
-        throw new Error(`AI request failed with ${attempt.response.status}${detail ? `: ${detail}` : ""}`);
+        throw new Error(redactDebugText(`AI request failed with ${attempt.response.status}${detail ? `: ${detail}` : ""}`, this.options.apiKey));
       }
       const body = JSON.parse(attempt.raw) as { choices?: Array<{ message?: { content?: string } }> };
       const value = jsonObject(body.choices?.[0]?.message?.content ?? "");

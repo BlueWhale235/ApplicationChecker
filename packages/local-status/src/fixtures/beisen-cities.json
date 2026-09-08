@@ -1,0 +1,1737 @@
+{
+  "snapshot": {
+    "url": "https://fixture.zhiye.com/personal/deliveryRecord",
+    "title": "投递记录",
+    "language": null,
+    "visibleText": "投递记录\n国内客户经理（27届校招 北京/上海/广州/深圳/苏州/福建）(J12320) 当前进度：简历筛选-进行中 校园招聘 2026-01-01 00:00 投递 查看/打印\n国内客户经理（27届校招 北京/上海/广州/深圳/苏州/福建）(J12320)\n国内客户经理（27届校招 北京/上海/广州/深圳/苏州/福建）(J12320)\n当前进度：简历筛选-进行中\n校园招聘\n2026-01-01 00:00 投递\n查看/打印\n查看/打印\n查看/打印\n查看/打印\n查看/打印\n查看/打印\n以下是来自其他招聘网站的投递记录\n以下是来自其他招聘网站的投递记录\n国内客户经理（27届校招 北京/上海/广州/深圳/苏州/福建） 当前进度：简历筛选-进行中 2026-01-01 00:00 投递于 校园大使\n国内客户经理（27届校招 北京/上海/广州/深圳/苏州/福建）\n国内客户经理（27届校招 北京/上海/广州/深圳/苏州/福建）\n当前进度：简历筛选-进行中\n2026-01-01 00:00 投递于 校园大使\n2026-01-01 00:00 投递 于\n校园大使\n没有更多了~",
+    "nodes": [
+      {
+        "id": 1,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "pc-page-container"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 900
+      },
+      {
+        "id": 2,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-bdvvtL",
+          "gCiWkA"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 60
+      },
+      {
+        "id": 3,
+        "parentId": 2,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-gsDKAQ",
+          "dUOFcl"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 60
+      },
+      {
+        "id": 4,
+        "parentId": 3,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-dkPtRN",
+          "lfhjek"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 0,
+        "width": 1200,
+        "height": 60
+      },
+      {
+        "id": 5,
+        "parentId": 4,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-hKwDye",
+          "beYMLX"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 0,
+        "width": 230,
+        "height": 60
+      },
+      {
+        "id": 6,
+        "parentId": 5,
+        "tag": "img",
+        "role": null,
+        "classes": [
+          "sc-jRQBWg",
+          "fUMBDq"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 15,
+        "width": 210,
+        "height": 30
+      },
+      {
+        "id": 7,
+        "parentId": 4,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-eCImPb",
+          "iqnMpE"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 390,
+        "y": 1,
+        "width": 930,
+        "height": 58
+      },
+      {
+        "id": 8,
+        "parentId": 7,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-gKclnd",
+          "kDQnwX"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 390,
+        "y": 1,
+        "width": 752,
+        "height": 58
+      },
+      {
+        "id": 9,
+        "parentId": 8,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-jrQzAO",
+          "hYVTUT"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 390,
+        "y": 1,
+        "width": 68,
+        "height": 58
+      },
+      {
+        "id": 10,
+        "parentId": 9,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-iqseJM",
+          "eYRSUu"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 390,
+        "y": 1,
+        "width": 28,
+        "height": 58
+      },
+      {
+        "id": 11,
+        "parentId": 10,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-kDTinF",
+          "dKlLIr"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 390,
+        "y": 1,
+        "width": 28,
+        "height": 58
+      },
+      {
+        "id": 12,
+        "parentId": 8,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-jrQzAO",
+          "hYVTUT"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 458,
+        "y": 1,
+        "width": 96,
+        "height": 58
+      },
+      {
+        "id": 13,
+        "parentId": 12,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-iqseJM",
+          "eYRSUu"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 458,
+        "y": 1,
+        "width": 56,
+        "height": 58
+      },
+      {
+        "id": 14,
+        "parentId": 13,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-kDTinF",
+          "dKlLIr"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 458,
+        "y": 1,
+        "width": 56,
+        "height": 58
+      },
+      {
+        "id": 15,
+        "parentId": 8,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-jrQzAO",
+          "hYVTUT"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 554,
+        "y": 1,
+        "width": 96,
+        "height": 58
+      },
+      {
+        "id": 16,
+        "parentId": 15,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-iqseJM",
+          "eYRSUu"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 554,
+        "y": 1,
+        "width": 56,
+        "height": 58
+      },
+      {
+        "id": 17,
+        "parentId": 16,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-kDTinF",
+          "dKlLIr"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 554,
+        "y": 1,
+        "width": 56,
+        "height": 58
+      },
+      {
+        "id": 18,
+        "parentId": 7,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-ezbkAF",
+          "bcYsBb"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1142,
+        "y": 1,
+        "width": 178,
+        "height": 58
+      },
+      {
+        "id": 19,
+        "parentId": 18,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-ksdxgE",
+          "xiHng"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1158,
+        "y": 1,
+        "width": 162,
+        "height": 58
+      },
+      {
+        "id": 20,
+        "parentId": 19,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-ksdxgE",
+          "klfWKj"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1158,
+        "y": 1,
+        "width": 162,
+        "height": 58
+      },
+      {
+        "id": 21,
+        "parentId": 20,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-egiyK",
+          "eIThjU"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1158,
+        "y": 1,
+        "width": 162,
+        "height": 58
+      },
+      {
+        "id": 22,
+        "parentId": 21,
+        "tag": "img",
+        "role": null,
+        "classes": [
+          "sc-fotOHu",
+          "bscMnt"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1158,
+        "y": 15,
+        "width": 30,
+        "height": 30
+      },
+      {
+        "id": 23,
+        "parentId": 21,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-fFeiMQ",
+          "kxWUIb"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1196,
+        "y": 23,
+        "width": 104,
+        "height": 14
+      },
+      {
+        "id": 24,
+        "parentId": 21,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-bkkeKt",
+          "cNnlrr"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1308,
+        "y": 23,
+        "width": 12,
+        "height": 14
+      },
+      {
+        "id": 25,
+        "parentId": 24,
+        "tag": "svg",
+        "role": null,
+        "classes": [
+          "icon"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1308,
+        "y": 23,
+        "width": 12,
+        "height": 12
+      },
+      {
+        "id": 26,
+        "parentId": 25,
+        "tag": "path",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1309,
+        "y": 26,
+        "width": 10,
+        "height": 5
+      },
+      {
+        "id": 27,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-hiCibw",
+          "hzRWgj"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 10,
+        "width": 1200,
+        "height": 40
+      },
+      {
+        "id": 28,
+        "parentId": 27,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sc-cCcXHH",
+          "LMYel"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 142,
+        "y": 24,
+        "width": 11,
+        "height": 11
+      },
+      {
+        "id": 29,
+        "parentId": 28,
+        "tag": "svg",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 142,
+        "y": 24,
+        "width": 14,
+        "height": 14
+      },
+      {
+        "id": 30,
+        "parentId": 29,
+        "tag": "path",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 142,
+        "y": 24,
+        "width": 14,
+        "height": 14
+      },
+      {
+        "id": 31,
+        "parentId": 27,
+        "tag": "input",
+        "role": null,
+        "classes": [
+          "sc-gWXbKe",
+          "kzZNkN"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 10,
+        "width": 1200,
+        "height": 40
+      },
+      {
+        "id": 32,
+        "parentId": 1,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "styled__pageContent-editor__sc-12b48c3-1",
+          "BNqUE"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 865
+      },
+      {
+        "id": 33,
+        "parentId": 32,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 60,
+        "width": 1440,
+        "height": 805
+      },
+      {
+        "id": 34,
+        "parentId": 33,
+        "tag": "header",
+        "role": null,
+        "classes": [
+          "stylest__STRoot-editor__sc-1qmr41u-0",
+          "dOfZLz"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 60,
+        "width": 1440,
+        "height": 126
+      },
+      {
+        "id": 35,
+        "parentId": 34,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STShadingWrapper-editor__sc-1qmr41u-5",
+          "dZEGSu"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 60,
+        "width": 188,
+        "height": 126
+      },
+      {
+        "id": 36,
+        "parentId": 35,
+        "tag": "svg",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 60,
+        "width": 254,
+        "height": 126
+      },
+      {
+        "id": 37,
+        "parentId": 36,
+        "tag": "g",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 60,
+        "width": 1366,
+        "height": 126
+      },
+      {
+        "id": 38,
+        "parentId": 37,
+        "tag": "g",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 60,
+        "width": 1366,
+        "height": 126
+      },
+      {
+        "id": 39,
+        "parentId": 38,
+        "tag": "use",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 60,
+        "width": 1366,
+        "height": 126
+      },
+      {
+        "id": 40,
+        "parentId": 38,
+        "tag": "g",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 60,
+        "width": 254,
+        "height": 126
+      },
+      {
+        "id": 41,
+        "parentId": 40,
+        "tag": "g",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 60,
+        "width": 254,
+        "height": 126
+      },
+      {
+        "id": 42,
+        "parentId": 41,
+        "tag": "rect",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 60,
+        "width": 254,
+        "height": 126
+      },
+      {
+        "id": 43,
+        "parentId": 41,
+        "tag": "path",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 12,
+        "y": 71,
+        "width": 230,
+        "height": 104
+      },
+      {
+        "id": 44,
+        "parentId": 34,
+        "tag": "section",
+        "role": null,
+        "classes": [
+          "stylest__STContainer-editor__sc-1qmr41u-1",
+          "dOgwAt"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 188,
+        "y": 60,
+        "width": 1064,
+        "height": 126
+      },
+      {
+        "id": 45,
+        "parentId": 44,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STTitleContainer-editor__sc-1qmr41u-2",
+          "cLZJDh"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 188,
+        "y": 92,
+        "width": 1064,
+        "height": 32
+      },
+      {
+        "id": 46,
+        "parentId": 45,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STTitle-editor__sc-1qmr41u-3",
+          "bDwUfB"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 672,
+        "y": 92,
+        "width": 96,
+        "height": 32
+      },
+      {
+        "id": 47,
+        "parentId": 44,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STContent-editor__sc-1qmr41u-4",
+          "kgIlxx"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 615,
+        "y": 132,
+        "width": 210,
+        "height": 22
+      },
+      {
+        "id": 48,
+        "parentId": 34,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STShadingWrapper-editor__sc-1qmr41u-5",
+          "dZEGSu"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1252,
+        "y": 60,
+        "width": 188,
+        "height": 126
+      },
+      {
+        "id": 49,
+        "parentId": 48,
+        "tag": "svg",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1252,
+        "y": 60,
+        "width": 254,
+        "height": 126
+      },
+      {
+        "id": 50,
+        "parentId": 49,
+        "tag": "g",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 140,
+        "y": 60,
+        "width": 1366,
+        "height": 126
+      },
+      {
+        "id": 51,
+        "parentId": 50,
+        "tag": "g",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 140,
+        "y": 60,
+        "width": 1366,
+        "height": 126
+      },
+      {
+        "id": 52,
+        "parentId": 51,
+        "tag": "use",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 140,
+        "y": 60,
+        "width": 1366,
+        "height": 126
+      },
+      {
+        "id": 53,
+        "parentId": 51,
+        "tag": "g",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1252,
+        "y": 60,
+        "width": 254,
+        "height": 126
+      },
+      {
+        "id": 54,
+        "parentId": 53,
+        "tag": "g",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1252,
+        "y": 60,
+        "width": 254,
+        "height": 126
+      },
+      {
+        "id": 55,
+        "parentId": 54,
+        "tag": "rect",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1252,
+        "y": 60,
+        "width": 254,
+        "height": 126
+      },
+      {
+        "id": 56,
+        "parentId": 54,
+        "tag": "path",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1264,
+        "y": 71,
+        "width": 230,
+        "height": 104
+      },
+      {
+        "id": 57,
+        "parentId": 33,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STTabContainer-editor__sc-x65g8q-0",
+          "bHPsDN"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 220,
+        "y": 218,
+        "width": 1000,
+        "height": 24
+      },
+      {
+        "id": 58,
+        "parentId": 57,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "stylest__STTab-editor__sc-x65g8q-1",
+          "iOdrRt"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 236,
+        "y": 221,
+        "width": 120,
+        "height": 17
+      },
+      {
+        "id": 59,
+        "parentId": 33,
+        "tag": "section",
+        "role": null,
+        "classes": [
+          "stylest__STListRoot-editor__sc-1x4urje-0",
+          "HfecS"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 220,
+        "y": 266,
+        "width": 1000,
+        "height": 424
+      },
+      {
+        "id": 60,
+        "parentId": 59,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STRoot-editor__sc-6zstm6-1",
+          "kTteHW"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "国内客户经理（27届校招 北京/上海/广州/深圳/苏州/福建）(J12320) 当前进度：简历筛选-进行中 校园招聘 2026-01-01 00:00 投递 查看/打印",
+        "x": 220,
+        "y": 266,
+        "width": 1000,
+        "height": 134
+      },
+      {
+        "id": 61,
+        "parentId": 60,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STContentContainer-editor__sc-6zstm6-2",
+          "iOAXjg"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 244,
+        "y": 290,
+        "width": 817,
+        "height": 86
+      },
+      {
+        "id": 62,
+        "parentId": 61,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STFlexContainer-editor__sc-6zstm6-0",
+          "bGKlod"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "国内客户经理（27届校招 北京/上海/广州/深圳/苏州/福建）(J12320)",
+        "x": 244,
+        "y": 290,
+        "width": 817,
+        "height": 26
+      },
+      {
+        "id": 63,
+        "parentId": 62,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "stylest__STJobName-editor__sc-6zstm6-4",
+          "eBEHMB",
+          "delivery-list-job_name"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "国内客户经理（27届校招 北京/上海/广州/深圳/苏州/福建）(J12320)",
+        "x": 244,
+        "y": 290,
+        "width": 535,
+        "height": 26
+      },
+      {
+        "id": 64,
+        "parentId": 61,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STJobStatus-editor__sc-6zstm6-5",
+          "hEEiJC"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "当前进度：简历筛选-进行中",
+        "x": 244,
+        "y": 324,
+        "width": 660,
+        "height": 22
+      },
+      {
+        "id": 65,
+        "parentId": 61,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STFlexContainer-editor__sc-6zstm6-0",
+          "bGKlod"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 244,
+        "y": 354,
+        "width": 817,
+        "height": 22
+      },
+      {
+        "id": 66,
+        "parentId": 65,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STCommonData-editor__sc-6zstm6-6",
+          "lnNVjk"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "校园招聘",
+        "x": 244,
+        "y": 354,
+        "width": 56,
+        "height": 22
+      },
+      {
+        "id": 67,
+        "parentId": 65,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STDivider-editor__sc-6zstm6-7",
+          "bdEmGa"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 312,
+        "y": 360,
+        "width": 1,
+        "height": 10
+      },
+      {
+        "id": 68,
+        "parentId": 65,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STCommonData-editor__sc-6zstm6-6",
+          "cVjLeU"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "2026-01-01 00:00 投递",
+        "x": 325,
+        "y": 354,
+        "width": 142,
+        "height": 22
+      },
+      {
+        "id": 69,
+        "parentId": 60,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STFlexContainer-editor__sc-6zstm6-0",
+          "bGKlod"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "查看/打印",
+        "x": 1101,
+        "y": 290,
+        "width": 95,
+        "height": 86
+      },
+      {
+        "id": 70,
+        "parentId": 69,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "查看/打印",
+        "x": 1101,
+        "y": 317,
+        "width": 95,
+        "height": 32
+      },
+      {
+        "id": 71,
+        "parentId": 70,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "pc-btn-group"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "查看/打印",
+        "x": 1101,
+        "y": 317,
+        "width": 95,
+        "height": 32
+      },
+      {
+        "id": 72,
+        "parentId": 71,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "phoenix-button"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "查看/打印",
+        "x": 1101,
+        "y": 317,
+        "width": 95,
+        "height": 32
+      },
+      {
+        "id": 73,
+        "parentId": 72,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "phoenix-button__wraper",
+          "phoenix-button__wraper--big",
+          "phoenix-button__wraper--normal"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "查看/打印",
+        "x": 1101,
+        "y": 317,
+        "width": 95,
+        "height": 32
+      },
+      {
+        "id": 74,
+        "parentId": 73,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "phoenix-button__content"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "查看/打印",
+        "x": 1118,
+        "y": 317,
+        "width": 61,
+        "height": 32
+      },
+      {
+        "id": 75,
+        "parentId": 59,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STContainer-editor__sc-ss60x6-0",
+          "bfvsAz"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "以下是来自其他招聘网站的投递记录",
+        "x": 220,
+        "y": 424,
+        "width": 1000,
+        "height": 22
+      },
+      {
+        "id": 76,
+        "parentId": 75,
+        "tag": "pre",
+        "role": null,
+        "classes": [
+          "stylest__STTitle-editor__sc-ss60x6-1",
+          "eBJerm"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "以下是来自其他招聘网站的投递记录",
+        "x": 592,
+        "y": 424,
+        "width": 256,
+        "height": 22
+      },
+      {
+        "id": 77,
+        "parentId": 59,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STRoot-editor__sc-6zstm6-1",
+          "klCSkb"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "国内客户经理（27届校招 北京/上海/广州/深圳/苏州/福建） 当前进度：简历筛选-进行中 2026-01-01 00:00 投递于 校园大使",
+        "x": 220,
+        "y": 470,
+        "width": 1000,
+        "height": 134
+      },
+      {
+        "id": 78,
+        "parentId": 77,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STContentContainer-editor__sc-6zstm6-2",
+          "iOAXjg"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 244,
+        "y": 494,
+        "width": 912,
+        "height": 86
+      },
+      {
+        "id": 79,
+        "parentId": 78,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STFlexContainer-editor__sc-6zstm6-0",
+          "bGKlod"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "国内客户经理（27届校招 北京/上海/广州/深圳/苏州/福建）",
+        "x": 244,
+        "y": 494,
+        "width": 912,
+        "height": 26
+      },
+      {
+        "id": 80,
+        "parentId": 79,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "stylest__STJobName-editor__sc-6zstm6-4",
+          "eBEHMB",
+          "delivery-list-job_name"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "国内客户经理（27届校招 北京/上海/广州/深圳/苏州/福建）",
+        "x": 244,
+        "y": 494,
+        "width": 464,
+        "height": 26
+      },
+      {
+        "id": 81,
+        "parentId": 78,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STJobStatus-editor__sc-6zstm6-5",
+          "hEEiJC"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "当前进度：简历筛选-进行中",
+        "x": 244,
+        "y": 528,
+        "width": 660,
+        "height": 22
+      },
+      {
+        "id": 82,
+        "parentId": 78,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STFlexContainer-editor__sc-6zstm6-0",
+          "bGKlod"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "2026-01-01 00:00 投递于 校园大使",
+        "x": 244,
+        "y": 558,
+        "width": 912,
+        "height": 22
+      },
+      {
+        "id": 83,
+        "parentId": 82,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STCommonData-editor__sc-6zstm6-6",
+          "cVjLeU"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "2026-01-01 00:00 投递 于",
+        "x": 244,
+        "y": 558,
+        "width": 240,
+        "height": 22
+      },
+      {
+        "id": 84,
+        "parentId": 83,
+        "tag": "img",
+        "role": null,
+        "classes": [
+          "channel-icon__IconWrapper-editor__sc-ogustw-0",
+          "fRhQWB"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 408,
+        "y": 561,
+        "width": 16,
+        "height": 16
+      },
+      {
+        "id": 85,
+        "parentId": 83,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STChannel-editor__sc-6zstm6-13",
+          "djFwzC"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "校园大使",
+        "x": 428,
+        "y": 558,
+        "width": 56,
+        "height": 22
+      },
+      {
+        "id": 86,
+        "parentId": 59,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "stylest__STNoMore-editor__sc-1x4urje-7",
+          "hNYaKh"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "没有更多了~",
+        "x": 220,
+        "y": 628,
+        "width": 1000,
+        "height": 22
+      },
+      {
+        "id": 87,
+        "parentId": 1,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "page-footer-runtime"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 865,
+        "width": 1440,
+        "height": 35
+      },
+      {
+        "id": 88,
+        "parentId": 87,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 140,
+        "y": 865,
+        "width": 1160,
+        "height": 35
+      },
+      {
+        "id": 89,
+        "parentId": 88,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "row-three"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 140,
+        "y": 865,
+        "width": 1160,
+        "height": 35
+      },
+      {
+        "id": 90,
+        "parentId": 89,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "page-footer-runtime-copy-right"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 140,
+        "y": 865,
+        "width": 1160,
+        "height": 35
+      },
+      {
+        "id": 91,
+        "parentId": 90,
+        "tag": "span",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 399,
+        "y": 877,
+        "width": 138,
+        "height": 14
+      },
+      {
+        "id": 92,
+        "parentId": 90,
+        "tag": "span",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 544,
+        "y": 877,
+        "width": 127,
+        "height": 14
+      },
+      {
+        "id": 93,
+        "parentId": 92,
+        "tag": "a",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 544,
+        "y": 877,
+        "width": 127,
+        "height": 14
+      },
+      {
+        "id": 94,
+        "parentId": 90,
+        "tag": "span",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 676,
+        "y": 877,
+        "width": 18,
+        "height": 14
+      },
+      {
+        "id": 95,
+        "parentId": 94,
+        "tag": "img",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 676,
+        "y": 872,
+        "width": 18,
+        "height": 20
+      },
+      {
+        "id": 96,
+        "parentId": 90,
+        "tag": "span",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 700,
+        "y": 877,
+        "width": 168,
+        "height": 14
+      },
+      {
+        "id": 97,
+        "parentId": 96,
+        "tag": "a",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 700,
+        "y": 877,
+        "width": 168,
+        "height": 14
+      },
+      {
+        "id": 98,
+        "parentId": 90,
+        "tag": "span",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 874,
+        "y": 877,
+        "width": 3,
+        "height": 14
+      },
+      {
+        "id": 99,
+        "parentId": 90,
+        "tag": "span",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 883,
+        "y": 877,
+        "width": 48,
+        "height": 14
+      },
+      {
+        "id": 100,
+        "parentId": 99,
+        "tag": "a",
+        "role": null,
+        "classes": [
+          "std__privacyLink-editor__sc-aqo4vs-1",
+          "jfhdSK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 883,
+        "y": 877,
+        "width": 48,
+        "height": 14
+      },
+      {
+        "id": 101,
+        "parentId": 90,
+        "tag": "span",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 937,
+        "y": 877,
+        "width": 103,
+        "height": 14
+      }
+    ],
+    "truncated": false,
+    "nodeLimitReached": false,
+    "textLimitReached": false
+  },
+  "candidates": [
+    {
+      "id": "candidate-1",
+      "jobTitle": "国内客户经理（27届校招 北京/上海/广州/深圳）(J12320)",
+      "location": null
+    }
+  ]
+}

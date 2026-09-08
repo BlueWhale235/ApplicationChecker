@@ -1,0 +1,1437 @@
+{
+  "snapshot": {
+    "url": "https://app.mokahr.com/campus-recruitment/fixture/123#/candidateHome/applications",
+    "title": "投递记录",
+    "language": "en-US",
+    "visibleText": "投递记录\nFY27 Campus opportunities - Graduate Programme including CSI (Chinese Mainland) Status: We are currently reviewing all applications Project: - 2026-01-01 00:00\nFY27 Campus opportunities - Graduate Programme including CSI (Chinese Mainland) Status: We are currently reviewing all applications Project: - 2026-01-01 00:00\nFY27 Campus opportunities - Graduate Programme including CSI (Chinese Mainland) Status: We are currently reviewing all applications Project: - 2026-01-01 00:00\nFY27 Campus opportunities - Graduate Programme including CSI (Chinese Mainland) Status: We are currently reviewing all applications Project: - 2026-01-01 00:00\nFY27 Campus opportunities - Graduate Programme including CSI (Chinese Mainland) Status: We are currently reviewing all applications Project: - 2026-01-01 00:00\nFY27 Campus opportunities - Graduate Programme including CSI (Chinese Mainland)\nFY27 Campus opportunities - Graduate Programme including CSI (Chinese Mainland)\nFY27 Campus opportunities - Graduate Programme including CSI (Chinese Mainland)\nStatus: We are currently reviewing all applications Project: - 2026-01-01 00:00\nStatus: We are currently reviewing all applications Project: -\nStatus: We are currently reviewing all applications\nStatus :\nWe are currently reviewing all applications\nW e a r e c u r r e n t l y r e v i e w i n g a l l a p p l i c a t i o n s\nProject: -\nProject :\n-\n-\n2026-01-01 00:00\n2026-01-01 00:00",
+    "nodes": [
+      {
+        "id": 1,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 1245
+      },
+      {
+        "id": 2,
+        "parentId": 1,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "apply-container"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 1245
+      },
+      {
+        "id": 3,
+        "parentId": 2,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 1245
+      },
+      {
+        "id": 4,
+        "parentId": 3,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "custom-navbar-uF9ZEb2wyQ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 80
+      },
+      {
+        "id": 5,
+        "parentId": 4,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "module-container-sMhrZBKRhp"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 0,
+        "width": 1200,
+        "height": 80
+      },
+      {
+        "id": 6,
+        "parentId": 5,
+        "tag": "a",
+        "role": null,
+        "classes": [
+          "custom-nav-d01xYKW67e"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 0,
+        "width": 59,
+        "height": 80
+      },
+      {
+        "id": 7,
+        "parentId": 5,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "button-div-Zjccv1K5Ef"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1268,
+        "y": 0,
+        "width": 52,
+        "height": 80
+      },
+      {
+        "id": 8,
+        "parentId": 7,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "account-q4V9o0gFXX"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1288,
+        "y": 20,
+        "width": 32,
+        "height": 41
+      },
+      {
+        "id": 9,
+        "parentId": 8,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Dropdown-container-1CigZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1288,
+        "y": 20,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "id": 10,
+        "parentId": 9,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "avatar-P47CwdVTSy"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1288,
+        "y": 20,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "id": 11,
+        "parentId": 10,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "avatar-div-pYvefnB0XT"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1288,
+        "y": 20,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "id": 12,
+        "parentId": 11,
+        "tag": "img",
+        "role": null,
+        "classes": [
+          "avatar-img-vxTEr_r0E4"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1288,
+        "y": 20,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "id": 13,
+        "parentId": 3,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "flex1-RnXKT9C5vW",
+          "pdb32-MQhsNPpFqc"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 80,
+        "width": 1440,
+        "height": 942
+      },
+      {
+        "id": 14,
+        "parentId": 13,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 80,
+        "width": 1440,
+        "height": 910
+      },
+      {
+        "id": 15,
+        "parentId": 14,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 80,
+        "width": 1440,
+        "height": 202
+      },
+      {
+        "id": 16,
+        "parentId": 15,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "header-img-oDucu8Pa8U"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 80,
+        "width": 1440,
+        "height": 150
+      },
+      {
+        "id": 17,
+        "parentId": 16,
+        "tag": "img",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 80,
+        "width": 1440,
+        "height": 150
+      },
+      {
+        "id": 18,
+        "parentId": 15,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "header-shade-P7_7VTLFiz"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 80,
+        "width": 1440,
+        "height": 150
+      },
+      {
+        "id": 19,
+        "parentId": 18,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "header-line-AdV5xiHS98"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 400,
+        "y": 190,
+        "width": 640,
+        "height": 32
+      },
+      {
+        "id": 20,
+        "parentId": 19,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "candidate-nickname-GKqSKxUkYk"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 400,
+        "y": 190,
+        "width": 72,
+        "height": 24
+      },
+      {
+        "id": 21,
+        "parentId": 20,
+        "tag": "span",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 400,
+        "y": 190,
+        "width": 72,
+        "height": 24
+      },
+      {
+        "id": 22,
+        "parentId": 19,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "edit-info-yTkEHfPhKD",
+          "sd-foundation-bold-body-primary-17aLS"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1090,
+        "y": 182,
+        "width": 110,
+        "height": 32
+      },
+      {
+        "id": 23,
+        "parentId": 15,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "header-select-N3W0Uod51o"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 230,
+        "width": 1440,
+        "height": 52
+      },
+      {
+        "id": 24,
+        "parentId": 23,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "page-options-lmobxmC2en"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 400,
+        "y": 230,
+        "width": 640,
+        "height": 52
+      },
+      {
+        "id": 25,
+        "parentId": 24,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "page-option-selected-ibJXxRiwNE"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 400,
+        "y": 230,
+        "width": 137,
+        "height": 52
+      },
+      {
+        "id": 26,
+        "parentId": 25,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "tab-w5L6GfkuNe"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 400,
+        "y": 249,
+        "width": 117,
+        "height": 16
+      },
+      {
+        "id": 27,
+        "parentId": 25,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Tooltip-container-2B2OE",
+          "mgl4-i0K3aAxyKy"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 521,
+        "y": 247,
+        "width": 16,
+        "height": 21
+      },
+      {
+        "id": 28,
+        "parentId": 27,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "sd-Icon-container-1EGHG",
+          "sd-Icon-iconinfo-23hbS",
+          "sd-foundation-n40-yqKxz",
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 521,
+        "y": 247,
+        "width": 16,
+        "height": 16
+      },
+      {
+        "id": 29,
+        "parentId": 25,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "tab-line-MN_gh65c5S"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 400,
+        "y": 278,
+        "width": 64,
+        "height": 4
+      },
+      {
+        "id": 30,
+        "parentId": 24,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "avatar-div-rHLPpIncwT"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 220,
+        "y": 160,
+        "width": 140,
+        "height": 140
+      },
+      {
+        "id": 31,
+        "parentId": 30,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "avatar-a4pHUxH4Y1"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 223,
+        "y": 163,
+        "width": 134,
+        "height": 134
+      },
+      {
+        "id": 32,
+        "parentId": 31,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "avatar-div-pYvefnB0XT"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 223,
+        "y": 163,
+        "width": 134,
+        "height": 134
+      },
+      {
+        "id": 33,
+        "parentId": 32,
+        "tag": "img",
+        "role": null,
+        "classes": [
+          "avatar-img-vxTEr_r0E4"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 223,
+        "y": 163,
+        "width": 134,
+        "height": 134
+      },
+      {
+        "id": 34,
+        "parentId": 14,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "body-wgKboXCeH9"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 282,
+        "width": 1440,
+        "height": 708
+      },
+      {
+        "id": 35,
+        "parentId": 34,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "main-xWJrd6cAtA"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 210,
+        "y": 340,
+        "width": 1020,
+        "height": 600
+      },
+      {
+        "id": 36,
+        "parentId": 35,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "FY27 Campus opportunities - Graduate Programme including CSI (Chinese Mainland) Status: We are currently reviewing all applications Project: - 2026-01-01 00:00",
+        "x": 210,
+        "y": 340,
+        "width": 1020,
+        "height": 172
+      },
+      {
+        "id": 37,
+        "parentId": 36,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "FY27 Campus opportunities - Graduate Programme including CSI (Chinese Mainland) Status: We are currently reviewing all applications Project: - 2026-01-01 00:00",
+        "x": 210,
+        "y": 340,
+        "width": 1020,
+        "height": 172
+      },
+      {
+        "id": 38,
+        "parentId": 37,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "FY27 Campus opportunities - Graduate Programme including CSI (Chinese Mainland) Status: We are currently reviewing all applications Project: - 2026-01-01 00:00",
+        "x": 210,
+        "y": 340,
+        "width": 1020,
+        "height": 172
+      },
+      {
+        "id": 39,
+        "parentId": 38,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "position-block-KEQOxnfzHq"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "FY27 Campus opportunities - Graduate Programme including CSI (Chinese Mainland) Status: We are currently reviewing all applications Project: - 2026-01-01 00:00",
+        "x": 210,
+        "y": 340,
+        "width": 1020,
+        "height": 172
+      },
+      {
+        "id": 40,
+        "parentId": 39,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "margin-bottom-eYST2qWXpi"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "FY27 Campus opportunities - Graduate Programme including CSI (Chinese Mainland) Status: We are currently reviewing all applications Project: - 2026-01-01 00:00",
+        "x": 210,
+        "y": 340,
+        "width": 1020,
+        "height": 172
+      },
+      {
+        "id": 41,
+        "parentId": 40,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "preference-mxteJLgr80"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 210,
+        "y": 356,
+        "width": 1020,
+        "height": 156
+      },
+      {
+        "id": 42,
+        "parentId": 41,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "preference-top-vBFGkpIV2T"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "FY27 Campus opportunities - Graduate Programme including CSI (Chinese Mainland)",
+        "x": 234,
+        "y": 381,
+        "width": 972,
+        "height": 56
+      },
+      {
+        "id": 43,
+        "parentId": 42,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Spacing-spacing-inline-2zHeO",
+          "sd-Spacing-align-center-1syHL"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "FY27 Campus opportunities - Graduate Programme including CSI (Chinese Mainland)",
+        "x": 234,
+        "y": 381,
+        "width": 630,
+        "height": 56
+      },
+      {
+        "id": 44,
+        "parentId": 43,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "sd-foundation-heading-50-2OcqG",
+          "font-style-cPXqNbiAmY"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "FY27 Campus opportunities - Graduate Programme including CSI (Chinese Mainland)",
+        "x": 234,
+        "y": 381,
+        "width": 630,
+        "height": 56
+      },
+      {
+        "id": 45,
+        "parentId": 41,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "preference-bottom-z2ZFlfnO14"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "Status: We are currently reviewing all applications Project: - 2026-01-01 00:00",
+        "x": 234,
+        "y": 449,
+        "width": 972,
+        "height": 23
+      },
+      {
+        "id": 46,
+        "parentId": 45,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Spacing-spacing-inline-2zHeO",
+          "sd-Spacing-align-center-1syHL"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "Status: We are currently reviewing all applications Project: -",
+        "x": 234,
+        "y": 449,
+        "width": 406,
+        "height": 23
+      },
+      {
+        "id": 47,
+        "parentId": 46,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Spacing-spacing-inline-2zHeO",
+          "sd-Spacing-align-center-1syHL",
+          "font-color-xglv13x8s8"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "Status: We are currently reviewing all applications",
+        "x": 234,
+        "y": 449,
+        "width": 326,
+        "height": 23
+      },
+      {
+        "id": 48,
+        "parentId": 47,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "sd-foundation-n60-1_dTK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "Status :",
+        "x": 234,
+        "y": 450,
+        "width": 45,
+        "height": 21
+      },
+      {
+        "id": 49,
+        "parentId": 47,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Tooltip-container-2B2OE"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "We are currently reviewing all applications",
+        "x": 287,
+        "y": 449,
+        "width": 273,
+        "height": 23
+      },
+      {
+        "id": 50,
+        "parentId": 49,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "application-status-UXzudUaFUg",
+          "detail-text-NraInzy4uw",
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "W e a r e c u r r e n t l y r e v i e w i n g a l l a p p l i c a t i o n s",
+        "x": 287,
+        "y": 449,
+        "width": 273,
+        "height": 21
+      },
+      {
+        "id": 51,
+        "parentId": 46,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Spacing-spacing-inline-2zHeO",
+          "sd-Spacing-align-center-1syHL"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "Project: -",
+        "x": 576,
+        "y": 449,
+        "width": 64,
+        "height": 23
+      },
+      {
+        "id": 52,
+        "parentId": 51,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "sd-foundation-n60-1_dTK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "Project :",
+        "x": 576,
+        "y": 450,
+        "width": 50,
+        "height": 21
+      },
+      {
+        "id": 53,
+        "parentId": 51,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Tooltip-container-2B2OE"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "-",
+        "x": 634,
+        "y": 449,
+        "width": 5,
+        "height": 23
+      },
+      {
+        "id": 54,
+        "parentId": 53,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "sd-foundation-body-secondary-v3EXx",
+          "detail-text-NraInzy4uw",
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "-",
+        "x": 634,
+        "y": 449,
+        "width": 5,
+        "height": 21
+      },
+      {
+        "id": 55,
+        "parentId": 45,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-foundation-n60-1_dTK",
+          "sd-foundation-body-primary-1WIfs"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "2026-01-01 00:00",
+        "x": 1101,
+        "y": 449,
+        "width": 105,
+        "height": 23
+      },
+      {
+        "id": 56,
+        "parentId": 55,
+        "tag": "span",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "2026-01-01 00:00",
+        "x": 1101,
+        "y": 452,
+        "width": 105,
+        "height": 14
+      },
+      {
+        "id": 57,
+        "parentId": 3,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "footer-container-OdXtXkNqKa"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 1022,
+        "width": 1440,
+        "height": 223
+      },
+      {
+        "id": 58,
+        "parentId": 57,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 1022,
+        "width": 1201,
+        "height": 223
+      },
+      {
+        "id": 59,
+        "parentId": 58,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "main-content-Xjvz9jbcWO"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 1062,
+        "width": 1201,
+        "height": 183
+      },
+      {
+        "id": 60,
+        "parentId": 59,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "vertical-link-content-TbMDawHIJm"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 728,
+        "y": 1062,
+        "width": 592,
+        "height": 75
+      },
+      {
+        "id": 61,
+        "parentId": 60,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "vertical-link-row-Yux9B5MGuQ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 728,
+        "y": 1062,
+        "width": 296,
+        "height": 75
+      },
+      {
+        "id": 62,
+        "parentId": 61,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "vertical-header-title-wxmoiNI5DH",
+          "ellipsis-s4h2VX0z8O"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 728,
+        "y": 1062,
+        "width": 296,
+        "height": 22
+      },
+      {
+        "id": 63,
+        "parentId": 61,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "vertical-link-area-C2JX5EuZ52"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 728,
+        "y": 1108,
+        "width": 296,
+        "height": 21
+      },
+      {
+        "id": 64,
+        "parentId": 63,
+        "tag": "a",
+        "role": null,
+        "classes": [
+          "block-pzEcF4Dzm5",
+          "mgb8-_7jJiRSsbZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 736,
+        "y": 1108,
+        "width": 279,
+        "height": 21
+      },
+      {
+        "id": 65,
+        "parentId": 64,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 736,
+        "y": 1108,
+        "width": 279,
+        "height": 21
+      },
+      {
+        "id": 66,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContainer-kLXnK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 736,
+        "y": 1108,
+        "width": 100000,
+        "height": 21
+      },
+      {
+        "id": 67,
+        "parentId": 66,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContent-12YAZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 50677,
+        "y": 1108,
+        "width": 119,
+        "height": 21
+      },
+      {
+        "id": 68,
+        "parentId": 65,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 736,
+        "y": 1108,
+        "width": 279,
+        "height": 21
+      },
+      {
+        "id": 69,
+        "parentId": 60,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "vertical-link-row-Yux9B5MGuQ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1024,
+        "y": 1062,
+        "width": 296,
+        "height": 75
+      },
+      {
+        "id": 70,
+        "parentId": 69,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "vertical-header-title-wxmoiNI5DH",
+          "ellipsis-s4h2VX0z8O"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1024,
+        "y": 1062,
+        "width": 296,
+        "height": 22
+      },
+      {
+        "id": 71,
+        "parentId": 69,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "vertical-link-area-C2JX5EuZ52"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1024,
+        "y": 1108,
+        "width": 296,
+        "height": 21
+      },
+      {
+        "id": 72,
+        "parentId": 71,
+        "tag": "a",
+        "role": null,
+        "classes": [
+          "block-pzEcF4Dzm5",
+          "mgb8-_7jJiRSsbZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1032,
+        "y": 1108,
+        "width": 280,
+        "height": 21
+      },
+      {
+        "id": 73,
+        "parentId": 72,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1032,
+        "y": 1108,
+        "width": 280,
+        "height": 21
+      },
+      {
+        "id": 74,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContainer-kLXnK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1032,
+        "y": 1108,
+        "width": 100000,
+        "height": 21
+      },
+      {
+        "id": 75,
+        "parentId": 74,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContent-12YAZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 50989,
+        "y": 1108,
+        "width": 87,
+        "height": 21
+      },
+      {
+        "id": 76,
+        "parentId": 73,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1032,
+        "y": 1108,
+        "width": 280,
+        "height": 21
+      },
+      {
+        "id": 77,
+        "parentId": 59,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "basic-info-dB86EjV5uU"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 1062,
+        "width": 608,
+        "height": 143
+      },
+      {
+        "id": 78,
+        "parentId": 77,
+        "tag": "img",
+        "role": null,
+        "classes": [
+          "mgb24-Op7tNrWlm3"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1062,
+        "width": 98,
+        "height": 24
+      },
+      {
+        "id": 79,
+        "parentId": 77,
+        "tag": "a",
+        "role": null,
+        "classes": [
+          "mgb8-_7jJiRSsbZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1110,
+        "width": 592,
+        "height": 63
+      },
+      {
+        "id": 80,
+        "parentId": 77,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1181,
+        "width": 370,
+        "height": 24
+      },
+      {
+        "id": 81,
+        "parentId": 80,
+        "tag": "img",
+        "role": null,
+        "classes": [
+          "public-security-icon-NRyimlPyhd"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1183,
+        "width": 16,
+        "height": 16
+      },
+      {
+        "id": 82,
+        "parentId": 80,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "license-text-nlwT5vIICg"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 152,
+        "y": 1187,
+        "width": 346,
+        "height": 14
+      },
+      {
+        "id": 83,
+        "parentId": 82,
+        "tag": "a",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 152,
+        "y": 1187,
+        "width": 197,
+        "height": 14
+      },
+      {
+        "id": 84,
+        "parentId": 82,
+        "tag": "a",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 357,
+        "y": 1187,
+        "width": 141,
+        "height": 14
+      }
+    ],
+    "truncated": false,
+    "nodeLimitReached": false,
+    "textLimitReached": false
+  },
+  "candidates": [
+    {
+      "id": "candidate-1",
+      "jobTitle": "FY27 校招",
+      "location": null
+    }
+  ]
+}

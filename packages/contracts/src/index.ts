@@ -318,6 +318,7 @@ export interface ApplicationSummary {
 }
 
 export interface RunSummary {
+  displayStatus?: RunStatus | "unmatched";
   id: string;
   applicationId: string;
   checkGroupId: string;
@@ -355,6 +356,8 @@ export interface TaskRunSummary extends RunSummary {
 }
 
 export interface ApplicationRecognitionResult {
+  localDiagnostic?: string | null;
+  aiError?: string | null;
   applicationId: string;
   jobTitle: string;
   matched: boolean;
@@ -397,6 +400,11 @@ export interface TaskRunPage {
   total: number;
   limit: number;
   offset: number;
+  statusCounts: {
+    queued: number;
+    running: number;
+    needsLogin: number;
+  };
 }
 
 export interface NotificationSummary {

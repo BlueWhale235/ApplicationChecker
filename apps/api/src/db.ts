@@ -33,6 +33,7 @@ export interface ApplicationsTable {
   next_run_at: string | null;
   last_run_at: string | null;
   last_run_status: RunStatus | null;
+  recognition_notice_key: Generated<string | null>;
   last_status_changed_at: string | null;
   created_at: string;
   updated_at: string;
@@ -99,6 +100,8 @@ export interface RunApplicationResultsTable {
   recognition_source: Generated<Exclude<RecognitionSource, "mixed"> | null>;
   adapter_id: Generated<string | null>;
   rule_version: Generated<string | null>;
+  local_diagnostic: Generated<string | null>;
+  ai_error: Generated<string | null>;
   created_at: string;
 }
 
@@ -769,5 +772,13 @@ export function createDb(filename: string): DbContext {
       ai_base_url,ai_model,ai_api_key_encrypted,ai_confidence_threshold,ai_deep_thinking,recognition_mode,updated_at
     ) VALUES(1,NULL,'Asia/Shanghai',1,30,?,NULL,NULL,NULL,0.75,0,'local_first',?)
   `).run(DEFAULT_USER_AGENT, new Date().toISOString());
+  // Additive migration after legacy table rebuilds, safe on existing portable databases.
+  for (const [table, columns] of Object.entries({
+    applications: ["recognition_notice_key"],
+    run_application_results: ["local_diagnostic", "ai_error"],
+  })) {
+    const present = new Set((raw.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((column) => column.name));
+    for (const column of columns) if (!present.has(column)) raw.exec(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT`);
+  }
   return { db: new Kysely<Database>({ dialect: new SqliteDialect({ database: raw }) }), raw };
 }

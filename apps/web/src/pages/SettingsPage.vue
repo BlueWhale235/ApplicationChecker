@@ -59,7 +59,7 @@ const concurrencyOptions = [
 
 <template>
   <section class="page-content narrow-page">
-    <div class="page-heading"><div><h1>设置</h1><p>配置自动检查时间、本地解析策略和可选的 AI 回退。</p></div></div>
+    <div class="page-heading"><div><h1>设置</h1><p>配置自动检查时间、本地解析策略和可选的 AI 回退。本地优先模式下，北森/Moka 仅本地解析，未匹配时保留原状态；其他网站可回退 AI。</p></div></div>
     <div class="settings-grid">
       <v-form class="content-card" @submit.prevent="$emit('save')">
         <div class="card-title"><div><h2>自动检查</h2><p>岗位选择“继承全局计划”时使用此处设置。</p></div><i class="mdi mdi-calendar-clock"></i></div>

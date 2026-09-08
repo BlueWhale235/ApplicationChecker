@@ -10,11 +10,12 @@ const props = defineProps<{
   busy: boolean;
   currentPage: number;
   pageCount: number;
+  perPage: number;
 }>();
 const activeCounts = computed(() => ({
-  running: props.page.items.filter((run) => run.status === "running").length,
-  queued: props.page.items.filter((run) => run.status === "queued").length,
-  login: props.page.items.filter((run) => run.status === "needs_login").length,
+  running: props.page.statusCounts.running,
+  queued: props.page.statusCounts.queued,
+  login: props.page.statusCounts.needsLogin,
 }));
 defineEmits<{
   scope: [value: "active" | "history"];
@@ -113,7 +114,7 @@ const sourceLabels = { local: "本地", ai: "AI" } as const;
           <template v-for="run in page.items" :key="run.id">
           <tr>
             <td><strong>{{ run.company }}</strong><span>{{ run.jobTitle }}</span><small>{{ run.site }} · 包含 {{ run.groupMemberCount }} 个岗位</small></td>
-            <td><span class="run-status-chip" :data-run="run.status"><i></i>{{ runLabels[run.status] }}</span></td>
+            <td><span class="run-status-chip" :data-run="run.displayStatus || run.status"><i></i>{{ (run.displayStatus === 'unmatched' ? '未匹配' : runLabels[run.displayStatus || run.status]) }}</span></td>
             <td>{{ triggerLabels[run.trigger] }}</td>
             <td><span>{{ date(run.createdAt) }}</span><small>{{ run.startedAt ? `开始 ${date(run.startedAt)}` : "尚未开始" }}</small></td>
             <td>{{ duration(run) }}</td>
@@ -139,7 +140,7 @@ const sourceLabels = { local: "本地", ai: "AI" } as const;
               <div class="task-row-actions">
                 <button v-if="run.status === 'needs_login'" class="row-action" @click="$emit('login', run)">去登录</button>
                 <button v-if="['queued','running','needs_login'].includes(run.status)" class="danger-ghost" :disabled="busy" @click="$emit('cancel', run)">取消</button>
-                <button v-if="['partial','failed','cancelled'].includes(run.status)" class="row-action" :disabled="busy" @click="$emit('retry', run)">重试</button>
+                <button v-if="['partial','failed','cancelled','unmatched'].includes(run.displayStatus || run.status)" class="row-action" :disabled="busy" @click="$emit('retry', run)">重试</button>
               </div>
             </td>
           </tr>
@@ -161,7 +162,7 @@ const sourceLabels = { local: "本地", ai: "AI" } as const;
                       <small v-if="result.source">{{ sourceLabels[result.source] }}{{ result.adapterId ? ` · ${result.adapterId} ${result.ruleVersion || ""}` : "" }}</small>
                     </div>
                     <span v-if="result.matched && result.suggestedStatus" class="status-chip" :data-status="result.suggestedStatus">{{ progressLabels[result.suggestedStatus] }}</span>
-                    <span v-else class="result-unmatched">未匹配</span>
+                    <span v-else class="result-unmatched">{{ ["ai_failed", "script_error"].includes(result.notAppliedReason || "") ? "识别失败" : "未匹配" }}</span>
                     <div class="result-meta">
                       <span><i class="mdi mdi-chart-donut"></i>{{ result.confidence === null ? "无置信度" : `${Math.round(result.confidence * 100)}%` }}</span>
                       <span :class="{ applied: result.applied }">
@@ -169,7 +170,9 @@ const sourceLabels = { local: "本地", ai: "AI" } as const;
                         {{ result.applied ? "已更新" : result.notAppliedReason ? resultReasonLabels[result.notAppliedReason] : "仅记录" }}
                       </span>
                     </div>
-                    <p v-if="result.evidence"><i class="mdi mdi-text-box-search-outline"></i><span>{{ result.evidence }}</span></p>
+                    <p v-if="result.localDiagnostic"><span>本地解析：{{ result.localDiagnostic }}</span></p>
+                    <p v-if="result.aiError"><span>AI：{{ result.aiError }}</span></p>
+                    <p v-if="result.evidence && result.evidence !== result.aiError && result.evidence !== result.localDiagnostic"><i class="mdi mdi-text-box-search-outline"></i><span>{{ result.evidence }}</span></p>
                   </article>
                 </div>
               </div>
@@ -194,8 +197,8 @@ const sourceLabels = { local: "本地", ai: "AI" } as const;
         刷新任务
       </v-btn>
     </div>
-    <div v-if="scope === 'history' && page.total" class="task-pagination">
-      <span>每页 10 条</span>
+    <div v-if="page.total" class="task-pagination">
+      <span>每页 {{ perPage }} 条</span>
       <v-pagination
         :model-value="currentPage"
         :length="pageCount"
@@ -236,7 +239,7 @@ const sourceLabels = { local: "本地", ai: "AI" } as const;
 .run-status-chip[data-run="queued"] i, .run-status-chip[data-run="running"] i { background: #4c83bc; }
 .run-status-chip[data-run="needs_login"] i { background: #d88b31; }
 .run-status-chip[data-run="succeeded"] i { background: #479069; }
-.run-status-chip[data-run="partial"] i { background: #d88032; }
+.run-status-chip[data-run="unmatched"] i, .run-status-chip[data-run="partial"] i { background: #d88032; }
 .run-status-chip[data-run="failed"] i, .run-status-chip[data-run="cancelled"] i { background: #c85e4c; }
 .task-screenshot-actions, .task-row-actions { display: flex; align-items: center; gap: 6px; }
 .task-screenshot-actions button { width: 29px; height: 29px; display: grid; place-items: center; border: 1px solid #d7d0c3; border-radius: 7px; background: #fffdf8; color: #315f51; font-size: 16px; }

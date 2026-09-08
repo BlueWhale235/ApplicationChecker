@@ -163,6 +163,11 @@ async function main(): Promise<void> {
         }));
         const detection = classifyPage({ url: page.url(), status: response?.status() ?? null, ...signals });
         const snapshot = await captureLocalPageSnapshot(page);
+        if (process.env.DRY_RUN_SAVE_SNAPSHOT === "1") {
+          await writeFile(path.join(outputDirectory, `${candidate.group_id}.snapshot.json`), JSON.stringify({
+            snapshot, candidates: members.map((member) => ({ id: member.id, jobTitle: member.job_title, location: member.location })),
+          }, null, 2));
+        }
         const image = await captureFullPage(page);
         const screenshotPath = path.join(outputDirectory, `${site.replace(".", "-")}-${accepted + 1}.png`);
         await writeFile(screenshotPath, image.data);

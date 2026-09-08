@@ -1,0 +1,2757 @@
+{
+  "snapshot": {
+    "url": "https://app.mokahr.com/campus-recruitment/fixture/123#/candidateHome/applications",
+    "title": "投递记录",
+    "language": "zh-CN",
+    "visibleText": "投递记录\n客户成功经理-深圳（27届） 修改申请 状态: 初筛 项目: - 2026-01-01 00:00 销售管培生-深圳（27届） 修改申请 状态: 初筛 项目: - 2026-01-01 00:00\n客户成功经理-深圳（27届） 修改申请 状态: 初筛 项目: - 2026-01-01 00:00 销售管培生-深圳（27届） 修改申请 状态: 初筛 项目: - 2026-01-01 00:00\n客户成功经理-深圳（27届） 修改申请 状态: 初筛 项目: - 2026-01-01 00:00 销售管培生-深圳（27届） 修改申请 状态: 初筛 项目: - 2026-01-01 00:00\n客户成功经理-深圳（27届） 修改申请 状态: 初筛 项目: - 2026-01-01 00:00 销售管培生-深圳（27届） 修改申请 状态: 初筛 项目: - 2026-01-01 00:00\n客户成功经理-深圳（27届） 修改申请\n客户成功经理-深圳（27届）\n客户成功经理-深圳（27届）\n修改申请\n修改申请\n修改申请\n修改申请\n修改申请\n状态: 初筛 项目: - 2026-01-01 00:00\n状态: 初筛 项目: -\n状态: 初筛\n状态 :\n初筛\n初筛\n项目: -\n项目 :\n-\n-\n2026-01-01 00:00\n2026-01-01 00:00\n销售管培生-深圳（27届） 修改申请\n销售管培生-深圳（27届）\n销售管培生-深圳（27届）\n修改申请\n修改申请\n修改申请\n修改申请\n修改申请\n状态: 初筛 项目: - 2026-01-01 00:00\n状态: 初筛 项目: -\n状态: 初筛\n状态 :\n初筛\n初筛\n项目: -\n项目 :\n-\n-\n2026-01-01 00:00\n2026-01-01 00:00",
+    "nodes": [
+      {
+        "id": 1,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 1371
+      },
+      {
+        "id": 2,
+        "parentId": 1,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "apply-container"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 1371
+      },
+      {
+        "id": 3,
+        "parentId": 2,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 1371
+      },
+      {
+        "id": 4,
+        "parentId": 3,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "custom-navbar-uF9ZEb2wyQ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 80
+      },
+      {
+        "id": 5,
+        "parentId": 4,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "module-container-sMhrZBKRhp"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 0,
+        "width": 1200,
+        "height": 80
+      },
+      {
+        "id": 6,
+        "parentId": 5,
+        "tag": "a",
+        "role": null,
+        "classes": [
+          "custom-nav-d01xYKW67e"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 0,
+        "width": 30,
+        "height": 80
+      },
+      {
+        "id": 7,
+        "parentId": 5,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "button-div-Zjccv1K5Ef"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1268,
+        "y": 0,
+        "width": 52,
+        "height": 80
+      },
+      {
+        "id": 8,
+        "parentId": 7,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "account-q4V9o0gFXX"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1288,
+        "y": 21,
+        "width": 32,
+        "height": 38
+      },
+      {
+        "id": 9,
+        "parentId": 8,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Dropdown-container-1CigZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1288,
+        "y": 21,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "id": 10,
+        "parentId": 9,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "avatar-P47CwdVTSy"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1288,
+        "y": 21,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "id": 11,
+        "parentId": 10,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "avatar-div-pYvefnB0XT"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1288,
+        "y": 21,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "id": 12,
+        "parentId": 11,
+        "tag": "img",
+        "role": null,
+        "classes": [
+          "avatar-img-vxTEr_r0E4"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1288,
+        "y": 21,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "id": 13,
+        "parentId": 3,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "flex1-RnXKT9C5vW",
+          "pdb32-MQhsNPpFqc"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 80,
+        "width": 1440,
+        "height": 942
+      },
+      {
+        "id": 14,
+        "parentId": 13,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 80,
+        "width": 1440,
+        "height": 910
+      },
+      {
+        "id": 15,
+        "parentId": 14,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 80,
+        "width": 1440,
+        "height": 202
+      },
+      {
+        "id": 16,
+        "parentId": 15,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "header-img-oDucu8Pa8U"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 80,
+        "width": 1440,
+        "height": 150
+      },
+      {
+        "id": 17,
+        "parentId": 16,
+        "tag": "img",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 80,
+        "width": 1440,
+        "height": 150
+      },
+      {
+        "id": 18,
+        "parentId": 15,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "header-shade-P7_7VTLFiz"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 80,
+        "width": 1440,
+        "height": 150
+      },
+      {
+        "id": 19,
+        "parentId": 18,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "header-line-AdV5xiHS98"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 400,
+        "y": 190,
+        "width": 640,
+        "height": 29
+      },
+      {
+        "id": 20,
+        "parentId": 19,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "candidate-nickname-GKqSKxUkYk"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 400,
+        "y": 190,
+        "width": 72,
+        "height": 24
+      },
+      {
+        "id": 21,
+        "parentId": 20,
+        "tag": "span",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 400,
+        "y": 186,
+        "width": 72,
+        "height": 31
+      },
+      {
+        "id": 22,
+        "parentId": 19,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "edit-info-yTkEHfPhKD",
+          "sd-foundation-bold-body-primary-17aLS"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1090,
+        "y": 182,
+        "width": 110,
+        "height": 32
+      },
+      {
+        "id": 23,
+        "parentId": 15,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "header-select-N3W0Uod51o"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 230,
+        "width": 1440,
+        "height": 52
+      },
+      {
+        "id": 24,
+        "parentId": 23,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "page-options-lmobxmC2en"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 400,
+        "y": 230,
+        "width": 640,
+        "height": 52
+      },
+      {
+        "id": 25,
+        "parentId": 24,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "page-option-FpxGzWnZ3e"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 400,
+        "y": 230,
+        "width": 64,
+        "height": 52
+      },
+      {
+        "id": 26,
+        "parentId": 25,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "tab-w5L6GfkuNe"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 400,
+        "y": 249,
+        "width": 64,
+        "height": 16
+      },
+      {
+        "id": 27,
+        "parentId": 25,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "tab-line-MN_gh65c5S"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 400,
+        "y": 278,
+        "width": 64,
+        "height": 4
+      },
+      {
+        "id": 28,
+        "parentId": 24,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "page-option-selected-ibJXxRiwNE"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 504,
+        "y": 230,
+        "width": 84,
+        "height": 52
+      },
+      {
+        "id": 29,
+        "parentId": 28,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "tab-w5L6GfkuNe"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 504,
+        "y": 249,
+        "width": 64,
+        "height": 16
+      },
+      {
+        "id": 30,
+        "parentId": 28,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Tooltip-container-2B2OE",
+          "mgl4-i0K3aAxyKy"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 572,
+        "y": 247,
+        "width": 16,
+        "height": 21
+      },
+      {
+        "id": 31,
+        "parentId": 30,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "sd-Icon-container-1EGHG",
+          "sd-Icon-iconinfo-23hbS",
+          "sd-foundation-n40-yqKxz",
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 572,
+        "y": 250,
+        "width": 16,
+        "height": 16
+      },
+      {
+        "id": 32,
+        "parentId": 28,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "tab-line-MN_gh65c5S"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 504,
+        "y": 278,
+        "width": 64,
+        "height": 4
+      },
+      {
+        "id": 33,
+        "parentId": 24,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "avatar-div-rHLPpIncwT"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 220,
+        "y": 160,
+        "width": 140,
+        "height": 140
+      },
+      {
+        "id": 34,
+        "parentId": 33,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "avatar-a4pHUxH4Y1"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 223,
+        "y": 163,
+        "width": 134,
+        "height": 134
+      },
+      {
+        "id": 35,
+        "parentId": 34,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "avatar-div-pYvefnB0XT"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 223,
+        "y": 163,
+        "width": 134,
+        "height": 134
+      },
+      {
+        "id": 36,
+        "parentId": 35,
+        "tag": "img",
+        "role": null,
+        "classes": [
+          "avatar-img-vxTEr_r0E4"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 223,
+        "y": 163,
+        "width": 134,
+        "height": 134
+      },
+      {
+        "id": 37,
+        "parentId": 14,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "body-wgKboXCeH9"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 282,
+        "width": 1440,
+        "height": 708
+      },
+      {
+        "id": 38,
+        "parentId": 37,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "main-xWJrd6cAtA"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 210,
+        "y": 340,
+        "width": 1020,
+        "height": 600
+      },
+      {
+        "id": 39,
+        "parentId": 38,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "客户成功经理-深圳（27届） 修改申请 状态: 初筛 项目: - 2026-01-01 00:00 销售管培生-深圳（27届） 修改申请 状态: 初筛 项目: - 2026-01-01 00:00",
+        "x": 210,
+        "y": 340,
+        "width": 1020,
+        "height": 286
+      },
+      {
+        "id": 40,
+        "parentId": 39,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "客户成功经理-深圳（27届） 修改申请 状态: 初筛 项目: - 2026-01-01 00:00 销售管培生-深圳（27届） 修改申请 状态: 初筛 项目: - 2026-01-01 00:00",
+        "x": 210,
+        "y": 340,
+        "width": 1020,
+        "height": 286
+      },
+      {
+        "id": 41,
+        "parentId": 40,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "客户成功经理-深圳（27届） 修改申请 状态: 初筛 项目: - 2026-01-01 00:00 销售管培生-深圳（27届） 修改申请 状态: 初筛 项目: - 2026-01-01 00:00",
+        "x": 210,
+        "y": 340,
+        "width": 1020,
+        "height": 286
+      },
+      {
+        "id": 42,
+        "parentId": 41,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "position-block-KEQOxnfzHq"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "客户成功经理-深圳（27届） 修改申请 状态: 初筛 项目: - 2026-01-01 00:00 销售管培生-深圳（27届） 修改申请 状态: 初筛 项目: - 2026-01-01 00:00",
+        "x": 210,
+        "y": 340,
+        "width": 1020,
+        "height": 286
+      },
+      {
+        "id": 43,
+        "parentId": 42,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "margin-bottom-eYST2qWXpi"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 210,
+        "y": 340,
+        "width": 1020,
+        "height": 286
+      },
+      {
+        "id": 44,
+        "parentId": 43,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "preference-mxteJLgr80"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 210,
+        "y": 356,
+        "width": 1020,
+        "height": 130
+      },
+      {
+        "id": 45,
+        "parentId": 44,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "preference-top-vBFGkpIV2T"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "客户成功经理-深圳（27届） 修改申请",
+        "x": 234,
+        "y": 381,
+        "width": 972,
+        "height": 32
+      },
+      {
+        "id": 46,
+        "parentId": 45,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Spacing-spacing-inline-2zHeO",
+          "sd-Spacing-align-center-1syHL"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "客户成功经理-深圳（27届）",
+        "x": 234,
+        "y": 381,
+        "width": 252,
+        "height": 32
+      },
+      {
+        "id": 47,
+        "parentId": 46,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "sd-foundation-heading-50-2OcqG",
+          "font-style-cPXqNbiAmY"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "客户成功经理-深圳（27届）",
+        "x": 234,
+        "y": 383,
+        "width": 252,
+        "height": 28
+      },
+      {
+        "id": 48,
+        "parentId": 45,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Spacing-spacing-inline-2zHeO",
+          "sd-Spacing-align-center-1syHL"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "修改申请",
+        "x": 1110,
+        "y": 381,
+        "width": 96,
+        "height": 32
+      },
+      {
+        "id": 49,
+        "parentId": 48,
+        "tag": "a",
+        "role": null,
+        "classes": [
+          "sd-foundation-n70-3qZg0"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "修改申请",
+        "x": 1110,
+        "y": 381,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "id": 50,
+        "parentId": 49,
+        "tag": "button",
+        "role": null,
+        "classes": [
+          "sd_global_focus_controller_class",
+          "sd-Button-container-1cq0K",
+          "sd-foundation-bold-body-secondary-1UKiw",
+          "sd-Button-secondary-1FwOr",
+          "sd-Button-md-2fkTl",
+          "button-container-Asr8HsCEyo"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "修改申请",
+        "x": 1110,
+        "y": 381,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "id": 51,
+        "parentId": 50,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "sd-Button-content-1Zgzx"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "修改申请",
+        "x": 1126,
+        "y": 382,
+        "width": 56,
+        "height": 30
+      },
+      {
+        "id": 52,
+        "parentId": 51,
+        "tag": "span",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "修改申请",
+        "x": 1126,
+        "y": 387,
+        "width": 56,
+        "height": 19
+      },
+      {
+        "id": 53,
+        "parentId": 44,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "preference-bottom-z2ZFlfnO14"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "状态: 初筛 项目: - 2026-01-01 00:00",
+        "x": 234,
+        "y": 425,
+        "width": 972,
+        "height": 21
+      },
+      {
+        "id": 54,
+        "parentId": 53,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Spacing-spacing-inline-2zHeO",
+          "sd-Spacing-align-center-1syHL"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "状态: 初筛 项目: -",
+        "x": 234,
+        "y": 425,
+        "width": 129,
+        "height": 21
+      },
+      {
+        "id": 55,
+        "parentId": 54,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Spacing-spacing-inline-2zHeO",
+          "sd-Spacing-align-center-1syHL",
+          "font-color-xglv13x8s8"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "状态: 初筛",
+        "x": 234,
+        "y": 425,
+        "width": 67,
+        "height": 21
+      },
+      {
+        "id": 56,
+        "parentId": 55,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "sd-foundation-n60-1_dTK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "状态 :",
+        "x": 234,
+        "y": 425,
+        "width": 31,
+        "height": 21
+      },
+      {
+        "id": 57,
+        "parentId": 55,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Tooltip-container-2B2OE"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "初筛",
+        "x": 273,
+        "y": 425,
+        "width": 28,
+        "height": 21
+      },
+      {
+        "id": 58,
+        "parentId": 57,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "application-status-UXzudUaFUg",
+          "detail-text-NraInzy4uw",
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "初筛",
+        "x": 273,
+        "y": 426,
+        "width": 28,
+        "height": 21
+      },
+      {
+        "id": 59,
+        "parentId": 54,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Spacing-spacing-inline-2zHeO",
+          "sd-Spacing-align-center-1syHL"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "项目: -",
+        "x": 317,
+        "y": 425,
+        "width": 45,
+        "height": 21
+      },
+      {
+        "id": 60,
+        "parentId": 59,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "sd-foundation-n60-1_dTK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "项目 :",
+        "x": 317,
+        "y": 425,
+        "width": 31,
+        "height": 21
+      },
+      {
+        "id": 61,
+        "parentId": 59,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Tooltip-container-2B2OE"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "-",
+        "x": 357,
+        "y": 425,
+        "width": 6,
+        "height": 21
+      },
+      {
+        "id": 62,
+        "parentId": 61,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "sd-foundation-body-secondary-v3EXx",
+          "detail-text-NraInzy4uw",
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "-",
+        "x": 357,
+        "y": 426,
+        "width": 6,
+        "height": 21
+      },
+      {
+        "id": 63,
+        "parentId": 53,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-foundation-n60-1_dTK",
+          "sd-foundation-body-primary-1WIfs"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "2026-01-01 00:00",
+        "x": 1088,
+        "y": 425,
+        "width": 118,
+        "height": 21
+      },
+      {
+        "id": 64,
+        "parentId": 63,
+        "tag": "span",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "2026-01-01 00:00",
+        "x": 1088,
+        "y": 426,
+        "width": 118,
+        "height": 19
+      },
+      {
+        "id": 65,
+        "parentId": 43,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "preference-mxteJLgr80"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 210,
+        "y": 496,
+        "width": 1020,
+        "height": 130
+      },
+      {
+        "id": 66,
+        "parentId": 65,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "preference-top-vBFGkpIV2T"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "销售管培生-深圳（27届） 修改申请",
+        "x": 234,
+        "y": 521,
+        "width": 972,
+        "height": 32
+      },
+      {
+        "id": 67,
+        "parentId": 66,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Spacing-spacing-inline-2zHeO",
+          "sd-Spacing-align-center-1syHL"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "销售管培生-深圳（27届）",
+        "x": 234,
+        "y": 521,
+        "width": 232,
+        "height": 32
+      },
+      {
+        "id": 68,
+        "parentId": 67,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "sd-foundation-heading-50-2OcqG",
+          "font-style-cPXqNbiAmY"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "销售管培生-深圳（27届）",
+        "x": 234,
+        "y": 523,
+        "width": 232,
+        "height": 28
+      },
+      {
+        "id": 69,
+        "parentId": 66,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Spacing-spacing-inline-2zHeO",
+          "sd-Spacing-align-center-1syHL"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "修改申请",
+        "x": 1110,
+        "y": 521,
+        "width": 96,
+        "height": 32
+      },
+      {
+        "id": 70,
+        "parentId": 69,
+        "tag": "a",
+        "role": null,
+        "classes": [
+          "sd-foundation-n70-3qZg0"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "修改申请",
+        "x": 1110,
+        "y": 521,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "id": 71,
+        "parentId": 70,
+        "tag": "button",
+        "role": null,
+        "classes": [
+          "sd_global_focus_controller_class",
+          "sd-Button-container-1cq0K",
+          "sd-foundation-bold-body-secondary-1UKiw",
+          "sd-Button-secondary-1FwOr",
+          "sd-Button-md-2fkTl",
+          "button-container-Asr8HsCEyo"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "修改申请",
+        "x": 1110,
+        "y": 521,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "id": 72,
+        "parentId": 71,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "sd-Button-content-1Zgzx"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "修改申请",
+        "x": 1126,
+        "y": 522,
+        "width": 56,
+        "height": 30
+      },
+      {
+        "id": 73,
+        "parentId": 72,
+        "tag": "span",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "修改申请",
+        "x": 1126,
+        "y": 527,
+        "width": 56,
+        "height": 19
+      },
+      {
+        "id": 74,
+        "parentId": 65,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "preference-bottom-z2ZFlfnO14"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "状态: 初筛 项目: - 2026-01-01 00:00",
+        "x": 234,
+        "y": 565,
+        "width": 972,
+        "height": 21
+      },
+      {
+        "id": 75,
+        "parentId": 74,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Spacing-spacing-inline-2zHeO",
+          "sd-Spacing-align-center-1syHL"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "状态: 初筛 项目: -",
+        "x": 234,
+        "y": 565,
+        "width": 129,
+        "height": 21
+      },
+      {
+        "id": 76,
+        "parentId": 75,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Spacing-spacing-inline-2zHeO",
+          "sd-Spacing-align-center-1syHL",
+          "font-color-xglv13x8s8"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "状态: 初筛",
+        "x": 234,
+        "y": 565,
+        "width": 67,
+        "height": 21
+      },
+      {
+        "id": 77,
+        "parentId": 76,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "sd-foundation-n60-1_dTK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "状态 :",
+        "x": 234,
+        "y": 565,
+        "width": 31,
+        "height": 21
+      },
+      {
+        "id": 78,
+        "parentId": 76,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Tooltip-container-2B2OE"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "初筛",
+        "x": 273,
+        "y": 565,
+        "width": 28,
+        "height": 21
+      },
+      {
+        "id": 79,
+        "parentId": 78,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "application-status-UXzudUaFUg",
+          "detail-text-NraInzy4uw",
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "初筛",
+        "x": 273,
+        "y": 566,
+        "width": 28,
+        "height": 21
+      },
+      {
+        "id": 80,
+        "parentId": 75,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Spacing-spacing-inline-2zHeO",
+          "sd-Spacing-align-center-1syHL"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "项目: -",
+        "x": 317,
+        "y": 565,
+        "width": 45,
+        "height": 21
+      },
+      {
+        "id": 81,
+        "parentId": 80,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "sd-foundation-n60-1_dTK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "项目 :",
+        "x": 317,
+        "y": 565,
+        "width": 31,
+        "height": 21
+      },
+      {
+        "id": 82,
+        "parentId": 80,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Tooltip-container-2B2OE"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "-",
+        "x": 357,
+        "y": 565,
+        "width": 6,
+        "height": 21
+      },
+      {
+        "id": 83,
+        "parentId": 82,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "sd-foundation-body-secondary-v3EXx",
+          "detail-text-NraInzy4uw",
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "-",
+        "x": 357,
+        "y": 566,
+        "width": 6,
+        "height": 21
+      },
+      {
+        "id": 84,
+        "parentId": 74,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-foundation-n60-1_dTK",
+          "sd-foundation-body-primary-1WIfs"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "2026-01-01 00:00",
+        "x": 1088,
+        "y": 565,
+        "width": 118,
+        "height": 21
+      },
+      {
+        "id": 85,
+        "parentId": 84,
+        "tag": "span",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "2026-01-01 00:00",
+        "x": 1088,
+        "y": 566,
+        "width": 118,
+        "height": 19
+      },
+      {
+        "id": 86,
+        "parentId": 3,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "footer-container-OdXtXkNqKa"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 0,
+        "y": 1022,
+        "width": 1440,
+        "height": 349
+      },
+      {
+        "id": 87,
+        "parentId": 86,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 1022,
+        "width": 1201,
+        "height": 249
+      },
+      {
+        "id": 88,
+        "parentId": 87,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "main-content-Xjvz9jbcWO"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 1022,
+        "width": 1201,
+        "height": 249
+      },
+      {
+        "id": 89,
+        "parentId": 88,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "vertical-link-content-TbMDawHIJm"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 1022,
+        "width": 390,
+        "height": 249
+      },
+      {
+        "id": 90,
+        "parentId": 89,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "vertical-link-row-Yux9B5MGuQ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 1022,
+        "width": 390,
+        "height": 249
+      },
+      {
+        "id": 91,
+        "parentId": 90,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "vertical-header-title-wxmoiNI5DH",
+          "ellipsis-s4h2VX0z8O"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 1022,
+        "width": 390,
+        "height": 22
+      },
+      {
+        "id": 92,
+        "parentId": 90,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "vertical-link-area-C2JX5EuZ52"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 1068,
+        "width": 390,
+        "height": 195
+      },
+      {
+        "id": 93,
+        "parentId": 92,
+        "tag": "a",
+        "role": null,
+        "classes": [
+          "block-pzEcF4Dzm5",
+          "mgb8-_7jJiRSsbZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1068,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 94,
+        "parentId": 93,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1068,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 95,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContainer-kLXnK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1068,
+        "width": 100000,
+        "height": 21
+      },
+      {
+        "id": 96,
+        "parentId": 95,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContent-12YAZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 50072,
+        "y": 1068,
+        "width": 112,
+        "height": 21
+      },
+      {
+        "id": 97,
+        "parentId": 94,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1068,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 98,
+        "parentId": 92,
+        "tag": "a",
+        "role": null,
+        "classes": [
+          "block-pzEcF4Dzm5",
+          "mgb8-_7jJiRSsbZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1097,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 99,
+        "parentId": 98,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1097,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 100,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContainer-kLXnK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1097,
+        "width": 100000,
+        "height": 21
+      },
+      {
+        "id": 101,
+        "parentId": 100,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContent-12YAZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 50072,
+        "y": 1097,
+        "width": 112,
+        "height": 21
+      },
+      {
+        "id": 102,
+        "parentId": 99,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1097,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 103,
+        "parentId": 92,
+        "tag": "a",
+        "role": null,
+        "classes": [
+          "block-pzEcF4Dzm5",
+          "mgb8-_7jJiRSsbZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1126,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 104,
+        "parentId": 103,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1126,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 105,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContainer-kLXnK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1126,
+        "width": 100000,
+        "height": 21
+      },
+      {
+        "id": 106,
+        "parentId": 105,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContent-12YAZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 50037,
+        "y": 1126,
+        "width": 182,
+        "height": 21
+      },
+      {
+        "id": 107,
+        "parentId": 104,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1126,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 108,
+        "parentId": 92,
+        "tag": "a",
+        "role": null,
+        "classes": [
+          "block-pzEcF4Dzm5",
+          "mgb8-_7jJiRSsbZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1155,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 109,
+        "parentId": 108,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1155,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 110,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContainer-kLXnK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1155,
+        "width": 100000,
+        "height": 21
+      },
+      {
+        "id": 111,
+        "parentId": 110,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContent-12YAZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 50084,
+        "y": 1155,
+        "width": 86,
+        "height": 21
+      },
+      {
+        "id": 112,
+        "parentId": 109,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1155,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 113,
+        "parentId": 92,
+        "tag": "a",
+        "role": null,
+        "classes": [
+          "block-pzEcF4Dzm5",
+          "mgb8-_7jJiRSsbZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1184,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 114,
+        "parentId": 113,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1184,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 115,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContainer-kLXnK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1184,
+        "width": 100000,
+        "height": 21
+      },
+      {
+        "id": 116,
+        "parentId": 115,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContent-12YAZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 50093,
+        "y": 1184,
+        "width": 70,
+        "height": 21
+      },
+      {
+        "id": 117,
+        "parentId": 114,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1184,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 118,
+        "parentId": 92,
+        "tag": "a",
+        "role": null,
+        "classes": [
+          "block-pzEcF4Dzm5",
+          "mgb8-_7jJiRSsbZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1213,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 119,
+        "parentId": 118,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1213,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 120,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContainer-kLXnK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1213,
+        "width": 100000,
+        "height": 21
+      },
+      {
+        "id": 121,
+        "parentId": 120,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContent-12YAZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 50095,
+        "y": 1213,
+        "width": 65,
+        "height": 21
+      },
+      {
+        "id": 122,
+        "parentId": 119,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1213,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 123,
+        "parentId": 92,
+        "tag": "a",
+        "role": null,
+        "classes": [
+          "block-pzEcF4Dzm5",
+          "mgb8-_7jJiRSsbZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1242,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 124,
+        "parentId": 123,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1242,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 125,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContainer-kLXnK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1242,
+        "width": 100000,
+        "height": 21
+      },
+      {
+        "id": 126,
+        "parentId": 125,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContent-12YAZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 50072,
+        "y": 1242,
+        "width": 112,
+        "height": 21
+      },
+      {
+        "id": 127,
+        "parentId": 124,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 128,
+        "y": 1242,
+        "width": 374,
+        "height": 21
+      },
+      {
+        "id": 128,
+        "parentId": 88,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "basic-info-dB86EjV5uU"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 509,
+        "y": 1022,
+        "width": 406,
+        "height": 50
+      },
+      {
+        "id": 129,
+        "parentId": 128,
+        "tag": "span",
+        "role": null,
+        "classes": [
+          "mgb8-_7jJiRSsbZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 628,
+        "y": 1022,
+        "width": 168,
+        "height": 21
+      },
+      {
+        "id": 130,
+        "parentId": 128,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 522,
+        "y": 1051,
+        "width": 379,
+        "height": 21
+      },
+      {
+        "id": 131,
+        "parentId": 130,
+        "tag": "img",
+        "role": null,
+        "classes": [
+          "public-security-icon-NRyimlPyhd"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 522,
+        "y": 1053,
+        "width": 16,
+        "height": 16
+      },
+      {
+        "id": 132,
+        "parentId": 130,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "license-text-nlwT5vIICg"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 546,
+        "y": 1052,
+        "width": 355,
+        "height": 19
+      },
+      {
+        "id": 133,
+        "parentId": 132,
+        "tag": "a",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 546,
+        "y": 1052,
+        "width": 203,
+        "height": 19
+      },
+      {
+        "id": 134,
+        "parentId": 132,
+        "tag": "a",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 758,
+        "y": 1052,
+        "width": 144,
+        "height": 19
+      },
+      {
+        "id": 135,
+        "parentId": 88,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "vertical-qrcode-mzD124gCNP"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 915,
+        "y": 1022,
+        "width": 406,
+        "height": 143
+      },
+      {
+        "id": 136,
+        "parentId": 135,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-foundation-heading-60-GkJoa",
+          "text-center-e0PU79DagV",
+          "flex-auto-ZFmvrAXWfs",
+          "mgb16-sMad5kqeGS"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1086,
+        "y": 1022,
+        "width": 64,
+        "height": 22
+      },
+      {
+        "id": 137,
+        "parentId": 135,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Spacing-spacing-inline-2zHeO",
+          "sd-Spacing-flex-vertical-1PxVy",
+          "sd-Spacing-align-center-1syHL"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 988,
+        "y": 1060,
+        "width": 260,
+        "height": 105
+      },
+      {
+        "id": 138,
+        "parentId": 137,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "qrcode-row-YQstzR0IS2",
+          "justify-center-UzPiuGNHnG"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 988,
+        "y": 1060,
+        "width": 260,
+        "height": 105
+      },
+      {
+        "id": 139,
+        "parentId": 138,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "qrcode-box-uEHH1bipf0"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 988,
+        "y": 1060,
+        "width": 76,
+        "height": 105
+      },
+      {
+        "id": 140,
+        "parentId": 139,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "qrcode-img-box-_reHBEdWPd"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 988,
+        "y": 1060,
+        "width": 76,
+        "height": 76
+      },
+      {
+        "id": 141,
+        "parentId": 140,
+        "tag": "img",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 996,
+        "y": 1068,
+        "width": 60,
+        "height": 60
+      },
+      {
+        "id": 142,
+        "parentId": 139,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 988,
+        "y": 1144,
+        "width": 76,
+        "height": 21
+      },
+      {
+        "id": 143,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContainer-kLXnK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 988,
+        "y": 1144,
+        "width": 100000,
+        "height": 21
+      },
+      {
+        "id": 144,
+        "parentId": 143,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContent-12YAZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 50953,
+        "y": 1144,
+        "width": 70,
+        "height": 21
+      },
+      {
+        "id": 145,
+        "parentId": 142,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 988,
+        "y": 1144,
+        "width": 76,
+        "height": 21
+      },
+      {
+        "id": 146,
+        "parentId": 138,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "qrcode-box-uEHH1bipf0"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1080,
+        "y": 1060,
+        "width": 76,
+        "height": 105
+      },
+      {
+        "id": 147,
+        "parentId": 146,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "qrcode-img-box-_reHBEdWPd"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1080,
+        "y": 1060,
+        "width": 76,
+        "height": 76
+      },
+      {
+        "id": 148,
+        "parentId": 147,
+        "tag": "img",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1088,
+        "y": 1068,
+        "width": 60,
+        "height": 60
+      },
+      {
+        "id": 149,
+        "parentId": 146,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1080,
+        "y": 1144,
+        "width": 76,
+        "height": 21
+      },
+      {
+        "id": 150,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContainer-kLXnK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1080,
+        "y": 1144,
+        "width": 100000,
+        "height": 21
+      },
+      {
+        "id": 151,
+        "parentId": 150,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContent-12YAZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 51045,
+        "y": 1144,
+        "width": 70,
+        "height": 21
+      },
+      {
+        "id": 152,
+        "parentId": 149,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1080,
+        "y": 1144,
+        "width": 76,
+        "height": 21
+      },
+      {
+        "id": 153,
+        "parentId": 138,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "qrcode-box-uEHH1bipf0"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1172,
+        "y": 1060,
+        "width": 76,
+        "height": 105
+      },
+      {
+        "id": 154,
+        "parentId": 153,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "qrcode-img-box-_reHBEdWPd"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1172,
+        "y": 1060,
+        "width": 76,
+        "height": 76
+      },
+      {
+        "id": 155,
+        "parentId": 154,
+        "tag": "img",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1180,
+        "y": 1068,
+        "width": 60,
+        "height": 60
+      },
+      {
+        "id": 156,
+        "parentId": 153,
+        "tag": "div",
+        "role": null,
+        "classes": [],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1172,
+        "y": 1144,
+        "width": 76,
+        "height": 21
+      },
+      {
+        "id": 157,
+        "parentId": null,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContainer-kLXnK"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1172,
+        "y": 1144,
+        "width": 100000,
+        "height": 21
+      },
+      {
+        "id": 158,
+        "parentId": 157,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-hiddenContent-12YAZ"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 51130,
+        "y": 1144,
+        "width": 84,
+        "height": 21
+      },
+      {
+        "id": 159,
+        "parentId": 156,
+        "tag": "div",
+        "role": null,
+        "classes": [
+          "sd-Ellipsis-ellipsis-15AU4",
+          "no-adaptive-tooltip"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 1172,
+        "y": 1144,
+        "width": 76,
+        "height": 21
+      },
+      {
+        "id": 160,
+        "parentId": 86,
+        "tag": "p",
+        "role": null,
+        "classes": [
+          "powered-by-QQJ4wlsK8K"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 120,
+        "y": 1285,
+        "width": 1201,
+        "height": 72
+      },
+      {
+        "id": 161,
+        "parentId": 160,
+        "tag": "a",
+        "role": null,
+        "classes": [
+          "powered-by-img-UA8DhuYgb3"
+        ],
+        "dataStatus": null,
+        "ariaCurrent": null,
+        "ariaSelected": null,
+        "text": "",
+        "x": 637,
+        "y": 1311,
+        "width": 166,
+        "height": 20
+      }
+    ],
+    "truncated": false,
+    "nodeLimitReached": false,
+    "textLimitReached": false
+  },
+  "candidates": [
+    {
+      "id": "candidate-1",
+      "jobTitle": "销售管培生（深圳）",
+      "location": null
+    },
+    {
+      "id": "candidate-2",
+      "jobTitle": "客户成功经理-深圳",
+      "location": "深圳"
+    }
+  ]
+}

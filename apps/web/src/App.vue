@@ -75,13 +75,16 @@ const settingsForm = reactive({
   screenshotRetentionDays: 30,
   defaultUserAgent: DEFAULT_USER_AGENT,
 });
-const emptyTaskPage = (): TaskRunPage => ({ items: [], total: 0, limit: 50, offset: 0 });
+const emptyTaskPage = (): TaskRunPage => ({
+  items: [], total: 0, limit: 20, offset: 0,
+  statusCounts: { queued: 0, running: 0, needsLogin: 0 },
+});
 const taskPage = ref<TaskRunPage>(emptyTaskPage());
 const taskScope = ref<"active" | "history">("active");
 const taskQuery = ref("");
-const taskHistoryPage = ref(1);
-const taskHistoryPerPage = 10;
-const taskHistoryPageCount = computed(() => Math.max(1, Math.ceil(taskPage.value.total / taskHistoryPerPage)));
+const taskCurrentPage = ref(1);
+const tasksPerPage = 20;
+const taskPageCount = computed(() => Math.max(1, Math.ceil(taskPage.value.total / tasksPerPage)));
 const emptyNotificationPage = (): NotificationPage => ({ items: [], total: 0, unreadCount: 0, limit: 20, offset: 0 });
 const notificationPage = ref<NotificationPage>(emptyNotificationPage());
 const notificationScope = ref<"all" | "unread">("all");
@@ -151,10 +154,8 @@ const scheduleFilterItems: Array<{ title: string; value: ScheduleMode | "" }> = 
 ];
 
 async function refreshTasks() {
-  const history = taskScope.value === "history";
-  const limit = history ? taskHistoryPerPage : 50;
-  const offset = history ? (taskHistoryPage.value - 1) * taskHistoryPerPage : 0;
-  taskPage.value = await api.tasks(taskScope.value, { q: taskQuery.value, limit, offset });
+  const offset = (taskCurrentPage.value - 1) * tasksPerPage;
+  taskPage.value = await api.tasks(taskScope.value, { q: taskQuery.value, limit: tasksPerPage, offset });
 }
 
 async function refreshNotifications() {
@@ -204,8 +205,8 @@ onBeforeUnmount(() => {
   if (taskSearchTimer) clearTimeout(taskSearchTimer);
 });
 watch([active, taskScope], ([page], previous) => {
-  if (previous && taskScope.value !== previous[1] && taskHistoryPage.value !== 1) {
-    taskHistoryPage.value = 1;
+  if (previous && taskScope.value !== previous[1] && taskCurrentPage.value !== 1) {
+    taskCurrentPage.value = 1;
     return;
   }
   if (page === "tasks") void refreshTasks();
@@ -226,14 +227,14 @@ watch(notificationPageCount, (count) => {
 });
 watch(taskQuery, () => {
   if (taskSearchTimer) clearTimeout(taskSearchTimer);
-  taskHistoryPage.value = 1;
+  taskCurrentPage.value = 1;
   taskSearchTimer = window.setTimeout(() => void refreshTasks(), 250);
 });
-watch(taskHistoryPage, () => {
-  if (active.value === "tasks" && taskScope.value === "history") void refreshTasks();
+watch(taskCurrentPage, () => {
+  if (active.value === "tasks") void refreshTasks();
 });
-watch(taskHistoryPageCount, (count) => {
-  if (taskHistoryPage.value > count) taskHistoryPage.value = count;
+watch(taskPageCount, (count) => {
+  if (taskCurrentPage.value > count) taskCurrentPage.value = count;
 });
 watch([query, statusFilter, scheduleFilter, appliedAtSort], () => { applicationPage.value = 1; });
 watch([active, debugEnabled], ([page, enabled]) => {
@@ -301,7 +302,7 @@ async function clearAllHistoryTasks() {
   })) return;
   await action(async () => {
     const result = await api.deleteAllHistoryRuns();
-    taskHistoryPage.value = 1;
+    taskCurrentPage.value = 1;
     screenshotRun.value = null;
     await Promise.all([refreshTasks(), refresh(true)]);
     const warning = result.screenshotsFailed ? `，${result.screenshotsFailed} 张截图清理失败` : "";
@@ -756,12 +757,13 @@ async function deleteProfile(site: string) {
           :page="taskPage"
           :query="taskQuery"
           :busy="busy"
-          :current-page="taskHistoryPage"
-          :page-count="taskHistoryPageCount"
+          :current-page="taskCurrentPage"
+          :page-count="taskPageCount"
+          :per-page="tasksPerPage"
           @scope="taskScope = $event"
           @query="taskQuery = $event"
           @refresh="refreshTasks()"
-          @page="taskHistoryPage = $event"
+          @page="taskCurrentPage = $event"
           @cancel="cancelTask"
           @retry="retryTask"
           @login="startLogin($event.id)"

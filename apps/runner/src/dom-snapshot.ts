@@ -19,6 +19,10 @@ export async function captureLocalPageSnapshot(page: Page): Promise<LocalPageSna
       if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) {
         return "";
       }
+      // Job titles may split the title/code across inline children; preserve the complete label.
+      if (element.matches('.delivery-list-job_name, [class*="STJobName"], [class*="foundation-heading"], h1, h2, h3')) {
+        return clean((element as HTMLElement).innerText ?? "").slice(0, maxNodeTextChars);
+      }
       const ownText = [...element.childNodes]
         .filter((child) => child.nodeType === Node.TEXT_NODE)
         .map((child) => child.textContent ?? "")

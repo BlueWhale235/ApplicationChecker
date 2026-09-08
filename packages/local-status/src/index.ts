@@ -17,9 +17,13 @@ import {
   normalizeStatusMappingText,
   type StatusMappingRule,
 } from "@application-checker/status-mapping";
+import { beisenAdapter } from "./adapters/beisen.js";
+import { feishuAdapter } from "./adapters/feishu.js";
+import { mokahrAdapter, MOKAHR_PARSER_VERSION } from "./adapters/mokahr.js";
+import { LOCAL_PARSER_VERSION, type ParserAdapter } from "./adapters/types.js";
 
-export const LOCAL_PARSER_VERSION = "1.0.2";
-export const MOKAHR_PARSER_VERSION = "1.0.1";
+export { LOCAL_PARSER_VERSION, MOKAHR_PARSER_VERSION };
+export type { ParserAdapter };
 export const LOCAL_AUTO_APPLY_THRESHOLD = 0.9;
 export const ASSISTED_RULE_SCHEMA_VERSION = 2;
 
@@ -29,55 +33,10 @@ export interface LocalRecognitionCandidate {
   location?: string | null;
 }
 
-export interface ParserAdapter {
-  id: string;
-  version: string;
-  priority: number;
-  routes: Array<{ hostname: string; pathname: string }>;
-  domFeatures?: string[];
-  containerHints: string[];
-}
-
 const adapters: ParserAdapter[] = [
-  {
-    id: "beisen",
-    version: LOCAL_PARSER_VERSION,
-    priority: 100,
-    routes: [
-      { hostname: "zhiye.com", pathname: "/*" },
-      { hostname: "*.zhiye.com", pathname: "/*" },
-    ],
-    domFeatures: ["zhiye", "beisen", "北森"],
-    containerHints: ["resume", "application", "delivery", "process", "progress"],
-  },
-  {
-    id: "feishu",
-    version: LOCAL_PARSER_VERSION,
-    priority: 100,
-    routes: [
-      { hostname: "feishu.cn", pathname: "/*" },
-      { hostname: "*.feishu.cn", pathname: "/*" },
-    ],
-    domFeatures: ["feishu", "atsx", "飞书招聘"],
-    containerHints: ["application", "delivery", "process", "progress"],
-  },
-  {
-    id: "mokahr",
-    version: MOKAHR_PARSER_VERSION,
-    priority: 100,
-    routes: [
-      { hostname: "mokahr.com", pathname: "/campus-recruitment/*" },
-      { hostname: "*.mokahr.com", pathname: "/campus-recruitment/*" },
-      { hostname: "mokahr.com", pathname: "/campus_apply/*" },
-      { hostname: "*.mokahr.com", pathname: "/campus_apply/*" },
-      { hostname: "mokahr.com", pathname: "/candidate/applications/deliver-query/*" },
-      { hostname: "*.mokahr.com", pathname: "/candidate/applications/deliver-query/*" },
-      { hostname: "mokahr.com", pathname: "/*" },
-      { hostname: "*.mokahr.com", pathname: "/*" },
-    ],
-    domFeatures: ["mokahr", "moka", "Moka"],
-    containerHints: ["preference", "application", "delivery", "process", "progress", "resume"],
-  },
+  beisenAdapter,
+  feishuAdapter,
+  mokahrAdapter,
 ];
 
 export const STATUS_RULES = createStatusMappingRules();
@@ -421,6 +380,15 @@ export function validateParserAdapters(items: ParserAdapter[] = adapters): void 
   }
 }
 
+/** Local-first deliberately avoids AI on supported Beisen/Moka routes, even without a snapshot. */
+export function isLocalOnlyRoute(input: string): boolean {
+  try {
+    const url = new URL(input);
+    return adapters.filter((adapter) => ["beisen", "mokahr"].includes(adapter.id))
+      .some((adapter) => adapter.routes.some((route) => urlPatternMatches(route, url)));
+  } catch { return false; }
+}
+
 export function resolveParserAdapter(snapshot: LocalPageSnapshot): {
   adapter: ParserAdapter | null;
   route: ParserRouteRule | null;
@@ -493,6 +461,16 @@ function contextForTitle(
 ): LocalDomNode[] {
   const byId = new Map(snapshot.nodes.map((node) => [node.id, node]));
   const ancestors = ancestorIds(titleNode, byId);
+  if (adapter.id === "beisen") {
+    for (const rootId of ancestors) {
+      const descendants = snapshot.nodes.filter((node) => ancestorIds(node, byId).has(rootId));
+      const titles = descendants.filter((node) => node.classes.some((name) => /STJobName|delivery-list-job_name/i.test(name)));
+      const statuses = descendants.filter((node) => /^当前进度\s*[:：]/.test(node.text.trim()));
+      if (titles.length <= 1 && statuses.length) return statuses;
+      if (titles.length > 1) break;
+    }
+  }
+
   const hintedAncestors = [...ancestors].filter((id) => {
     const node = byId.get(id);
     if (!node) return false;
@@ -594,7 +572,7 @@ function mokahrStatusMatches(
   const normalizedStatusLabel = normalizeRecognitionText("状态");
   const explicitStatusLabels = context.filter((node) => {
     const text = normalizeRecognitionText(node.text);
-    return text === normalizedStatusLabel || text.startsWith(`${normalizedStatusLabel}:`) || text.startsWith(`${normalizedStatusLabel}：`);
+    return /^(?:状态|status)\s*[:：]/i.test(node.text.trim()) || text === normalizedStatusLabel || text === "status";
   });
   if (explicitStatusLabels.length) {
     const nearestDistance = Math.min(...matches.map((match) => Math.min(...explicitStatusLabels.map((label) =>
@@ -634,24 +612,25 @@ function parseCandidate(
   statusRules: StatusMappingRule[],
 ): LocalRecognitionResultItem {
   const target = normalizeRecognitionText(candidate.jobTitle);
+  const byId = new Map(snapshot.nodes.map((node) => [node.id, node]));
+  const codeOf = (value: string) => value.normalize("NFKC").match(/\bJ\d{4,}\b/i)?.[0]?.toUpperCase();
+  const expectedCode = codeOf(candidate.jobTitle);
   const rawTitleNodes = snapshot.nodes
     .map((node) => ({ node, normalized: normalizeRecognitionText(node.text) }))
-    .filter(({ normalized }) => normalized === target || (normalized.length <= Math.max(target.length * 2.5, target.length + 16) && normalized.includes(target)))
+    .filter(({ node, normalized }) => expectedCode
+      ? codeOf(node.text) === expectedCode
+      : normalized === target || (normalized.length <= Math.max(target.length * 2.5, target.length + 16) && normalized.includes(target)))
     .sort((left, right) => left.normalized.length - right.normalized.length);
-  const titleNodes = rawTitleNodes.filter((candidateNode, index, all) => !all.slice(0, index).some((existing) =>
-    existing.normalized === candidateNode.normalized
-    && Math.abs(existing.node.y - candidateNode.node.y) <= 5
-    && Math.abs(existing.node.x - candidateNode.node.x) <= 12));
+  // DOM wrappers repeat the same title at different coordinates. They are not separate jobs.
+  const titleNodes = rawTitleNodes.filter((entry) => !rawTitleNodes.some((other) =>
+    other.node.id !== entry.node.id && ancestorIds(other.node, byId).has(entry.node.id)))
+    .filter((entry, index, all) => !all.slice(0, index).some((other) =>
+      other.normalized === entry.normalized && Math.abs(other.node.y - entry.node.y) <= 5
+      && Math.abs(other.node.x - entry.node.x) <= 12));
   const exact = titleNodes.filter(({ normalized }) => normalized === target);
-  const topZhiyeExact = adapter.id === "beisen" && exact.length > 1
-    ? [...exact].sort((left, right) => left.node.y - right.node.y)[0]
-    : null;
-  const chosen = exact.length === 1 ? exact[0]
-    : topZhiyeExact
-      ? topZhiyeExact
-      : exact.length === 0 && titleNodes.length === 1 ? titleNodes[0] : null;
-  const selectedLatestZhiyeDuplicate = Boolean(topZhiyeExact);
-  const titleMatch = exact.length === 1 || selectedLatestZhiyeDuplicate ? "exact" : chosen ? "contains" : "none";
+  const chosen = expectedCode ? (titleNodes.length === 1 ? titleNodes[0] : null)
+    : exact.length === 1 ? exact[0] : exact.length === 0 && titleNodes.length === 1 ? titleNodes[0] : null;
+  const titleMatch = chosen && (expectedCode || exact.length === 1) ? "exact" : chosen ? "contains" : "none";
   if (!chosen) {
     return {
       applicationId: candidate.id, matched: false, rawStatus: null, status: null, confidence: 0,
@@ -681,15 +660,14 @@ function parseCandidate(
     };
   }
   const selected = matches.sort((left, right) => statusRules.indexOf(left.rule) - statusRules.indexOf(right.rule))[0]!;
-  const confidence = selectedLatestZhiyeDuplicate ? 0.92
-    : titleMatch === "exact" ? (selected.active ? 0.99 : 0.96) : (selected.active ? 0.94 : 0.91);
+  const confidence = titleMatch === "exact" ? (selected.active ? 0.99 : 0.96) : (selected.active ? 0.94 : 0.91);
   return {
     applicationId: candidate.id,
     matched: true,
     rawStatus: selected.term,
     status: selected.rule.status,
     confidence,
-    evidence: `${selectedLatestZhiyeDuplicate ? "智业同名历史记录中选择页面最上方的最新记录" : titleMatch === "exact" ? "完全" : "唯一包含"}匹配岗位“${candidate.jobTitle}”，附近状态文本为“${selected.term}”`,
+    evidence: `${titleMatch === "exact" ? "完全" : "唯一包含"}匹配岗位“${candidate.jobTitle}”，附近状态文本为“${selected.term}”`,
     titleMatch,
     statusRule: selected.rule.id,
   };

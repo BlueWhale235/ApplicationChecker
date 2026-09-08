@@ -39,10 +39,10 @@ describe("path registry", () => {
     expect(resolveParserAdapter(snapshot(url, [])).adapter?.id).toBe(expected);
   });
 
-  it("uses an independent MokaHR 1.0.1 adapter version", () => {
+  it("uses an independent MokaHR 1.0.2 adapter version", () => {
     expect(resolveParserAdapter(snapshot("https://app.mokahr.com/candidate/applications/deliver-query/sunnyoptical", [])).adapter?.version)
       .toBe(MOKAHR_PARSER_VERSION);
-    expect(MOKAHR_PARSER_VERSION).toBe("1.0.1");
+    expect(MOKAHR_PARSER_VERSION).toBe("1.0.2");
     expect(resolveParserAdapter(snapshot("https://app.zhiye.com/personal/delivery", [])).adapter?.version).toBe(LOCAL_PARSER_VERSION);
   });
 
@@ -148,7 +148,7 @@ describe("local recognition", () => {
       { id: "sales", jobTitle: "销售-国内客户" },
       { id: "ambassador", jobTitle: "舜宇集团2027届校园大使" },
     ]);
-    expect(result).toMatchObject({ adapterId: "mokahr", adapterVersion: "1.0.1" });
+    expect(result).toMatchObject({ adapterId: "mokahr", adapterVersion: MOKAHR_PARSER_VERSION });
     expect(result.results).toMatchObject([
       { applicationId: "sales", matched: true, rawStatus: "投递成功", status: "screening" },
       { applicationId: "ambassador", matched: true, rawStatus: "不匹配", status: "rejected" },
@@ -176,7 +176,7 @@ describe("local recognition", () => {
       node(3, "初筛", 120, 1),
       node(4, "投递时间：2026-08-07", 160, 1),
     ]), [{ id: "job-1", jobTitle: "【2027秋招】销售工程师" }]);
-    expect(result).toMatchObject({ adapterId: "mokahr", adapterVersion: "1.0.1" });
+    expect(result).toMatchObject({ adapterId: "mokahr", adapterVersion: MOKAHR_PARSER_VERSION });
     expect(result.results[0]).toMatchObject({ matched: true, rawStatus: "初筛", status: "screening" });
   });
 

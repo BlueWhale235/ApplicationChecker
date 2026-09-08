@@ -223,10 +223,14 @@ function date(value: string | null): string {
         <div class="section-title"><h3>运行记录</h3><small>{{ detail.runs.length }} 次</small></div>
         <div class="run-list">
           <article v-for="run in detail.runs.slice(0, runsExpanded ? detail.runs.length : 3)" :key="run.id">
-            <i class="run-dot" :data-run="run.status"></i>
-            <div><strong>{{ runLabels[run.status] }}</strong><span>{{ date(run.createdAt) }}</span>
+            <i class="run-dot" :data-run="run.displayStatus || run.status"></i>
+            <div><strong>{{ (run.displayStatus === 'unmatched' ? '未匹配' : runLabels[run.displayStatus || run.status]) }}</strong><span>{{ date(run.createdAt) }}</span>
               <small v-if="run.recognitionSuggestedStatus">识别：{{ progressLabels[run.recognitionSuggestedStatus] }} · {{ Math.round((run.recognitionConfidence || 0) * 100) }}%</small>
-              <small v-else-if="run.errorMessage">{{ run.errorMessage }}</small>
+              <small v-else-if="run.errorMessage || run.recognitionEvidence">{{ run.errorMessage || run.recognitionEvidence }}</small>
+              <template v-for="result in run.recognitionResults.filter(item => item.applicationId === detail?.application.id)" :key="result.applicationId">
+                <small v-if="result.localDiagnostic">本地解析：{{ result.localDiagnostic }}</small>
+                <small v-if="result.aiError">AI：{{ result.aiError }}</small>
+              </template>
               <small v-if="run.groupMemberCount > 1">共享检查 · {{ run.groupMemberCount }} 个岗位</small>
             </div>
             <button v-if="run.status === 'needs_login'" class="login-button" @click="$emit('login', run)">登录</button>

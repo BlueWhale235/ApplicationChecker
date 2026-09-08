@@ -123,7 +123,7 @@ async function exercise(mode: RecognitionMode, snapshot = pageSnapshot) {
     url: `/internal/runs/${runId}/complete`,
     headers: { authorization: `Bearer ${config.runnerToken}` },
     payload: {
-      finalUrl: pageSnapshot.url,
+      finalUrl: snapshot.url,
       pageTitle: pageSnapshot.title,
       screenshotBase64: Buffer.from("png").toString("base64"),
       truncated: false,
@@ -165,16 +165,16 @@ describe("recognition modes", () => {
     });
   });
 
-  it("local_first sends only an unresolved local candidate to AI", async () => {
+  it("local_first never sends unresolved Moka candidates to AI", async () => {
     const unresolved = {
       ...pageSnapshot,
       visibleText: "当前页面只显示其他岗位内容",
       nodes: [{ ...pageSnapshot.nodes[0]!, text: "其他岗位" }],
     };
     const { recognizeGroup, detail } = await exercise("local_first", unresolved);
-    expect(recognizeGroup).toHaveBeenCalledTimes(1);
-    expect(recognizeGroup.mock.calls[0]?.[0].applications).toHaveLength(1);
-    expect(detail.application).toMatchObject({ progressStatus: "interviewed", progressSource: "ai" });
+    expect(recognizeGroup).not.toHaveBeenCalled();
+    expect(detail.application.progressStatus).toBe("screening");
+    expect(detail.runs[0]).toMatchObject({ displayStatus: "unmatched", aiStatus: "skipped" });
   });
 
   it("local_first falls back to AI when no built-in or user adapter matches", async () => {
@@ -187,5 +187,55 @@ describe("recognition modes", () => {
     expect(recognizeGroup.mock.calls[0]?.[0].applications).toHaveLength(1);
     expect(detail.application).toMatchObject({ progressStatus: "interviewed", progressSource: "ai" });
     expect(detail.runs[0]).toMatchObject({ recognitionSource: "ai" });
+  });
+});
+
+
+describe("recognition failure episodes", () => {
+  it("deduplicates unresolved episodes, resets after recovery, and preserves local diagnostics", async () => {
+    const { context, config } = await setup("local_first");
+    const recognizeGroup = vi.fn().mockRejectedValue(new Error("fetch failed"));
+    const app = Fastify();
+    await registerRoutes(app, { context, config, recognizer: { configured: true, model: "test", recognize: vi.fn(), recognizeGroup }, runnerHeartbeat: { at: Date.now() } });
+    const headers = { authorization: `Bearer ${config.runnerToken}` };
+    async function complete(snapshot: LocalPageSnapshot | null, finalUrl = pageSnapshot.url) {
+      const id = await queueRun(context, "11111111-1111-4111-8111-111111111111", "manual");
+      await app.inject({ method: "POST", url: "/internal/claim", headers });
+      const reply = await app.inject({ method: "POST", url: `/internal/runs/${id}/complete`, headers, payload: {
+        finalUrl, pageTitle: "投递记录", screenshotBase64: "cG5n", truncated: false,
+        browserState: { version: 1, cookies: [], origins: [] }, pageSnapshot: snapshot,
+      } });
+      expect(reply.statusCode, reply.body).toBe(200);
+      return context.db.selectFrom("runs").selectAll().where("id", "=", id!).executeTakeFirstOrThrow();
+    }
+    try {
+      const unresolved = { ...pageSnapshot, nodes: [], visibleText: "投递记录，暂无目标岗位" };
+      await complete(unresolved); await complete(unresolved);
+      expect(await context.db.selectFrom("notifications").selectAll().execute()).toHaveLength(1);
+      await complete(pageSnapshot);
+      await complete(unresolved);
+      expect((await context.db.selectFrom("notifications").selectAll().where("kind", "=", "recognition_unmatched").execute())).toHaveLength(2);
+      await complete(null, "https://site.zhiye.com/personal/deliveryRecord");
+      expect(recognizeGroup).not.toHaveBeenCalled();
+      const failed = await complete({ ...unresolved, url: "https://other.example/status" }, "https://other.example/status");
+      expect(failed.status).toBe("failed");
+      const result = await context.db.selectFrom("run_application_results").selectAll().where("run_id", "=", failed.id).executeTakeFirstOrThrow();
+      expect(result.ai_error).toBe("fetch failed");
+      expect(result.local_diagnostic).toContain("未命中");
+      expect(result.local_diagnostic).not.toContain("fetch failed");
+    } finally { await app.close(); await context.db.destroy(); context.raw.close(); }
+  });
+});
+
+
+describe("supported-site failure classification", () => {
+  it.each([
+    ["https://example.zhiye.com/personal/deliveryRecord", "", "unmatched"],
+    ["https://app.mokahr.com/campus-recruitment/test/1", "请登录后查看个人投递记录", "needs_login"],
+  ])("classifies %s without AI", async (url, visibleText, displayStatus) => {
+    const { recognizeGroup, detail } = await exercise("local_first", { ...pageSnapshot, url, nodes: [], visibleText });
+    expect(recognizeGroup).not.toHaveBeenCalled();
+    expect(detail.runs[0].displayStatus).toBe(displayStatus);
+    expect(detail.runs[0].screenshotAvailable).toBe(true);
   });
 });

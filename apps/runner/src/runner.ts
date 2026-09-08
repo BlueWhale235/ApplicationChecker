@@ -19,6 +19,7 @@ import { withNavigationRetry } from "./page-stability.js";
 import { executeScriptRule, ScriptRuleExecutionError, selectScriptRule } from "./script-rule.js";
 import { PreviewPageSessionManager, type PreviewPageResource } from "./preview-page-session.js";
 import { isLoginPageAvailable, LoginWorkspace } from "./login-workspace.js";
+import { executeRuntimeStatusAdapter } from "./status-adapters/index.js";
 
 const apiBase = (process.env.APP_INTERNAL_URL ?? "http://127.0.0.1:8080/api").replace(/\/$/, "");
 const token = process.env.RUNNER_INTERNAL_TOKEN ?? "development-runner-token-change-me-123456";
@@ -176,14 +177,20 @@ async function capture(job: RunnerJob): Promise<void> {
     let scriptExecution: ScriptRuleExecution | null = null;
     if (!initialDetection.requiresLogin || isSoftMokahrLoginDetection(initialDetection, page.url())) {
       const scriptRule = selectScriptRule(job.scriptRules, page.url());
-      if (scriptRule) {
-        try {
+      try {
+        if (scriptRule) {
           scriptExecution = await executeScriptRule(page, scriptRule, job.applicationId, job.applications);
-          await settle(page);
-        } catch (error) {
-          if (page.isClosed()) throw error;
-          console.error(`Page script ${scriptRule.id} failed; continuing with normal recognition`, error);
+        } else {
+          scriptExecution = await executeRuntimeStatusAdapter({
+            page,
+            primaryApplicationId: job.applicationId,
+            applications: job.applications,
+          });
         }
+        if (scriptExecution) await settle(page);
+      } catch (error) {
+        if (page.isClosed()) throw error;
+        console.error(`${scriptRule ? `Page script ${scriptRule.id}` : "Built-in status adapter"} failed; continuing with normal recognition`, error);
       }
     }
     const { observed, detection, image, snapshot: pageSnapshot } = await captureStablePage(

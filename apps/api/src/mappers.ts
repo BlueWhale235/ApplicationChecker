@@ -60,6 +60,7 @@ export const mapRun = (
   groupMemberCount,
   trigger: row.trigger,
   status: row.status,
+  displayStatus: displayRunStatus(row, recognitionResults),
   finalUrl: row.final_url,
   pageTitle: row.page_title,
   screenshotAvailable: Boolean(row.screenshot_path),
@@ -96,6 +97,8 @@ export const mapRecognitionResult = (row: Selectable<RunApplicationResultsTable>
   source: row.recognition_source,
   adapterId: row.adapter_id,
   ruleVersion: row.rule_version,
+  localDiagnostic: row.local_diagnostic ?? null,
+  aiError: row.ai_error ?? (row.not_applied_reason === "ai_failed" ? row.evidence : null),
 });
 
 export const mapEvent = (row: Selectable<StatusEventsTable>): StatusEvent => ({
@@ -128,3 +131,18 @@ export const mapLogin = (row: LoginSessionsTable): LoginSessionSummary => ({
   createdAt: row.created_at,
   errorMessage: row.error_message,
 });
+
+export function displayRunStatus(row: Selectable<RunsTable>, results: ApplicationRecognitionResult[]): NonNullable<RunSummary["displayStatus"]> {
+  if (["queued", "running", "needs_login", "cancelled"].includes(row.status)) return row.status;
+  if (row.error_code === "LOCAL_UNMATCHED") return "unmatched";
+  if (row.status === "failed" && row.error_code) return "failed";
+  if (results.length) {
+    const resolved = results.filter((item) => item.matched && item.suggestedStatus !== null && !["ai_failed", "script_error", "script_skipped", "unmatched", "low_confidence"].includes(item.notAppliedReason ?? "")).length;
+    if (resolved === results.length) return "succeeded";
+    if (resolved) return "partial";
+    return results.some((item) => ["ai_failed", "script_error"].includes(item.notAppliedReason ?? "")) ? "failed" : "unmatched";
+  }
+  if (row.ai_status === "failed" || row.recognition_status === "failed") return "failed";
+  if (row.recognition_status === "partial") return "partial";
+  return row.status;
+}

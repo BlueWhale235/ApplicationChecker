@@ -263,6 +263,23 @@ if (missing) return helpers.error();`;
     expect(String(request.mock.calls[0]?.[0])).toContain("id=job-1");
   });
 
+  it("preserves redirect URL and status when a JSON request receives HTML", async () => {
+    const response = new Response("<html>login</html>", { status: 401, headers: { "content-type": "text/html" } });
+    Object.defineProperty(response, "url", { value: "https://careers.example.com/login" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+    const scriptRule = rule("axios-login", "/query");
+    if (scriptRule.definition.kind !== "script") throw new Error("unexpected rule kind");
+    scriptRule.definition.script = `
+      try {
+        await helpers.axios.get("/api/status", { responseType: "json" });
+      } catch (error) {
+        return { applicationId: application.id, rawStatus: error.response.url + "|" + error.response.status };
+      }
+    `;
+    const result = await executeScriptRule(navigablePage(), scriptRule, "job-1", applications);
+    expect(result.results[0]?.rawStatus).toBe("https://careers.example.com/login|401");
+  });
+
   it("blocks protected Axios request headers", async () => {
     const scriptRule = rule("axios-header", "/query");
     if (scriptRule.definition.kind !== "script") throw new Error("unexpected rule kind");

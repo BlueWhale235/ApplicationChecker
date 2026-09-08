@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 
 namespace ApplicationChecker.Desktop;
 
@@ -22,6 +23,8 @@ internal sealed class ProcessSupervisor : IAsyncDisposable
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
         };
         info.ArgumentList.Add(argument);
         foreach (var pair in environment)
@@ -65,7 +68,7 @@ internal sealed class ProcessSupervisor : IAsyncDisposable
                     FileShare.ReadWrite | FileShare.Delete,
                     bufferSize: 4096,
                     useAsync: true);
-                await using var writer = new StreamWriter(stream);
+                await using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 await writer.WriteLineAsync(line);
             }
             finally

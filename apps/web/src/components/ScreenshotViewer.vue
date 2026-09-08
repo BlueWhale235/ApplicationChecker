@@ -36,7 +36,7 @@ function date(value: string | null): string {
         <div>
           <span>网页完整截图</span>
           <h2 id="screenshot-viewer-title">{{ company }} · {{ jobTitle }}</h2>
-          <p>{{ date(run.completedAt || run.createdAt) }} · {{ runLabels[run.status] }}</p>
+          <p>{{ date(run.completedAt || run.createdAt) }} · {{ (run.displayStatus === 'unmatched' ? '未匹配' : runLabels[run.displayStatus || run.status]) }}</p>
         </div>
         <div class="viewer-head-actions">
           <span v-if="run.screenshotTruncated" class="viewer-warning"><i class="mdi mdi-alert-outline"></i>页面过长，截图已截断</span>

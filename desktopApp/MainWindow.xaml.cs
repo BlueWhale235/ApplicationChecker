@@ -75,6 +75,13 @@ public partial class MainWindow : Window
             ["RUNNER_URL"] = baseUrl,
             ["STATE_ENCRYPTION_KEY"] = settings.StateEncryptionKey,
         };
+        if (DetectSystemProxy() is { } systemProxy)
+        {
+            apiEnvironment["HTTP_PROXY"] = systemProxy;
+            apiEnvironment["HTTPS_PROXY"] = systemProxy;
+            apiEnvironment["NO_PROXY"] = "127.0.0.1,localhost";
+            apiEnvironment["NODE_USE_ENV_PROXY"] = "1";
+        }
         if (_devToolsEnabled)
         {
             apiEnvironment["DEBUG_TOOLS"] = "1";
@@ -151,6 +158,24 @@ public partial class MainWindow : Window
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         return ((IPEndPoint)listener.LocalEndpoint).Port;
+    }
+
+    private static string? DetectSystemProxy()
+    {
+        try
+        {
+            var probe = new Uri("https://example.com/");
+            var proxy = HttpClient.DefaultProxy;
+            if (proxy.IsBypassed(probe)) return null;
+            var proxyUri = proxy.GetProxy(probe);
+            if (proxyUri is null || proxyUri == probe) return null;
+            if (proxyUri.Scheme != Uri.UriSchemeHttp && proxyUri.Scheme != Uri.UriSchemeHttps) return null;
+            return proxyUri.GetLeftPart(UriPartial.Authority);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static async Task WaitForHealthAsync(string baseUrl, System.Diagnostics.Process process, string apiLogPath)
