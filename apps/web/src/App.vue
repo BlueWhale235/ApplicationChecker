@@ -549,6 +549,11 @@ async function refreshBrowserStorage() {
     error.value = value instanceof Error ? value.message : "无法读取浏览器存储占用";
   }
 }
+
+async function handleDataImported(resumedQueued: number) {
+  await Promise.all([refresh(false), refreshTasks(), refreshNotifications(), refreshBrowserStorage()]);
+  flash(`数据迁移完成${resumedQueued ? `，已恢复 ${resumedQueued} 个排队任务` : ""}`);
+}
 async function clearBrowserStorage(kind: "cache" | "temp" | "logs") {
   const labels = {
     cache: { title: "清除浏览器缓存", message: "将删除自动检查浏览器缓存的 JS、CSS、字体、图片等资源。登录状态不会被删除，后续检查可能需要重新下载页面资源。", confirm: "清除缓存", done: "浏览器缓存" },
@@ -785,6 +790,9 @@ async function deleteProfile(site: string) {
           @configure-ai="aiSettingsOpen = true"
           @configure-status-mappings="statusMappingsOpen = true"
           @recognition-mode="saveRecognitionMode"
+          @notice="flash"
+          @failure="error = $event"
+          @imported="handleDataImported"
         />
         <AiDebugPage
           v-else-if="active === 'debug' && debugEnabled"

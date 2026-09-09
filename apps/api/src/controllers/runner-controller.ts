@@ -94,6 +94,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
   });
 
   const claimLogin = async (): Promise<RunnerLoginJob | { kind: "idle" }> => {
+    if (deps.maintenance?.active) return { kind: "idle" };
     const login = await context.db.selectFrom("login_sessions")
       .innerJoin("applications", "applications.id", "login_sessions.application_id")
       .leftJoin("check_groups", "check_groups.id", "applications.check_group_id")
@@ -129,6 +130,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
 
   type BackgroundClaim = RunnerJob | RunnerRecognitionPreviewJob | RunnerRecognitionPreviewReleaseJob | { kind: "idle" };
   const claimBackgroundUnlocked = async (): Promise<BackgroundClaim> => {
+    if (deps.maintenance?.active) return { kind: "idle" };
     const activeLogin = await context.db.selectFrom("login_sessions").select("id")
       .where("status", "in", ["queued", "starting", "ready", "active", "saving"]).executeTakeFirst();
     if (activeLogin) return { kind: "idle" };

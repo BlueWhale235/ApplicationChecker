@@ -5,5 +5,6 @@ export { registerNotificationSettingsController } from "./notification-settings-
 export { registerLoginController } from "./login-controller.js";
 export { registerRunnerController } from "./runner-controller.js";
 export { registerParserRuleController } from "./parser-rule-controller.js";
+export { registerDataTransferController } from "./data-transfer-controller.js";
 export { authorizeVncRequest, exchangeRemoteLogin } from "./remote-login-controller.js";
 export type { RouteDeps } from "./shared.js";

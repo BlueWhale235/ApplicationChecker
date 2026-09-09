@@ -16,7 +16,7 @@ interface EncryptedSecret {
   ciphertext: string;
 }
 
-function encryptSecret(value: string, key: Buffer): string {
+export function encryptSecret(value: string, key: Buffer): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
@@ -28,7 +28,7 @@ function encryptSecret(value: string, key: Buffer): string {
   } satisfies EncryptedSecret);
 }
 
-function decryptSecret(value: string | null, key: Buffer): string | null {
+export function decryptSecret(value: string | null, key: Buffer): string | null {
   if (!value) return null;
   const payload = JSON.parse(value) as EncryptedSecret;
   if (payload.version !== 1) throw new Error("Unsupported encrypted settings version");

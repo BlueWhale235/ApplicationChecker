@@ -24,6 +24,7 @@ import type { StatusRecognizer } from "@application-checker/ai-status";
 import type { Config } from "../config.js";
 import type { AiDebugStore } from "../ai-debug.js";
 import type { RecognitionPreviewStore } from "../recognition-preview.js";
+import type { DataTransferService, MaintenanceState } from "../data-transfer.js";
 import type { DbContext, RunsTable } from "../db.js";
 import { mapApplication, mapEvent, mapLogin, mapProfile, mapRecognitionResult, mapRun } from "../mappers.js";
 import { assertPublicUrl } from "../security.js";
@@ -157,6 +158,8 @@ export interface RouteDeps {
   aiDebugStore?: AiDebugStore;
   recognitionPreviewStore?: RecognitionPreviewStore;
   runnerHeartbeat: { at: number };
+  maintenance?: MaintenanceState;
+  dataTransfer?: DataTransferService;
 }
 
 export {

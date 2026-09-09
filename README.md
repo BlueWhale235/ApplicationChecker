@@ -96,6 +96,14 @@ docker compose up -d --build
 
 Docker 版数据保存在仓库根目录的 `data`。执行 `docker compose down` 不会删除这些数据。
 
+### 在桌面版与 Docker 之间迁移数据
+
+设置页的“数据迁移”可以导出或导入 `.acbackup` 全量加密备份。备份包含岗位、检查记录、规则、设置、截图、浏览器登录状态和 AI API Key，但不包含日志、缓存、临时文件以及 `STATE_ENCRYPTION_KEY`。
+
+导出时需要设置迁移密码，导入端使用同一密码解密。敏感数据会先由来源端 Key 解密，再使用目标端当前的 `STATE_ENCRYPTION_KEY` 重新加密，因此桌面版和 Docker 不需要使用相同 Key，也不应为了导入而修改 `docker-compose.yml`。
+
+Docker 的 Key 必须与 `data` 目录一起长期保管，推荐写入未提交的 `.env` 或 Docker Secret。程序会记录 Key 的不可逆指纹；如果数据目录中已有加密数据但 Key 被修改，启动时会明确报错。导入采用全量覆盖且不会自动备份目标数据，请在确认页核对数据数量。
+
 ## Windows 桌面版
 
 ### 环境要求

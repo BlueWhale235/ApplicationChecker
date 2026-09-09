@@ -45,6 +45,26 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export interface DataTransferSummary {
+  formatVersion: number;
+  appVersion: string;
+  exportedAt: string;
+  sourceKeyId: string;
+  targetKeyId: string;
+  keyChanged: boolean;
+  counts: Record<string, number>;
+  targetCounts: Record<string, number>;
+  screenshotCount: number;
+  screenshotBytes: number;
+  sensitiveData: string[];
+  targetHasData: boolean;
+}
+
+async function transferError(response: Response): Promise<never> {
+  const body = await response.json().catch(() => ({ error: `请求失败：${response.status}` })) as { error?: string };
+  throw new Error(body.error ?? `请求失败：${response.status}`);
+}
+
 export const api = {
   applications: (q = "", status = "") =>
     request<ApplicationSummary[]>(`/applications?q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}`),
@@ -136,6 +156,35 @@ export const api = {
   browserStorage: () => request<BrowserStorageUsage>("/settings/browser-storage"),
   clearBrowserStorage: (kind: "cache" | "temp" | "logs") =>
     request<BrowserStorageCleanupResult>(`/settings/browser-storage/${kind}/clear`, { method: "POST" }),
+  exportAllData: async (password: string, passwordConfirmation: string) => {
+    const response = await fetch("/api/data-transfer/export", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password, passwordConfirmation }),
+    });
+    if (!response.ok) return transferError(response);
+    const disposition = response.headers.get("content-disposition") ?? "";
+    const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? "application-checker.acbackup";
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  },
+  inspectDataBackup: async (file: File, password: string) => {
+    const body = new FormData();
+    body.append("password", password);
+    body.append("backup", file, file.name);
+    const response = await fetch("/api/data-transfer/imports", { method: "POST", body });
+    if (!response.ok) return transferError(response);
+    return response.json() as Promise<{ id: string; summary: DataTransferSummary; expiresAt: string }>;
+  },
+  applyDataBackup: (id: string) => request<{ ok: true; summary: DataTransferSummary; resumedQueued: number }>(
+    `/data-transfer/imports/${id}/apply`, { method: "POST", body: JSON.stringify({ confirmReplace: true }) },
+  ),
+  cancelDataBackup: (id: string) => request<void>(`/data-transfer/imports/${id}`, { method: "DELETE" }),
   updateSettings: (body: SettingsUpdate) => request<{
     ok: true;
     screenshotCleanup: { deleted: number; missing: number; failed: number };

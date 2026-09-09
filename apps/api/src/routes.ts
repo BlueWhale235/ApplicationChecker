@@ -7,6 +7,7 @@ import {
   registerRunController,
   registerRunnerController,
   registerParserRuleController,
+  registerDataTransferController,
   type RouteDeps,
 } from "./controllers/index.js";
 
@@ -21,4 +22,5 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
   await registerLoginController(app, deps);
   await registerRunnerController(app, deps);
   await registerParserRuleController(app, deps);
+  await registerDataTransferController(app, deps);
 }

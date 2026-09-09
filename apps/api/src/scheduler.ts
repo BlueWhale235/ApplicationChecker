@@ -1,5 +1,6 @@
 import type { Config } from "./config.js";
 import type { DbContext } from "./db.js";
+import type { MaintenanceState } from "./data-transfer.js";
 import { calculateNextRun, cleanupExpiredScreenshots, queueRun } from "./service.js";
 
 function localClock(now: Date, timezone: string): { date: string; hour: number; minute: number } {
@@ -19,11 +20,11 @@ function localClock(now: Date, timezone: string): { date: string; hour: number; 
   };
 }
 
-export function startScheduler(context: DbContext, config: Config): () => void {
+export function startScheduler(context: DbContext, config: Config, maintenance: MaintenanceState = { active: false }): () => void {
   let running = false;
   let lastCleanupDate = "";
   const tick = async () => {
-    if (running) return;
+    if (running || maintenance.active) return;
     running = true;
     try {
       const now = new Date();

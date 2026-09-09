@@ -173,6 +173,7 @@ export interface AppSettingsTable {
   ai_deep_thinking: number;
   recognition_mode: Generated<RecognitionMode>;
   status_mappings: Generated<string>;
+  state_key_fingerprint: Generated<string | null>;
   updated_at: string;
 }
 
@@ -374,6 +375,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
   ai_deep_thinking INTEGER NOT NULL DEFAULT 0 CHECK(ai_deep_thinking IN (0,1)),
   recognition_mode TEXT NOT NULL DEFAULT 'local_first' CHECK(recognition_mode IN ('local_first','local_only','ai_only')),
   status_mappings TEXT NOT NULL DEFAULT '{}',
+  state_key_fingerprint TEXT,
   updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS parser_rules (
@@ -451,6 +453,9 @@ export function createDb(filename: string): DbContext {
   }
   if (!settingsColumns.some((column) => column.name === "status_mappings")) {
     raw.exec("ALTER TABLE app_settings ADD COLUMN status_mappings TEXT NOT NULL DEFAULT '{}'");
+  }
+  if (!settingsColumns.some((column) => column.name === "state_key_fingerprint")) {
+    raw.exec("ALTER TABLE app_settings ADD COLUMN state_key_fingerprint TEXT");
   }
   const applicationColumns = raw.prepare("PRAGMA table_info(applications)").all() as Array<{ name: string }>;
   if (!applicationColumns.some((column) => column.name === "check_group_id")) {

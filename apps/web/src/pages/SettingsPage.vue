@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import type {
   AppSettings,
   BrowserStorageUsage,
   RecognitionMode,
 } from "@application-checker/contracts";
+import { api, type DataTransferSummary } from "../api";
 
 const appVersion = __APP_VERSION__;
 const githubUrl = "https://github.com/BlueWhale235/ApplicationChecker";
@@ -28,7 +29,90 @@ const emit = defineEmits<{
   recognitionMode: [value: RecognitionMode];
   refreshStorage: [];
   clearStorage: [kind: "cache" | "temp" | "logs"];
+  notice: [message: string];
+  failure: [message: string];
+  imported: [resumedQueued: number];
 }>();
+
+const exportOpen = ref(false);
+const exportPassword = ref("");
+const exportConfirmation = ref("");
+const importOpen = ref(false);
+const importFile = ref<File | File[] | null>(null);
+const importPassword = ref("");
+const importSessionId = ref<string | null>(null);
+const importSummary = ref<DataTransferSummary | null>(null);
+const replaceConfirmed = ref(false);
+const transferBusy = ref(false);
+const passwordVisible = ref(false);
+const tableLabels: Record<string, string> = {
+  applications: "岗位", runs: "运行记录", check_groups: "检查组", run_application_results: "识别结果",
+  status_events: "状态事件", notifications: "通知", browser_profiles: "浏览器状态",
+  login_sessions: "登录记录", app_settings: "设置", parser_rules: "解析规则",
+};
+const sourceTotal = computed(() => Object.entries(importSummary.value?.counts ?? {})
+  .filter(([key]) => key !== "app_settings").reduce((sum, [, count]) => sum + count, 0));
+const selectedImportFile = computed(() => Array.isArray(importFile.value) ? importFile.value[0] ?? null : importFile.value);
+
+function resetExport() {
+  exportOpen.value = false;
+  exportPassword.value = "";
+  exportConfirmation.value = "";
+  passwordVisible.value = false;
+}
+
+async function exportData() {
+  if (exportPassword.value.length < 8) return emit("failure", "迁移密码至少需要 8 个字符");
+  if (exportPassword.value !== exportConfirmation.value) return emit("failure", "两次输入的迁移密码不一致");
+  transferBusy.value = true;
+  try {
+    await api.exportAllData(exportPassword.value, exportConfirmation.value);
+    resetExport();
+    emit("notice", "全量加密备份已导出");
+  } catch (error) { emit("failure", error instanceof Error ? error.message : "导出失败"); }
+  finally { transferBusy.value = false; }
+}
+
+async function inspectImport() {
+  const file = selectedImportFile.value;
+  if (!file) return emit("failure", "请选择 .acbackup 备份文件");
+  if (!file.name.toLowerCase().endsWith(".acbackup")) return emit("failure", "请选择 .acbackup 备份文件");
+  if (!importPassword.value) return emit("failure", "请输入迁移密码");
+  transferBusy.value = true;
+  try {
+    const result = await api.inspectDataBackup(file, importPassword.value);
+    importSessionId.value = result.id;
+    importSummary.value = result.summary;
+    importPassword.value = "";
+  } catch (error) { emit("failure", error instanceof Error ? error.message : "备份校验失败"); }
+  finally { transferBusy.value = false; }
+}
+
+async function closeImport() {
+  if (importSessionId.value) await api.cancelDataBackup(importSessionId.value).catch(() => {});
+  importOpen.value = false;
+  importFile.value = null;
+  importPassword.value = "";
+  importSessionId.value = null;
+  importSummary.value = null;
+  replaceConfirmed.value = false;
+  passwordVisible.value = false;
+}
+
+async function applyImport() {
+  if (!importSessionId.value || !replaceConfirmed.value) return;
+  transferBusy.value = true;
+  try {
+    const result = await api.applyDataBackup(importSessionId.value);
+    importSessionId.value = null;
+    importOpen.value = false;
+    importSummary.value = null;
+    importFile.value = null;
+    replaceConfirmed.value = false;
+    emit("imported", result.resumedQueued);
+  } catch (error) { emit("failure", error instanceof Error ? error.message : "导入失败"); }
+  finally { transferBusy.value = false; }
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -144,6 +228,18 @@ const concurrencyOptions = [
         </div>
         <p class="settings-help">缓存和临时文件在检查、登录或加载规则预览时不能清理；运行日志可随时清除。</p>
       </div>
+      <div class="content-card data-transfer-card">
+        <div class="card-title">
+          <div><h2>数据迁移</h2><p>在桌面端和 Docker Web 端之间迁移全部业务数据。</p></div>
+          <i class="mdi mdi-database-export-outline"></i>
+        </div>
+        <div class="transfer-actions">
+          <div><strong>全量加密备份</strong><span>包含岗位、运行记录、设置、规则、截图、登录状态和 AI Key；不迁移环境加密 Key。</span></div>
+          <v-btn variant="outlined" color="primary" prepend-icon="mdi-export" @click="exportOpen = true">导出全部数据</v-btn>
+          <v-btn variant="outlined" color="secondary" prepend-icon="mdi-import" @click="importOpen = true">导入备份</v-btn>
+        </div>
+        <p class="settings-help">迁移密码不会保存。Docker 会使用自己的 STATE_ENCRYPTION_KEY 重新加密敏感数据。</p>
+      </div>
       <div class="content-card project-card">
         <div>
           <span class="project-kicker">关于职迹</span>
@@ -158,6 +254,43 @@ const concurrencyOptions = [
         </a>
       </div>
     </div>
+
+    <v-dialog v-model="exportOpen" max-width="500" persistent>
+      <v-card class="transfer-dialog">
+        <v-card-title>导出全部数据</v-card-title>
+        <v-card-text>
+          <v-alert type="warning" variant="tonal" density="compact" class="mb-4">备份包含浏览器登录状态和 AI API Key，请设置独立的强密码并妥善保管。</v-alert>
+          <v-text-field v-model="exportPassword" label="迁移密码" :type="passwordVisible ? 'text' : 'password'" minlength="8" variant="outlined" :append-inner-icon="passwordVisible ? 'mdi-eye-off' : 'mdi-eye'" @click:append-inner="passwordVisible = !passwordVisible" />
+          <v-text-field v-model="exportConfirmation" label="再次输入迁移密码" :type="passwordVisible ? 'text' : 'password'" variant="outlined" hide-details />
+        </v-card-text>
+        <v-card-actions><v-spacer /><v-btn :disabled="transferBusy" @click="resetExport">取消</v-btn><v-btn color="primary" variant="flat" :loading="transferBusy" @click="exportData">导出备份</v-btn></v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="importOpen" max-width="650" persistent>
+      <v-card class="transfer-dialog">
+        <v-card-title>{{ importSummary ? "确认覆盖数据" : "导入加密备份" }}</v-card-title>
+        <v-card-text v-if="!importSummary">
+          <v-alert type="info" variant="tonal" density="compact" class="mb-4">文件会先完成解密和完整性校验，此阶段不会修改当前数据。</v-alert>
+          <v-file-input v-model="importFile" accept=".acbackup" label="选择 .acbackup 文件" variant="outlined" prepend-icon="mdi-database-import-outline" />
+          <v-text-field v-model="importPassword" label="迁移密码" :type="passwordVisible ? 'text' : 'password'" variant="outlined" hide-details :append-inner-icon="passwordVisible ? 'mdi-eye-off' : 'mdi-eye'" @click:append-inner="passwordVisible = !passwordVisible" />
+        </v-card-text>
+        <v-card-text v-else>
+          <v-alert type="error" variant="tonal" class="mb-4">导入会永久覆盖当前岗位、记录、设置、规则和截图，且不会自动备份旧数据。</v-alert>
+          <div class="transfer-summary">
+            <div><span>备份版本</span><strong>{{ importSummary.appVersion }}</strong></div>
+            <div><span>导出时间</span><strong>{{ new Date(importSummary.exportedAt).toLocaleString() }}</strong></div>
+            <div><span>数据记录</span><strong>{{ sourceTotal }} 条</strong></div>
+            <div><span>截图</span><strong>{{ importSummary.screenshotCount }} 张 · {{ formatBytes(importSummary.screenshotBytes) }}</strong></div>
+            <div><span>敏感数据</span><strong>{{ importSummary.sensitiveData.join("、") || "无" }}</strong></div>
+            <div><span>加密转换</span><strong>{{ importSummary.keyChanged ? "将使用目标端 Key 重新加密" : "来源与目标 Key 标识相同" }}</strong></div>
+          </div>
+          <details class="transfer-details"><summary>查看各类数据数量</summary><div><span v-for="(count, key) in importSummary.counts" :key="key">{{ tableLabels[key] || key }}：{{ count }}</span></div></details>
+          <v-checkbox v-model="replaceConfirmed" color="error" hide-details label="我了解当前数据将被永久覆盖，且没有自动备份" />
+        </v-card-text>
+        <v-card-actions><v-spacer /><v-btn :disabled="transferBusy" @click="closeImport">取消</v-btn><v-btn v-if="!importSummary" color="primary" variant="flat" :loading="transferBusy" @click="inspectImport">校验备份</v-btn><v-btn v-else color="error" variant="flat" :disabled="!replaceConfirmed" :loading="transferBusy" @click="applyImport">覆盖并导入</v-btn></v-card-actions>
+      </v-card>
+    </v-dialog>
   </section>
 </template>
 
@@ -185,6 +318,19 @@ const concurrencyOptions = [
 .mapping-summary strong { font-size: 12px; }
 .mapping-summary span { margin-top: 3px; color: #718078; font-size: 10px; line-height: 1.5; }
 .browser-storage-card { grid-column: 1 / -1; }
+.data-transfer-card { grid-column: 1 / -1; }
+.transfer-actions { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; }
+.transfer-actions strong, .transfer-actions span { display: block; }
+.transfer-actions strong { color: #30453d; font-size: 12px; }
+.transfer-actions span { margin-top: 4px; color: #7a837f; font-size: 10px; line-height: 1.6; }
+.transfer-dialog { padding: 4px; }
+.transfer-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.transfer-summary > div { padding: 12px; border: 1px solid #e4ded3; border-radius: 8px; background: #fbf8f1; }
+.transfer-summary span, .transfer-summary strong { display: block; }
+.transfer-summary span { color: #7a837f; font-size: 9px; }
+.transfer-summary strong { margin-top: 4px; color: #30453d; font-size: 11px; }
+.transfer-details { margin-top: 15px; color: #596a63; font-size: 10px; }
+.transfer-details div { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .storage-items { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .storage-items > div { display: grid; grid-template-columns: auto 1fr auto auto; gap: 11px; align-items: center; padding: 14px; border: 1px solid #e4ded3; border-radius: 9px; background: #fbf8f1; }
 .storage-items .logs-storage-item { grid-column: 1 / -1; }
@@ -210,6 +356,9 @@ const concurrencyOptions = [
   .settings-grid { grid-template-columns: 1fr; }
   .settings-grid .content-card:first-child { grid-row: auto; }
   .browser-storage-card { grid-column: auto; }
+  .data-transfer-card { grid-column: auto; }
+  .transfer-actions { grid-template-columns: 1fr; }
+  .transfer-summary { grid-template-columns: 1fr; }
   .storage-items { grid-template-columns: 1fr; }
   .storage-items > div { grid-template-columns: auto 1fr auto; }
   .storage-items > div .v-btn { grid-column: 1 / -1; }
