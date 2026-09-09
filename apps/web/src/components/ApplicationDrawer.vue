@@ -226,10 +226,10 @@ function date(value: string | null): string {
             <i class="run-dot" :data-run="run.displayStatus || run.status"></i>
             <div><strong>{{ (run.displayStatus === 'unmatched' ? '未匹配' : runLabels[run.displayStatus || run.status]) }}</strong><span>{{ date(run.createdAt) }}</span>
               <small v-if="run.recognitionSuggestedStatus">识别：{{ progressLabels[run.recognitionSuggestedStatus] }} · {{ Math.round((run.recognitionConfidence || 0) * 100) }}%</small>
-              <small v-else-if="run.errorMessage || run.recognitionEvidence">{{ run.errorMessage || run.recognitionEvidence }}</small>
+              <small v-else-if="run.errorMessage || run.recognitionEvidence" :title="run.errorMessage || run.recognitionEvidence || undefined">{{ run.errorMessage || run.recognitionEvidence }}</small>
               <template v-for="result in run.recognitionResults.filter(item => item.applicationId === detail?.application.id)" :key="result.applicationId">
-                <small v-if="result.localDiagnostic">本地解析：{{ result.localDiagnostic }}</small>
-                <small v-if="result.aiError">AI：{{ result.aiError }}</small>
+                <small v-if="result.localDiagnostic" :title="`本地解析：${result.localDiagnostic}`">本地解析：{{ result.localDiagnostic }}</small>
+                <small v-if="result.aiError" :title="`AI：${result.aiError}`">AI：{{ result.aiError }}</small>
               </template>
               <small v-if="run.groupMemberCount > 1">共享检查 · {{ run.groupMemberCount }} 个岗位</small>
             </div>
@@ -335,16 +335,16 @@ function date(value: string | null): string {
 .screenshot-overlay button.danger { color: #ad4f40; }
 .quiet-empty { margin: 12px 0 0; color: #929a96; font-size: 10px; }
 .run-list { display: grid; gap: 8px; }
-.run-list article { display: flex; align-items: flex-start; gap: 9px; padding: 9px; background: #f8f6f0; border-radius: 7px; }
+.run-list article { display: flex; align-items: flex-start; gap: 9px; min-width: 0; overflow: hidden; padding: 9px; background: #f8f6f0; border-radius: 7px; }
 .run-dot { width: 7px; height: 7px; margin-top: 5px; border-radius: 50%; background: #858e89; }
 .run-dot[data-run="succeeded"] { background: #479069; }
 .run-dot[data-run="failed"] { background: #c85e4c; }
 .run-dot[data-run="needs_login"] { background: #d88b31; }
 .run-dot[data-run="running"], .run-dot[data-run="queued"] { background: #4c83bc; }
-.run-list article > div { flex: 1; min-width: 0; }
+.run-list article > div { flex: 1 1 0; width: 0; min-width: 0; overflow: hidden; }
 .run-list strong { display: block; color: #3a4742; font-size: 10px; }
 .run-list span { float: right; color: #939a96; font-size: 9px; font-weight: 400; }
-.run-list small { display: block; margin-top: 3px; color: #838c87; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.run-list small { display: block; width: 100%; max-width: 100%; margin-top: 3px; overflow: hidden; color: #838c87; font-size: 9px; white-space: nowrap; text-overflow: ellipsis; }
 .drawer-actions { flex: 0 0 75px; width: 100%; padding: 15px 22px; display: flex; align-items: center; justify-content: space-between; background: #fffdf9e8; border-top: 1px solid #ddd6c8; backdrop-filter: blur(10px); }
 .drawer-loading { height: 100%; display: grid; place-items: center; }
 .automation-pause-note { margin-top: 12px; padding: 12px; border-radius: 10px; background: #fff4e4; color: #855c27; display: flex; align-items: center; gap: 10px; }

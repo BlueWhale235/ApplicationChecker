@@ -362,7 +362,7 @@ function finishConfirm(value: boolean) {
 
 function flash(message: string) {
   notice.value = message;
-  window.setTimeout(() => { notice.value = ""; }, 3500);
+  window.setTimeout(() => { notice.value = ""; }, 3000);
 }
 async function action(work: () => Promise<void>) {
   busy.value = true;
@@ -668,11 +668,11 @@ async function deleteProfile(site: string) {
           <div class="topbar-spacer"></div>
           <span class="local-mode"><i></i>本地模式</span>
         </header>
-        <v-snackbar :model-value="Boolean(error)" color="error" location="top" :timeout="-1" @update:model-value="!$event && (error = '')">
+        <v-snackbar :model-value="Boolean(error)" color="error" location="top" :timeout="3000" @update:model-value="!$event && (error = '')">
           {{ error }}
           <template #actions><v-btn icon="mdi-close" variant="text" aria-label="关闭错误提示" @click="error = ''" /></template>
         </v-snackbar>
-        <v-snackbar :model-value="Boolean(notice)" color="success" location="top" :timeout="3500" @update:model-value="!$event && (notice = '')">
+        <v-snackbar :model-value="Boolean(notice)" color="success" location="top" :timeout="3000" @update:model-value="!$event && (notice = '')">
           {{ notice }}
           <template #actions><v-btn icon="mdi-close" variant="text" aria-label="关闭提示" @click="notice = ''" /></template>
         </v-snackbar>
