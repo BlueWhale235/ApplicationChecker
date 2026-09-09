@@ -96,6 +96,22 @@ docker compose up -d --build
 
 Docker 版数据保存在仓库根目录的 `data`。执行 `docker compose down` 不会删除这些数据。
 
+### 使用 GitHub Container Registry 镜像
+
+仓库会在 `main` 分支更新或推送 `v*` 版本标签时，将 API/Web 与 Runner 多架构镜像发布到 GHCR：
+
+- `ghcr.io/bluewhale235/application-checker:latest`
+- `ghcr.io/bluewhale235/application-checker-runner:latest`
+
+无需克隆源码构建时，下载 `docker-compose.ghcr.yml` 和 `.env.example`，创建并填写 `.env`，然后运行：
+
+```bash
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+默认使用 `latest`。设置 `IMAGE_TAG=v0.0.9` 可以固定版本。首次发布后，如 GHCR Package 默认为私有，需要在 GitHub Package 设置中将两个镜像改为 Public；私有镜像则需要先执行 `docker login ghcr.io`。
+
 ### 在桌面版与 Docker 之间迁移数据
 
 设置页的“数据迁移”可以导出或导入 `.acbackup` 全量加密备份。备份包含岗位、检查记录、规则、设置、截图、浏览器登录状态和 AI API Key，但不包含日志、缓存、临时文件以及 `STATE_ENCRYPTION_KEY`。
