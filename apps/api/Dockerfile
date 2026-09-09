@@ -1,7 +1,5 @@
 FROM node:24-bookworm-slim AS build
 WORKDIR /workspace
-ARG DEBIAN_MIRROR=http://mirrors.aliyun.com
-RUN sed -i "s|http://deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 RUN corepack enable

@@ -11,8 +11,6 @@ RUN pnpm --filter @application-checker/runner... build
 
 FROM node:24-bookworm-slim
 ENV NODE_ENV=production DISPLAY=:99 BROWSER_BIN=/usr/bin/chromium
-ARG DEBIAN_MIRROR=http://mirrors.aliyun.com
-RUN sed -i "s|http://deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium xvfb x11vnc novnc websockify fonts-noto-cjk ca-certificates dumb-init \
     && rm -rf /var/lib/apt/lists/*
