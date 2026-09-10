@@ -13,6 +13,7 @@ import { appSettings, loadBrowserState, saveBrowserState } from "./service.js";
 
 const folders: string[] = [];
 const contexts: DbContext[] = [];
+const allSections = ["application_data", "screenshots", "system_settings", "browser_state"] as const;
 
 afterEach(async () => {
   for (const context of contexts.splice(0)) {
@@ -80,11 +81,105 @@ async function seedSource(context: DbContext, config: Config): Promise<void> {
 }
 
 describe("full data transfer", () => {
+  it("exports only the requested application data section", async () => {
+    const source = await setup(11);
+    const target = await setup(12);
+    await seedSource(source.context, source.config);
+
+    const exported = await source.service.export("application-data-only", ["application_data"]);
+    const inspected = await target.service.inspect(exported.filename, "application-data-only");
+
+    expect(inspected.summary.sections).toEqual(["application_data"]);
+    expect(inspected.summary.counts.applications).toBe(1);
+    expect(inspected.summary.counts.runs).toBe(1);
+    expect(inspected.summary.counts.app_settings).toBe(0);
+    expect(inspected.summary.counts.parser_rules).toBe(0);
+    expect(inspected.summary.counts.browser_profiles).toBe(0);
+    expect(inspected.summary.screenshotCount).toBe(0);
+    expect(inspected.summary.sensitiveData).toEqual([]);
+  });
+
+  it("rejects invalid section selections", async () => {
+    const source = await setup(12);
+    await expect(source.service.export("selection-password", [])).rejects.toThrow("至少选择");
+    await expect(source.service.export("selection-password", ["screenshots"])).rejects.toThrow("必须同时导出");
+    await expect(source.service.export("selection-password", ["application_data", "application_data"])).rejects.toThrow("重复");
+    await expect(source.service.export("selection-password", ["unknown"])).rejects.toThrow("未知");
+  });
+
+  it("does not decrypt sensitive sections that were not selected", async () => {
+    const source = await setup(13);
+    await seedSource(source.context, source.config);
+    source.context.raw.prepare("UPDATE app_settings SET value_json = ? WHERE key = 'ai_api_key_encrypted'").run(JSON.stringify("invalid-secret"));
+    source.context.raw.prepare("UPDATE browser_profiles SET payload_json = ?").run("invalid-browser-state");
+
+    await expect(source.service.export("records-only-password", ["application_data"]))
+      .resolves.toEqual(expect.objectContaining({ downloadName: expect.stringMatching(/\.acbackup$/) }));
+  });
+
+  it("imports system settings without replacing applications or browser state", async () => {
+    const source = await setup(14);
+    const target = await setup(15);
+    await seedSource(source.context, source.config);
+    await seedSource(target.context, target.config);
+    await target.context.db.updateTable("applications").set({ company: "目标端公司" }).execute();
+    await updateAiSettings(target.context, target.config, {
+      baseUrl: "https://target.example.com/v1", model: "target-model", apiKey: "target-api-key",
+      confidenceThreshold: 0.7, deepThinking: false,
+    });
+    await saveBrowserState(target.context, target.config, "example.com", {
+      version: 1,
+      cookies: [{ name: "session", value: "target-cookie", domain: "example.com", path: "/", expires: -1, httpOnly: true, secure: true, sameSite: "Lax" }],
+      origins: [],
+    });
+
+    const exported = await source.service.export("settings-only-password", ["system_settings"]);
+    const inspected = await target.service.inspect(exported.filename, "settings-only-password");
+    const result = await target.service.apply(inspected.id, true);
+
+    expect(result.summary.sections).toEqual(["system_settings"]);
+    expect(result.resumedQueued).toBe(0);
+    expect((await target.context.db.selectFrom("applications").select("company").executeTakeFirstOrThrow()).company).toBe("目标端公司");
+    expect((await loadBrowserState(target.context, target.config, "example.com"))?.cookies[0]?.value).toBe("target-cookie");
+    const settings = await appSettings(target.context);
+    expect(settings.ai_model).toBe("test-model");
+    expect(decryptSecret(settings.ai_api_key_encrypted, target.config.stateKey)).toBe("secret-api-key");
+  });
+
+  it("imports application data without screenshots and preserves unselected settings and browser state", async () => {
+    const source = await setup(16);
+    const target = await setup(17);
+    await seedSource(source.context, source.config);
+    await seedSource(target.context, target.config);
+    const targetRun = await target.context.db.selectFrom("runs").select("screenshot_path").executeTakeFirstOrThrow();
+    await updateAiSettings(target.context, target.config, {
+      baseUrl: "https://target.example.com/v1", model: "target-model", apiKey: "target-api-key",
+      confidenceThreshold: 0.7, deepThinking: false,
+    });
+    await saveBrowserState(target.context, target.config, "example.com", {
+      version: 1,
+      cookies: [{ name: "session", value: "target-cookie", domain: "example.com", path: "/", expires: -1, httpOnly: true, secure: true, sameSite: "Lax" }],
+      origins: [],
+    });
+
+    const exported = await source.service.export("records-no-screenshots", ["application_data"]);
+    const inspected = await target.service.inspect(exported.filename, "records-no-screenshots");
+    expect(inspected.summary.targetScreenshotCount).toBe(1);
+    expect(inspected.summary.targetScreenshotBytes).toBe(Buffer.byteLength("fake-png"));
+    const result = await target.service.apply(inspected.id, true);
+
+    expect(result.summary.sections).toEqual(["application_data"]);
+    expect((await target.context.db.selectFrom("runs").select("screenshot_path").executeTakeFirstOrThrow()).screenshot_path).toBeNull();
+    await expect(readFile(targetRun.screenshot_path!)).rejects.toThrow();
+    expect((await appSettings(target.context)).ai_model).toBe("target-model");
+    expect((await loadBrowserState(target.context, target.config, "example.com"))?.cookies[0]?.value).toBe("target-cookie");
+  });
+
   it("re-encrypts sensitive values with the target key and restores screenshots", async () => {
     const source = await setup(1);
     const target = await setup(2);
     await seedSource(source.context, source.config);
-    const exported = await source.service.export("correct horse battery staple");
+    const exported = await source.service.export("correct horse battery staple", allSections);
     const inspected = await target.service.inspect(exported.filename, "correct horse battery staple");
 
     expect(inspected.summary.keyChanged).toBe(true);
@@ -108,7 +203,7 @@ describe("full data transfer", () => {
     const source = await setup(3);
     const target = await setup(4);
     await seedSource(source.context, source.config);
-    const exported = await source.service.export("right-password");
+    const exported = await source.service.export("right-password", allSections);
     await expect(target.service.inspect(exported.filename, "wrong-password")).rejects.toThrow(/密码错误|损坏/);
     expect((await target.context.db.selectFrom("applications").selectAll().execute()).length).toBe(0);
   });
@@ -126,7 +221,7 @@ describe("full data transfer", () => {
     await seedSource(source.context, source.config);
     const run = await source.context.db.selectFrom("runs").select("screenshot_path").executeTakeFirstOrThrow();
     await writeFile(run.screenshot_path!, randomBytes(4 * 1024 * 1024 + 257));
-    const exported = await source.service.export("chunked-password");
+    const exported = await source.service.export("chunked-password", allSections);
     const backup = await readFile(exported.filename);
 
     const upload = await target.service.startUpload({
@@ -153,7 +248,7 @@ describe("full data transfer", () => {
     source.context.raw.prepare("INSERT INTO app_settings(key,value_json,updated_at) VALUES(?,?,?)")
       .run("form_ai_base_url", JSON.stringify("https://removed.example.com/v1"), new Date().toISOString());
 
-    const exported = await source.service.export("legacy-settings-password");
+    const exported = await source.service.export("legacy-settings-password", allSections);
     const inspected = await target.service.inspect(exported.filename, "legacy-settings-password");
     await target.service.apply(inspected.id, true);
 

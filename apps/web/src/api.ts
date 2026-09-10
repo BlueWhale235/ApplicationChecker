@@ -46,6 +46,21 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export type DataTransferSection = "application_data" | "screenshots" | "system_settings" | "browser_state";
+const DATA_TRANSFER_SECTION_ORDER: DataTransferSection[] = [
+  "application_data", "screenshots", "system_settings", "browser_state",
+];
+
+export function defaultDataTransferSections(): DataTransferSection[] {
+  return [...DATA_TRANSFER_SECTION_ORDER];
+}
+
+export function normalizeDataTransferSections(sections: readonly string[]): DataTransferSection[] {
+  const selected = new Set(sections);
+  if (!selected.has("application_data")) selected.delete("screenshots");
+  return DATA_TRANSFER_SECTION_ORDER.filter((section) => selected.has(section));
+}
+
 export interface DataTransferSummary {
   formatVersion: number;
   appVersion: string;
@@ -59,6 +74,9 @@ export interface DataTransferSummary {
   screenshotBytes: number;
   sensitiveData: string[];
   targetHasData: boolean;
+  targetScreenshotCount: number;
+  targetScreenshotBytes: number;
+  sections: DataTransferSection[];
 }
 
 export interface DataBackupUploadProgress {
@@ -162,11 +180,11 @@ export const api = {
   browserStorage: () => request<BrowserStorageUsage>("/settings/browser-storage"),
   clearBrowserStorage: (kind: "cache" | "temp" | "logs") =>
     request<BrowserStorageCleanupResult>(`/settings/browser-storage/${kind}/clear`, { method: "POST" }),
-  exportAllData: async (password: string, passwordConfirmation: string) => {
+  exportAllData: async (password: string, passwordConfirmation: string, sections: DataTransferSection[]) => {
     const response = await fetch("/api/data-transfer/export", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ password, passwordConfirmation }),
+      body: JSON.stringify({ password, passwordConfirmation, sections }),
     });
     if (!response.ok) return transferError(response);
     const disposition = response.headers.get("content-disposition") ?? "";

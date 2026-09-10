@@ -550,9 +550,12 @@ async function refreshBrowserStorage() {
   }
 }
 
-async function handleDataImported(resumedQueued: number) {
+async function handleDataImported(resumedQueued: number, sections: import("./api").DataTransferSection[]) {
   await Promise.all([refresh(false), refreshTasks(), refreshNotifications(), refreshBrowserStorage()]);
-  flash(`数据迁移完成${resumedQueued ? `，已恢复 ${resumedQueued} 个排队任务` : ""}`);
+  const labels: Record<import("./api").DataTransferSection, string> = {
+    application_data: "投递与运行记录", screenshots: "截图", system_settings: "系统配置与规则", browser_state: "浏览器登录状态",
+  };
+  flash(`已导入：${sections.map((section) => labels[section]).join("、")}${resumedQueued ? `；已恢复 ${resumedQueued} 个排队任务` : ""}`);
 }
 async function clearBrowserStorage(kind: "cache" | "temp" | "logs") {
   const labels = {

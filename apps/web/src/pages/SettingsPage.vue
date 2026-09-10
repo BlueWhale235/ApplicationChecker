@@ -5,7 +5,13 @@ import type {
   BrowserStorageUsage,
   RecognitionMode,
 } from "@application-checker/contracts";
-import { api, type DataTransferSummary } from "../api";
+import {
+  api,
+  defaultDataTransferSections,
+  normalizeDataTransferSections,
+  type DataTransferSection,
+  type DataTransferSummary,
+} from "../api";
 
 const appVersion = __APP_VERSION__;
 const githubUrl = "https://github.com/BlueWhale235/ApplicationChecker";
@@ -31,12 +37,13 @@ const emit = defineEmits<{
   clearStorage: [kind: "cache" | "temp" | "logs"];
   notice: [message: string];
   failure: [message: string];
-  imported: [resumedQueued: number];
+  imported: [resumedQueued: number, sections: DataTransferSection[]];
 }>();
 
 const exportOpen = ref(false);
 const exportPassword = ref("");
 const exportConfirmation = ref("");
+const exportSections = ref<DataTransferSection[]>(defaultDataTransferSections());
 const importOpen = ref(false);
 const importFile = ref<File | File[] | null>(null);
 const importPassword = ref("");
@@ -52,25 +59,88 @@ const tableLabels: Record<string, string> = {
   status_events: "状态事件", notifications: "通知", browser_profiles: "浏览器状态",
   login_sessions: "登录记录", app_settings: "设置", parser_rules: "解析规则",
 };
+const sectionLabels: Record<DataTransferSection, string> = {
+  application_data: "投递与运行记录",
+  screenshots: "截图",
+  system_settings: "系统配置与规则",
+  browser_state: "浏览器登录状态",
+};
+const sectionOptions: Array<{ value: DataTransferSection; title: string; description: string; icon: string }> = [
+  { value: "application_data", title: sectionLabels.application_data, description: "岗位、检查组、运行及识别历史、通知", icon: "mdi-briefcase-outline" },
+  { value: "screenshots", title: sectionLabels.screenshots, description: "运行记录关联的页面截图", icon: "mdi-image-multiple-outline" },
+  { value: "system_settings", title: sectionLabels.system_settings, description: "系统设置、解析规则及 AI 配置", icon: "mdi-cog-transfer-outline" },
+  { value: "browser_state", title: sectionLabels.browser_state, description: "Cookie、localStorage 和 IndexedDB", icon: "mdi-cookie-cog-outline" },
+];
 const sourceTotal = computed(() => Object.entries(importSummary.value?.counts ?? {})
-  .filter(([key]) => key !== "app_settings").reduce((sum, [, count]) => sum + count, 0));
+  .reduce((sum, [, count]) => sum + count, 0));
 const selectedImportFile = computed(() => Array.isArray(importFile.value) ? importFile.value[0] ?? null : importFile.value);
+const canExport = computed(() => exportSections.value.some((section) => section !== "screenshots"));
+const selectedImportSectionNames = computed(() => (importSummary.value?.sections ?? []).map((section) => sectionLabels[section]));
+const affectedImportSectionNames = computed(() => {
+  const names = [...selectedImportSectionNames.value];
+  const sections = importSummary.value?.sections ?? [];
+  if (sections.includes("application_data") && !sections.includes("screenshots")) names.push("现有截图（将清空）");
+  return names;
+});
+const applicationTableKeys = [
+  "check_groups", "applications", "runs", "run_application_results", "status_events", "notifications", "login_sessions",
+] as const;
+const importCategoryRows = computed(() => {
+  const summary = importSummary.value;
+  if (!summary) return [];
+  const sum = (counts: Record<string, number>, keys: readonly string[]) => keys.reduce((total, key) => total + (counts[key] ?? 0), 0);
+  const rows = summary.sections.map((section) => {
+    if (section === "application_data") return {
+      section, source: `${sum(summary.counts, applicationTableKeys)} 条`, target: `${sum(summary.targetCounts, applicationTableKeys)} 条`,
+    };
+    if (section === "screenshots") return {
+      section, source: `${summary.screenshotCount} 张 · ${formatBytes(summary.screenshotBytes)}`,
+      target: `${summary.targetScreenshotCount} 张 · ${formatBytes(summary.targetScreenshotBytes)}`,
+    };
+    const keys = section === "system_settings" ? ["app_settings", "parser_rules"] : ["browser_profiles"];
+    return { section, source: `${sum(summary.counts, keys)} 条`, target: `${sum(summary.targetCounts, keys)} 条` };
+  });
+  if (summary.sections.includes("application_data") && !summary.sections.includes("screenshots")) {
+    rows.splice(1, 0, {
+      section: "screenshots", source: "未包含（导入后清空）",
+      target: `${summary.targetScreenshotCount} 张 · ${formatBytes(summary.targetScreenshotBytes)}`,
+    });
+  }
+  return rows;
+});
+const exportSensitiveText = computed(() => {
+  const sensitive: string[] = [];
+  if (exportSections.value.includes("browser_state")) sensitive.push("浏览器登录状态");
+  if (exportSections.value.includes("system_settings")) sensitive.push("AI API Key");
+  return sensitive.length
+    ? `备份包含${sensitive.join("和")}，请设置独立的强密码并妥善保管。`
+    : "备份仍会使用迁移密码加密，请妥善保管密码。";
+});
+
+function toggleExportSection(section: DataTransferSection, selected: boolean | null) {
+  const next = new Set(exportSections.value);
+  if (selected) next.add(section); else next.delete(section);
+  exportSections.value = normalizeDataTransferSections([...next]);
+}
 
 function resetExport() {
   exportOpen.value = false;
   exportPassword.value = "";
   exportConfirmation.value = "";
+  exportSections.value = defaultDataTransferSections();
   passwordVisible.value = false;
 }
 
 async function exportData() {
   if (exportPassword.value.length < 8) return emit("failure", "迁移密码至少需要 8 个字符");
   if (exportPassword.value !== exportConfirmation.value) return emit("failure", "两次输入的迁移密码不一致");
+  if (!canExport.value) return emit("failure", "请至少选择一类导出数据");
   transferBusy.value = true;
   try {
-    await api.exportAllData(exportPassword.value, exportConfirmation.value);
+    const sections = normalizeDataTransferSections(exportSections.value);
+    await api.exportAllData(exportPassword.value, exportConfirmation.value, sections);
     resetExport();
-    emit("notice", "全量加密备份已导出");
+    emit("notice", `加密备份已导出：${sections.map((section) => sectionLabels[section]).join("、")}`);
   } catch (error) { emit("failure", error instanceof Error ? error.message : "导出失败"); }
   finally { transferBusy.value = false; }
 }
@@ -118,7 +188,7 @@ async function applyImport() {
     importSummary.value = null;
     importFile.value = null;
     replaceConfirmed.value = false;
-    emit("imported", result.resumedQueued);
+    emit("imported", result.resumedQueued, result.summary.sections);
   } catch (error) { emit("failure", error instanceof Error ? error.message : "导入失败"); }
   finally { transferBusy.value = false; }
 }
@@ -239,12 +309,12 @@ const concurrencyOptions = [
       </div>
       <div class="content-card data-transfer-card">
         <div class="card-title">
-          <div><h2>数据迁移</h2><p>在桌面端和 Docker Web 端之间迁移全部业务数据。</p></div>
+          <div><h2>数据迁移</h2><p>在桌面端和 Docker Web 端之间迁移所需数据。</p></div>
           <i class="mdi mdi-database-export-outline"></i>
         </div>
         <div class="transfer-actions">
-          <div><strong>全量加密备份</strong><span>包含岗位、运行记录、设置、规则、截图、登录状态和 AI Key；不迁移环境加密 Key。</span></div>
-          <v-btn variant="outlined" color="primary" prepend-icon="mdi-export" @click="exportOpen = true">导出全部数据</v-btn>
+          <div><strong>分类加密备份</strong><span>可分别迁移投递记录、截图、系统配置和浏览器登录状态；不迁移环境加密 Key。</span></div>
+          <v-btn variant="outlined" color="primary" prepend-icon="mdi-export" @click="exportOpen = true">导出数据</v-btn>
           <v-btn variant="outlined" color="secondary" prepend-icon="mdi-import" @click="importOpen = true">导入备份</v-btn>
         </div>
         <p class="settings-help">迁移密码不会保存。Docker 会使用自己的 STATE_ENCRYPTION_KEY 重新加密敏感数据。</p>
@@ -264,15 +334,29 @@ const concurrencyOptions = [
       </div>
     </div>
 
-    <v-dialog v-model="exportOpen" max-width="500" persistent>
+    <v-dialog v-model="exportOpen" max-width="560" persistent>
       <v-card class="transfer-dialog">
-        <v-card-title>导出全部数据</v-card-title>
+        <v-card-title>选择导出内容</v-card-title>
         <v-card-text>
-          <v-alert type="warning" variant="tonal" density="compact" class="mb-4">备份包含浏览器登录状态和 AI API Key，请设置独立的强密码并妥善保管。</v-alert>
+          <div class="export-section-list">
+            <label v-for="option in sectionOptions" :key="option.value" class="export-section-option" :class="{ disabled: option.value === 'screenshots' && !exportSections.includes('application_data') }">
+              <i :class="`mdi ${option.icon}`"></i>
+              <span><strong>{{ option.title }}</strong><small>{{ option.description }}</small></span>
+              <v-checkbox
+                :model-value="exportSections.includes(option.value)"
+                :disabled="option.value === 'screenshots' && !exportSections.includes('application_data')"
+                color="primary"
+                density="compact"
+                hide-details
+                @update:model-value="toggleExportSection(option.value, $event)"
+              />
+            </label>
+          </div>
+          <v-alert :type="exportSections.includes('browser_state') || exportSections.includes('system_settings') ? 'warning' : 'info'" variant="tonal" density="compact" class="mb-4">{{ exportSensitiveText }}</v-alert>
           <v-text-field v-model="exportPassword" label="迁移密码" :type="passwordVisible ? 'text' : 'password'" minlength="8" variant="outlined" :append-inner-icon="passwordVisible ? 'mdi-eye-off' : 'mdi-eye'" @click:append-inner="passwordVisible = !passwordVisible" />
           <v-text-field v-model="exportConfirmation" label="再次输入迁移密码" :type="passwordVisible ? 'text' : 'password'" variant="outlined" hide-details />
         </v-card-text>
-        <v-card-actions><v-spacer /><v-btn :disabled="transferBusy" @click="resetExport">取消</v-btn><v-btn color="primary" variant="flat" :loading="transferBusy" @click="exportData">导出备份</v-btn></v-card-actions>
+        <v-card-actions><v-spacer /><v-btn :disabled="transferBusy" @click="resetExport">取消</v-btn><v-btn color="primary" variant="flat" :disabled="!canExport" :loading="transferBusy" @click="exportData">导出备份</v-btn></v-card-actions>
       </v-card>
     </v-dialog>
 
@@ -289,7 +373,7 @@ const concurrencyOptions = [
           </div>
         </v-card-text>
         <v-card-text v-else>
-          <v-alert type="error" variant="tonal" class="mb-4">导入会永久覆盖当前岗位、记录、设置、规则和截图，且不会自动备份旧数据。</v-alert>
+          <v-alert type="error" variant="tonal" class="mb-4">导入将永久影响以下类别：{{ affectedImportSectionNames.join("、") }}。未列出的类别保持不变，且不会自动备份被覆盖的数据。</v-alert>
           <div class="transfer-summary">
             <div><span>备份版本</span><strong>{{ importSummary.appVersion }}</strong></div>
             <div><span>导出时间</span><strong>{{ new Date(importSummary.exportedAt).toLocaleString() }}</strong></div>
@@ -297,9 +381,14 @@ const concurrencyOptions = [
             <div><span>截图</span><strong>{{ importSummary.screenshotCount }} 张 · {{ formatBytes(importSummary.screenshotBytes) }}</strong></div>
             <div><span>敏感数据</span><strong>{{ importSummary.sensitiveData.join("、") || "无" }}</strong></div>
             <div><span>加密转换</span><strong>{{ importSummary.keyChanged ? "将使用目标端 Key 重新加密" : "来源与目标 Key 标识相同" }}</strong></div>
+            <div><span>备份包含</span><strong>{{ selectedImportSectionNames.join("、") }}</strong></div>
+          </div>
+          <div class="category-compare">
+            <div class="category-compare-head"><span>类别</span><span>备份中</span><span>当前目标端</span></div>
+            <div v-for="row in importCategoryRows" :key="row.section"><strong>{{ sectionLabels[row.section] }}</strong><span>{{ row.source }}</span><span>{{ row.target }}</span></div>
           </div>
           <details class="transfer-details"><summary>查看各类数据数量</summary><div><span v-for="(count, key) in importSummary.counts" :key="key">{{ tableLabels[key] || key }}：{{ count }}</span></div></details>
-          <v-checkbox v-model="replaceConfirmed" color="error" hide-details label="我了解当前数据将被永久覆盖，且没有自动备份" />
+          <v-checkbox v-model="replaceConfirmed" color="error" hide-details :label="`我了解将影响${affectedImportSectionNames.join('、')}，且没有自动备份`" />
         </v-card-text>
         <v-card-actions><v-spacer /><v-btn :disabled="transferBusy" @click="closeImport">取消</v-btn><v-btn v-if="!importSummary" color="primary" variant="flat" :loading="transferBusy" @click="inspectImport">校验备份</v-btn><v-btn v-else color="error" variant="flat" :disabled="!replaceConfirmed" :loading="transferBusy" @click="applyImport">覆盖并导入</v-btn></v-card-actions>
       </v-card>
@@ -337,11 +426,24 @@ const concurrencyOptions = [
 .transfer-actions strong { color: #30453d; font-size: 12px; }
 .transfer-actions span { margin-top: 4px; color: #7a837f; font-size: 10px; line-height: 1.6; }
 .transfer-dialog { padding: 4px; }
+.export-section-list { display: grid; gap: 8px; margin-bottom: 16px; }
+.export-section-option { padding: 11px 12px; display: grid; grid-template-columns: auto 1fr auto; gap: 11px; align-items: center; border: 1px solid #e4ded3; border-radius: 9px; background: #fbf8f1; cursor: pointer; }
+.export-section-option > i { color: #53766a; font-size: 21px; }
+.export-section-option span, .export-section-option strong, .export-section-option small { display: block; }
+.export-section-option strong { color: #30453d; font-size: 12px; }
+.export-section-option small { margin-top: 3px; color: #7a837f; font-size: 10px; line-height: 1.45; }
+.export-section-option :deep(.v-checkbox) { justify-self: end; }
+.export-section-option.disabled { opacity: .48; cursor: not-allowed; }
 .transfer-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .transfer-summary > div { padding: 12px; border: 1px solid #e4ded3; border-radius: 8px; background: #fbf8f1; }
 .transfer-summary span, .transfer-summary strong { display: block; }
 .transfer-summary span { color: #7a837f; font-size: 9px; }
 .transfer-summary strong { margin-top: 4px; color: #30453d; font-size: 11px; }
+.category-compare { margin-top: 14px; overflow: hidden; border: 1px solid #e4ded3; border-radius: 8px; }
+.category-compare > div { padding: 9px 12px; display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 10px; align-items: center; color: #596a63; font-size: 10px; }
+.category-compare > div + div { border-top: 1px solid #ece6dc; }
+.category-compare .category-compare-head { color: #87908c; background: #f5f1e9; font-size: 9px; }
+.category-compare strong { color: #30453d; font-size: 10px; }
 .transfer-details { margin-top: 15px; color: #596a63; font-size: 10px; }
 .transfer-details div { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .transfer-progress { margin-top: 18px; }

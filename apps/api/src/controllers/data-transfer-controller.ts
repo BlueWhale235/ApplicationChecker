@@ -16,9 +16,9 @@ export async function registerDataTransferController(app: FastifyInstance, deps:
   }
 
   app.post("/data-transfer/export", async (request, reply) => {
-    const body = request.body as { password?: string; passwordConfirmation?: string };
+    const body = request.body as { password?: string; passwordConfirmation?: string; sections?: unknown };
     if (!body.password || body.password !== body.passwordConfirmation) throw httpError(400, "两次输入的迁移密码不一致");
-    const result = await service.export(body.password);
+    const result = await service.export(body.password, body.sections);
     reply.header("content-type", "application/vnd.application-checker.backup");
     reply.header("content-disposition", `attachment; filename="${result.downloadName}"`);
     let cleaned = false;

@@ -27,6 +27,17 @@ const TABLES = [
   "check_groups", "applications", "runs", "run_application_results", "status_events",
   "notifications", "browser_profiles", "login_sessions", "app_settings", "parser_rules",
 ] as const;
+export const DATA_TRANSFER_SECTIONS = [
+  "application_data", "screenshots", "system_settings", "browser_state",
+] as const;
+export type DataTransferSection = typeof DATA_TRANSFER_SECTIONS[number];
+const SECTION_TABLES: Record<Exclude<DataTransferSection, "screenshots">, readonly TableName[]> = {
+  application_data: [
+    "check_groups", "applications", "runs", "run_application_results", "status_events", "notifications", "login_sessions",
+  ],
+  system_settings: ["app_settings", "parser_rules"],
+  browser_state: ["browser_profiles"],
+};
 const INSERT_ORDER = [...TABLES];
 const DELETE_ORDER = [...TABLES].reverse();
 const ACTIVE_LOGIN_STATUSES = ["queued", "starting", "ready", "active", "saving"];
@@ -35,6 +46,10 @@ const MAX_JSON_BYTES = 256 * 1024 * 1024;
 type TableName = typeof TABLES[number];
 type JsonRow = Record<string, unknown>;
 type ExportTables = Record<TableName, JsonRow[]>;
+
+function tablesForSections(sections: readonly DataTransferSection[]): Set<TableName> {
+  return new Set(sections.flatMap((section) => section === "screenshots" ? [] : SECTION_TABLES[section]));
+}
 
 export interface MaintenanceState { active: boolean }
 
@@ -51,6 +66,9 @@ export interface TransferSummary {
   screenshotBytes: number;
   sensitiveData: string[];
   targetHasData: boolean;
+  targetScreenshotCount: number;
+  targetScreenshotBytes: number;
+  sections: DataTransferSection[];
 }
 
 interface Manifest {
@@ -62,6 +80,7 @@ interface Manifest {
   screenshotCount: number;
   screenshotBytes: number;
   sensitiveData: string[];
+  sections: DataTransferSection[];
 }
 
 interface ImportSession {
@@ -95,6 +114,16 @@ function passwordVerifier(key: Buffer): Buffer {
 function validateMigrationPassword(password: string): void {
   if (password.length < 8) throw Object.assign(new Error("迁移密码至少需要 8 个字符"), { statusCode: 400 });
   if (password.length > 1024) throw Object.assign(new Error("迁移密码长度不能超过 1024 个字符"), { statusCode: 400 });
+}
+
+export function validateTransferSections(input: unknown): DataTransferSection[] {
+  if (!Array.isArray(input) || input.length === 0) throw new Error("请至少选择一类导出数据");
+  const allowed = new Set<string>(DATA_TRANSFER_SECTIONS);
+  if (input.some((section) => typeof section !== "string" || !allowed.has(section))) throw new Error("备份包含未知的数据类别");
+  if (new Set(input).size !== input.length) throw new Error("备份包含重复的数据类别");
+  const selected = new Set(input as DataTransferSection[]);
+  if (selected.has("screenshots") && !selected.has("application_data")) throw new Error("导出截图时必须同时导出投递与运行记录");
+  return DATA_TRANSFER_SECTIONS.filter((section) => selected.has(section));
 }
 
 function parseBackupHeader(header: Buffer): { formatVersion: number } {
@@ -257,8 +286,12 @@ function validateTables(tables: ExportTables, raw: DbContext["raw"]): void {
   }
 }
 
-async function collectExportTables(context: DbContext, config: Config): Promise<ExportTables> {
-  const tables = Object.fromEntries(TABLES.map((table) => [table, context.raw.prepare(`SELECT * FROM ${table}`).all() as JsonRow[]])) as ExportTables;
+async function collectExportTables(context: DbContext, config: Config, sections: readonly DataTransferSection[]): Promise<ExportTables> {
+  const selectedTables = tablesForSections(sections);
+  const tables = Object.fromEntries(TABLES.map((table) => [
+    table,
+    selectedTables.has(table) ? context.raw.prepare(`SELECT * FROM ${table}`).all() as JsonRow[] : [],
+  ])) as ExportTables;
   tables.browser_profiles = tables.browser_profiles.map((row) => {
     try {
       const browserState = decryptBrowserState(JSON.parse(String(row.payload_json)) as EncryptedPayload, config.stateKey);
@@ -304,9 +337,33 @@ async function screenshotEntries(tables: ExportTables, config: Config): Promise<
   return entries;
 }
 
-async function createEncryptedBackup(context: DbContext, config: Config, password: string, destination: string): Promise<Manifest> {
-  const tables = await collectExportTables(context, config);
-  const screenshots = await screenshotEntries(tables, config);
+async function targetScreenshotStats(context: DbContext, config: Config): Promise<{ count: number; bytes: number }> {
+  const rows = context.raw.prepare("SELECT screenshot_path FROM runs WHERE screenshot_path IS NOT NULL").all() as Array<{ screenshot_path: string }>;
+  let count = 0;
+  let bytes = 0;
+  for (const row of rows) {
+    const filename = path.resolve(String(row.screenshot_path));
+    const relative = path.relative(path.resolve(config.screenshotsPath), filename);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) continue;
+    const info = await stat(filename).catch(() => null);
+    if (!info?.isFile()) continue;
+    count += 1;
+    bytes += info.size;
+  }
+  return { count, bytes };
+}
+
+async function createEncryptedBackup(
+  context: DbContext,
+  config: Config,
+  password: string,
+  destination: string,
+  requestedSections: unknown,
+): Promise<Manifest> {
+  const sections = validateTransferSections(requestedSections);
+  const tables = await collectExportTables(context, config, sections);
+  const screenshots = sections.includes("screenshots") ? await screenshotEntries(tables, config) : [];
+  if (!sections.includes("screenshots")) for (const run of tables.runs) run.screenshot_path = null;
   const counts = Object.fromEntries(TABLES.map((table) => [table, tables[table].length])) as Record<TableName, number>;
   const sensitiveData = [
     ...(tables.browser_profiles.length ? ["浏览器登录状态"] : []),
@@ -321,6 +378,7 @@ async function createEncryptedBackup(context: DbContext, config: Config, passwor
     screenshotCount: screenshots.length,
     screenshotBytes: screenshots.reduce((total, item) => total + item.size, 0),
     sensitiveData,
+    sections,
   };
   const manifestBuffer = Buffer.from(JSON.stringify(manifest), "utf8");
   const dataBuffer = Buffer.from(JSON.stringify({ tables }), "utf8");
@@ -408,51 +466,58 @@ function sqlInsert(raw: DbContext["raw"], table: TableName, rows: JsonRow[]): vo
 function prepareImportedTables(session: ImportSession, config: Config): ExportTables {
   const now = new Date().toISOString();
   const tables = structuredClone(session.tables);
-  tables.browser_profiles = tables.browser_profiles.map((row) => {
-    const state = row.browser_state as BrowserStateEnvelope;
-    if (!state || state.version !== 1 || !Array.isArray(state.cookies) || !Array.isArray(state.origins)) throw new Error("浏览器登录状态格式无效");
-    const { browser_state: _state, ...rest } = row;
-    return { ...rest, payload_json: JSON.stringify(encryptBrowserState(state, config.stateKey)) };
-  });
-  tables.app_settings = tables.app_settings.filter((row) => !String(row.key).startsWith("form_ai_")).map((row) => {
-    if (row.key === "state_key_fingerprint") return { ...row, value_json: JSON.stringify(keyId(config.stateKey)) };
-    if (row.key !== "ai_api_key_encrypted") return row;
-    const secret = row.ai_api_key;
-    if (secret !== null && secret !== undefined && typeof secret !== "string") throw new Error("AI API Key 格式无效");
-    const { ai_api_key: _secret, ...rest } = row;
-    return {
-      ...rest,
-      value_json: JSON.stringify(typeof secret === "string" && secret ? encryptSecret(secret, config.stateKey) : null),
-    };
-  });
-  if (!tables.app_settings.some((row) => row.key === "state_key_fingerprint")) {
-    tables.app_settings.push({ key: "state_key_fingerprint", value_json: JSON.stringify(keyId(config.stateKey)), updated_at: now });
+  const sections = new Set(session.manifest.sections);
+  if (sections.has("browser_state")) {
+    tables.browser_profiles = tables.browser_profiles.map((row) => {
+      const state = row.browser_state as BrowserStateEnvelope;
+      if (!state || state.version !== 1 || !Array.isArray(state.cookies) || !Array.isArray(state.origins)) throw new Error("浏览器登录状态格式无效");
+      const { browser_state: _state, ...rest } = row;
+      return { ...rest, payload_json: JSON.stringify(encryptBrowserState(state, config.stateKey)) };
+    });
   }
-  const importedSettingKeys = new Set(tables.app_settings.map((row) => String(row.key)));
-  for (const [key, value] of Object.entries(APP_SETTINGS_DEFAULTS)) {
-    if (!importedSettingKeys.has(key)) {
-      tables.app_settings.push({ key, value_json: JSON.stringify(value ?? null), updated_at: now });
+  if (sections.has("system_settings")) {
+    tables.app_settings = tables.app_settings.filter((row) => !String(row.key).startsWith("form_ai_")).map((row) => {
+      if (row.key === "state_key_fingerprint") return { ...row, value_json: JSON.stringify(keyId(config.stateKey)) };
+      if (row.key !== "ai_api_key_encrypted") return row;
+      const secret = row.ai_api_key;
+      if (secret !== null && secret !== undefined && typeof secret !== "string") throw new Error("AI API Key 格式无效");
+      const { ai_api_key: _secret, ...rest } = row;
+      return {
+        ...rest,
+        value_json: JSON.stringify(typeof secret === "string" && secret ? encryptSecret(secret, config.stateKey) : null),
+      };
+    });
+    if (!tables.app_settings.some((row) => row.key === "state_key_fingerprint")) {
+      tables.app_settings.push({ key: "state_key_fingerprint", value_json: JSON.stringify(keyId(config.stateKey)), updated_at: now });
     }
+    const importedSettingKeys = new Set(tables.app_settings.map((row) => String(row.key)));
+    for (const [key, value] of Object.entries(APP_SETTINGS_DEFAULTS)) {
+      if (!importedSettingKeys.has(key)) {
+        tables.app_settings.push({ key, value_json: JSON.stringify(value ?? null), updated_at: now });
+      }
+    }
+    decodeAppSettings(tables.app_settings as Array<{ key: string; value_json: string; updated_at: string }>);
   }
-  decodeAppSettings(tables.app_settings as Array<{ key: string; value_json: string; updated_at: string }>);
-  tables.runs = tables.runs.map((row) => ({
-    ...row,
-    ...(row.status === "running" ? {
-      status: "queued", started_at: null, completed_at: null,
-      error_code: "RECOVERED_AFTER_IMPORT", error_message: "数据迁移后任务已自动重新排队",
-      recognition_status: "pending",
-    } : {}),
-    screenshot_path: typeof row.screenshot_path === "string"
-      ? path.join(config.screenshotsPath, String(row.screenshot_path).replace(/^screenshots\//, ""))
-      : null,
-  }));
-  tables.applications = tables.applications.map((row) => ({
-    ...row,
-    ...(row.last_run_status === "running" ? { last_run_status: "queued", updated_at: now } : {}),
-  }));
-  tables.login_sessions = tables.login_sessions.map((row) => ACTIVE_LOGIN_STATUSES.includes(String(row.status)) ? {
-    ...row, status: "failed", error_message: "数据迁移后原登录窗口已关闭，请重新打开登录", updated_at: now, completed_at: now,
-  } : row);
+  if (sections.has("application_data")) {
+    tables.runs = tables.runs.map((row) => ({
+      ...row,
+      ...(row.status === "running" ? {
+        status: "queued", started_at: null, completed_at: null,
+        error_code: "RECOVERED_AFTER_IMPORT", error_message: "数据迁移后任务已自动重新排队",
+        recognition_status: "pending",
+      } : {}),
+      screenshot_path: sections.has("screenshots") && typeof row.screenshot_path === "string"
+        ? path.join(config.screenshotsPath, String(row.screenshot_path).replace(/^screenshots\//, ""))
+        : null,
+    }));
+    tables.applications = tables.applications.map((row) => ({
+      ...row,
+      ...(row.last_run_status === "running" ? { last_run_status: "queued", updated_at: now } : {}),
+    }));
+    tables.login_sessions = tables.login_sessions.map((row) => ACTIVE_LOGIN_STATUSES.includes(String(row.status)) ? {
+      ...row, status: "failed", error_message: "数据迁移后原登录窗口已关闭，请重新打开登录", updated_at: now, completed_at: now,
+    } : row);
+  }
   return tables;
 }
 
@@ -466,7 +531,7 @@ export async function verifyStateEncryptionKey(context: DbContext, config: Confi
     await updateAppSettings(context, { state_key_fingerprint: current });
   }
   if (!settings.state_key_fingerprint) {
-    await collectExportTables(context, config);
+    await collectExportTables(context, config, ["system_settings", "browser_state"]);
     await updateAppSettings(context, { state_key_fingerprint: current });
   }
 }
@@ -476,7 +541,7 @@ export class DataTransferService {
   private readonly uploads = new Map<string, UploadSession>();
   constructor(private readonly context: DbContext, private readonly config: Config, readonly maintenance: MaintenanceState) {}
 
-  async export(password: string): Promise<{ filename: string; downloadName: string }> {
+  async export(password: string, sections: unknown): Promise<{ filename: string; downloadName: string }> {
     if (this.maintenance.active) throw Object.assign(new Error("另一项数据迁移正在进行"), { statusCode: 409 });
     const activeRun = this.context.raw.prepare("SELECT id FROM runs WHERE status = 'running' LIMIT 1").get();
     const activeLogin = this.context.raw.prepare("SELECT id FROM login_sessions WHERE status IN ('starting','ready','active','saving') LIMIT 1").get();
@@ -486,7 +551,7 @@ export class DataTransferService {
     const filename = path.join(root, "backup.acbackup");
     try {
       await mkdir(root, { recursive: true });
-      await createEncryptedBackup(this.context, this.config, password, filename);
+      await createEncryptedBackup(this.context, this.config, password, filename, sections);
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
       return { filename, downloadName: `application-checker-${stamp}.acbackup` };
     } catch (error) {
@@ -506,16 +571,22 @@ export class DataTransferService {
     try {
       const parsed = await decryptBackup(stored, password, path.join(root, "extracted"));
       if (parsed.manifest.formatVersion !== FORMAT_VERSION) throw new Error("备份格式版本不受支持");
+      parsed.manifest.sections = validateTransferSections(parsed.manifest.sections);
       if (!/^[a-f0-9]{16}$/.test(parsed.manifest.sourceKeyId)
           || typeof parsed.manifest.exportedAt !== "string"
           || !Array.isArray(parsed.manifest.sensitiveData)) throw new Error("备份清单格式无效");
       validateTables(parsed.tables, this.context.raw);
+      const selectedTables = tablesForSections(parsed.manifest.sections);
+      for (const table of TABLES) if (!selectedTables.has(table) && parsed.tables[table].length > 0) {
+        throw new Error(`未选择的数据类别包含了数据表：${table}`);
+      }
       for (const table of TABLES) if (parsed.manifest.counts?.[table] !== parsed.tables[table].length) {
         throw new Error(`备份清单数量不一致：${table}`);
       }
       if (parsed.manifest.screenshotCount !== parsed.screenshotCount || parsed.manifest.screenshotBytes !== parsed.screenshotBytes) {
         throw new Error("备份截图清单与实际内容不一致");
       }
+      if (!parsed.manifest.sections.includes("screenshots") && parsed.screenshotCount > 0) throw new Error("未选择截图类别但备份中包含截图");
       const settingKeys = new Set<string>();
       for (const row of parsed.tables.app_settings) {
         const settingKey = String(row.key ?? "");
@@ -523,7 +594,9 @@ export class DataTransferService {
         if (typeof row.value_json !== "string" || typeof row.updated_at !== "string") throw new Error("备份中的应用设置记录无效");
         settingKeys.add(settingKey);
       }
-      decodeAppSettings(parsed.tables.app_settings as Array<{ key: string; value_json: string; updated_at: string }>);
+      if (parsed.manifest.sections.includes("system_settings")) {
+        decodeAppSettings(parsed.tables.app_settings as Array<{ key: string; value_json: string; updated_at: string }>);
+      }
       const referencedScreenshots = new Set(parsed.tables.runs.flatMap((row) => {
         if (row.screenshot_path === null || row.screenshot_path === undefined) return [];
         const name = String(row.screenshot_path);
@@ -533,12 +606,17 @@ export class DataTransferService {
       if (referencedScreenshots.size !== parsed.screenshotCount) throw new Error("备份截图与运行记录不一致");
       for (const name of referencedScreenshots) await access(safeEntryPath(path.join(root, "extracted"), name));
       const targetCounts = tableCounts(this.context.raw);
+      const targetScreenshots = parsed.manifest.sections.includes("application_data")
+        ? await targetScreenshotStats(this.context, this.config)
+        : { count: 0, bytes: 0 };
       const summary: TransferSummary = {
         ...parsed.manifest,
         targetKeyId: keyId(this.config.stateKey),
         keyChanged: parsed.manifest.sourceKeyId !== keyId(this.config.stateKey),
         targetCounts,
-        targetHasData: TABLES.some((table) => table !== "app_settings" && targetCounts[table] > 0),
+        targetHasData: [...selectedTables].some((table) => targetCounts[table] > 0),
+        targetScreenshotCount: targetScreenshots.count,
+        targetScreenshotBytes: targetScreenshots.bytes,
       };
       const session: ImportSession = { id, root, tables: parsed.tables, manifest: parsed.manifest, summary, expiresAt: Date.now() + 30 * 60_000 };
       this.sessions.set(id, session);
@@ -637,7 +715,7 @@ export class DataTransferService {
   }
 
   async apply(id: string, confirmed: boolean): Promise<{ ok: true; summary: TransferSummary; resumedQueued: number }> {
-    if (!confirmed) throw Object.assign(new Error("必须确认覆盖目标端全部数据"), { statusCode: 400 });
+    if (!confirmed) throw Object.assign(new Error("必须确认覆盖备份中包含的数据类别"), { statusCode: 400 });
     const session = this.sessions.get(id);
     if (!session || session.expiresAt <= Date.now()) throw Object.assign(new Error("导入会话不存在或已过期"), { statusCode: 404 });
     if (this.maintenance.active) throw Object.assign(new Error("另一项数据迁移正在进行"), { statusCode: 409 });
@@ -647,27 +725,34 @@ export class DataTransferService {
     this.maintenance.active = true;
     const rollback = path.join(session.root, "rollback-screenshots");
     const importedScreenshots = path.join(session.root, "extracted", "screenshots");
+    const sections = new Set(session.manifest.sections);
+    const selectedTables = tablesForSections(session.manifest.sections);
+    const replaceScreenshots = sections.has("application_data");
     let oldMoved = false;
     let importedMoved = false;
     let databaseCommitted = false;
     try {
-      await mkdir(path.dirname(this.config.screenshotsPath), { recursive: true });
-      const oldExists = await access(this.config.screenshotsPath).then(() => true, () => false);
-      if (oldExists) { await rename(this.config.screenshotsPath, rollback); oldMoved = true; }
-      const importedExists = await access(importedScreenshots).then(() => true, () => false);
-      if (importedExists) await rename(importedScreenshots, this.config.screenshotsPath);
-      else await mkdir(this.config.screenshotsPath, { recursive: true });
-      importedMoved = true;
+      if (replaceScreenshots) {
+        await mkdir(path.dirname(this.config.screenshotsPath), { recursive: true });
+        const oldExists = await access(this.config.screenshotsPath).then(() => true, () => false);
+        if (oldExists) { await rename(this.config.screenshotsPath, rollback); oldMoved = true; }
+        const importedExists = sections.has("screenshots") && await access(importedScreenshots).then(() => true, () => false);
+        if (importedExists) await rename(importedScreenshots, this.config.screenshotsPath);
+        else await mkdir(this.config.screenshotsPath, { recursive: true });
+        importedMoved = true;
+      }
       const tables = prepareImportedTables(session, this.config);
       const replace = this.context.raw.transaction(() => {
         this.context.raw.pragma("defer_foreign_keys = ON");
-        for (const table of DELETE_ORDER) this.context.raw.prepare(`DELETE FROM ${table}`).run();
-        for (const table of INSERT_ORDER) sqlInsert(this.context.raw, table, tables[table]);
+        for (const table of DELETE_ORDER) if (selectedTables.has(table)) this.context.raw.prepare(`DELETE FROM ${table}`).run();
+        for (const table of INSERT_ORDER) if (selectedTables.has(table)) sqlInsert(this.context.raw, table, tables[table]);
       });
       replace();
       databaseCommitted = true;
-      await syncRuntimeSettingsFile(await appSettings(this.context), this.config).catch(() => {});
-      const resumedQueued = Number((this.context.raw.prepare("SELECT COUNT(*) AS count FROM runs WHERE status = 'queued'").get() as { count: number }).count);
+      if (sections.has("system_settings")) await syncRuntimeSettingsFile(await appSettings(this.context), this.config).catch(() => {});
+      const resumedQueued = sections.has("application_data")
+        ? Number((this.context.raw.prepare("SELECT COUNT(*) AS count FROM runs WHERE status = 'queued'").get() as { count: number }).count)
+        : 0;
       if (oldMoved) await rm(rollback, { recursive: true, force: true }).catch(() => {});
       this.sessions.delete(id);
       await rm(session.root, { recursive: true, force: true }).catch(() => {});
