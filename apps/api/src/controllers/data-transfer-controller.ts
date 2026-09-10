@@ -1,6 +1,7 @@
 import { createWriteStream } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
+import type { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { FastifyInstance } from "fastify";
 import type { RouteDeps } from "./shared.js";
@@ -9,6 +10,10 @@ import { createReadStream, httpError, randomUUID } from "./shared.js";
 export async function registerDataTransferController(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   const service = deps.dataTransfer;
   if (!service) return;
+
+  if (!app.hasContentTypeParser("application/octet-stream")) {
+    app.addContentTypeParser("application/octet-stream", (_request, payload, done) => done(null, payload));
+  }
 
   app.post("/data-transfer/export", async (request, reply) => {
     const body = request.body as { password?: string; passwordConfirmation?: string };
@@ -54,6 +59,36 @@ export async function registerDataTransferController(app: FastifyInstance, deps:
       if (error instanceof Error && !("statusCode" in error)) Object.assign(error, { statusCode: 400 });
       throw error;
     }
+  });
+
+  app.post("/data-transfer/imports/preflight", async (request) => {
+    const body = request.body as { filename?: string; size?: number; headerBase64?: string };
+    if (!body || typeof body.filename !== "string" || body.filename.length > 512) throw httpError(400, "备份文件名无效");
+    if (typeof body.headerBase64 !== "string" || body.headerBase64.length > 1024 || !/^[A-Za-z0-9+/]*={0,2}$/.test(body.headerBase64)) {
+      throw httpError(400, "备份文件头无效");
+    }
+    return service.startUpload({
+      filename: body.filename,
+      size: Number(body.size),
+      header: Buffer.from(body.headerBase64, "base64"),
+    });
+  });
+
+  app.put("/data-transfer/imports/:id/chunks/:index", async (request) => {
+    const params = request.params as { id: string; index: string };
+    const query = request.query as { offset?: string };
+    const index = Number(params.index);
+    const offset = Number(query.offset);
+    if (!Number.isSafeInteger(index) || index < 0 || !Number.isSafeInteger(offset) || offset < 0) {
+      throw httpError(400, "备份分片参数无效");
+    }
+    return service.appendUploadChunk(params.id, index, offset, request.body as Readable);
+  });
+
+  app.post("/data-transfer/imports/:id/complete", async (request) => {
+    const id = (request.params as { id: string }).id;
+    const body = request.body as { password?: string };
+    return service.completeUpload(id, String(body?.password ?? ""));
   });
 
   app.post("/data-transfer/imports/:id/apply", async (request) => {

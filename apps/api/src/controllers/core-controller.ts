@@ -139,7 +139,7 @@ export async function registerCoreController(app: FastifyInstance, deps: RouteDe
     const members = await context.db.selectFrom("applications")
       .select([
         "id", "company", "job_title", "check_url", "posting_url", "applied_at", "location", "notes",
-        "site", "progress_status_v2",
+        "site", "progress_status",
       ])
       .where("check_group_id", "=", groupId).orderBy("created_at").execute();
     const settings = await appSettings(context);
@@ -155,7 +155,7 @@ export async function registerCoreController(app: FastifyInstance, deps: RouteDe
         id: member.id, company: member.company, jobTitle: member.job_title,
         checkUrl: member.check_url || null, postingUrl: member.posting_url,
         appliedAt: member.applied_at, location: member.location, notes: member.notes,
-        site: member.site, progressStatus: member.progress_status_v2 ?? "unset",
+        site: member.site, progressStatus: member.progress_status,
       })),
       site: application.site,
       browserState: await loadBrowserState(context, config, application.site),

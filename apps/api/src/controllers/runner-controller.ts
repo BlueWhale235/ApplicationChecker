@@ -179,7 +179,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       .select([
         "applications.id", "applications.company", "applications.job_title", "applications.check_url",
         "applications.posting_url", "applications.applied_at", "applications.location", "applications.notes",
-        "applications.site", "applications.progress_status", "applications.progress_status_v2",
+        "applications.site", "applications.progress_status",
       ])
       .where("run_application_results.run_id", "=", run.id).orderBy("applications.created_at").execute();
     const browserProfile = await loadBrowserStateWithVersion(context, config, run.site);
@@ -201,7 +201,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
         location: member.location,
         notes: member.notes,
         site: member.site,
-        progressStatus: member.progress_status_v2 ?? "unset",
+        progressStatus: member.progress_status,
       })),
       site: run.site,
       browserState: browserProfile.state,
@@ -288,7 +288,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       .innerJoin("run_application_results", "run_application_results.application_id", "applications.id")
       .select([
         "applications.id", "applications.company", "applications.job_title", "applications.applied_at", "applications.location",
-        "applications.progress_status_v2", "applications.manual_locked", "applications.automation_paused",
+        "applications.progress_status", "applications.manual_locked", "applications.automation_paused",
       ])
       .where("run_application_results.run_id", "=", id).orderBy("applications.created_at").execute();
     const screenshotPath = await persistScreenshot(config, groupId, id, body.screenshotBase64);
@@ -533,7 +533,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
             ? `${notAppliedReason}:${(controlledError?.error ?? (aiMemberIds.has(member.id) ? aiError : null) ?? result?.evidence ?? "未匹配").replace(/\d+ms|第\d+次|耗时\s*\d+/g, "*")}` : null;
         const shouldNotify = await updateRecognitionNotice(trx, member.id, noticeKey);
         if (shouldNotify && !loginRequired && (notAppliedReason === "script_error" || notAppliedReason === "ai_failed" || notAppliedReason === "unmatched" || notAppliedReason === "low_confidence")) {
-          const currentStatus = member.progress_status_v2 ?? "unset";
+          const currentStatus = member.progress_status;
           const notificationKind = notAppliedReason === "script_error" || notAppliedReason === "ai_failed"
             ? "recognition_failed" as const
             : "recognition_unmatched" as const;
@@ -560,11 +560,10 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
           }).execute();
         }
         if (applied && result?.status) {
-          const previous = member.progress_status_v2 ?? "unset";
+          const previous = member.progress_status;
           const rejected = result.status === "rejected";
           await trx.updateTable("applications").set({
-            progress_status: legacyStatus(result.status),
-            progress_status_v2: result.status,
+            progress_status: result.status,
             progress_source: "ai",
             recognition_source: result.source,
             ...(rejected ? {
@@ -658,7 +657,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     const members = await context.db.selectFrom("applications")
       .innerJoin("run_application_results", "run_application_results.application_id", "applications.id")
       .select([
-        "applications.id", "applications.company", "applications.job_title", "applications.progress_status_v2",
+        "applications.id", "applications.company", "applications.job_title", "applications.progress_status",
       ])
       .where("run_application_results.run_id", "=", id)
       .orderBy("applications.created_at")
@@ -676,7 +675,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       if (!Number(updated.numUpdatedRows)) return;
       for (const member of members) {
         if (!await updateRecognitionNotice(trx, member.id, `${body.code ?? "CAPTURE_FAILED"}:${failureMessage}`)) continue;
-        const currentStatus = member.progress_status_v2 ?? "unset";
+        const currentStatus = member.progress_status;
         await trx.insertInto("notifications").values({
           id: randomUUID(),
           kind: "recognition_failed",

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "./config.js";
 import { createDb, type DbContext } from "./db.js";
 import { registerRoutes } from "./routes.js";
+import { appSettings } from "./service.js";
 
 const folders: string[] = [];
 const contexts: DbContext[] = [];
@@ -76,10 +77,7 @@ describe("desktop mode", () => {
     });
     expect(updateMappings.statusCode).toBe(200);
     expect(updateMappings.json()).toMatchObject({ statusMappings: customMappings });
-    const storedMappings = context.raw.prepare("SELECT status_mappings FROM app_settings WHERE id = 1").get() as {
-      status_mappings: string;
-    };
-    expect(JSON.parse(storedMappings.status_mappings)).toMatchObject(customMappings);
+    expect(JSON.parse((await appSettings(context)).status_mappings)).toMatchObject(customMappings);
 
     const conflictingMappings = await app.inject({
       method: "POST",

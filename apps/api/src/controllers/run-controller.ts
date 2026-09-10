@@ -100,7 +100,7 @@ export async function registerRunController(app: FastifyInstance, deps: RouteDep
         "check_groups.company as task_company",
         "applications.job_title as task_job_title",
         "check_groups.site as task_site",
-        "applications.progress_status_v2 as task_progress_status",
+        "applications.progress_status as task_progress_status",
       ])
       .select((eb) => eb.selectFrom("applications as task_members")
         .select(({ fn }) => fn.countAll<number>().as("count"))
@@ -259,13 +259,12 @@ export async function registerRunController(app: FastifyInstance, deps: RouteDep
   app.post("/applications/:id/progress", { schema: { body: SetProgressSchema } }, async (request) => {
     const id = (request.params as { id: string }).id;
     const body = request.body as typeof SetProgressSchema.static;
-    const current = await context.db.selectFrom("applications").select(["progress_status_v2", "check_group_id"]).where("id", "=", id).executeTakeFirst();
+    const current = await context.db.selectFrom("applications").select(["progress_status", "check_group_id"]).where("id", "=", id).executeTakeFirst();
     if (!current) throw httpError(404, "岗位不存在");
     const now = nowIso();
     await context.db.transaction().execute(async (trx) => {
       await trx.updateTable("applications").set({
-        progress_status: legacyStatus(body.status),
-        progress_status_v2: body.status,
+        progress_status: body.status,
         progress_source: "manual",
         manual_locked: 1,
         ...(body.status === "rejected" ? {
@@ -281,7 +280,7 @@ export async function registerRunController(app: FastifyInstance, deps: RouteDep
         id: randomUUID(),
         application_id: id,
         run_id: null,
-        from_status: current.progress_status_v2 ?? "unset",
+        from_status: current.progress_status,
         to_status: body.status,
         source: "manual",
         confidence: null,
@@ -300,9 +299,9 @@ export async function registerRunController(app: FastifyInstance, deps: RouteDep
   app.post("/applications/:id/automation/resume", async (request) => {
     const id = (request.params as { id: string }).id;
     const application = await context.db.selectFrom("applications")
-      .select(["progress_status_v2", "check_group_id"]).where("id", "=", id).executeTakeFirst();
+      .select(["progress_status", "check_group_id"]).where("id", "=", id).executeTakeFirst();
     if (!application) throw httpError(404, "岗位不存在");
-    if (application.progress_status_v2 === "rejected") throw httpError(409, "请先将岗位状态改为非淘汰状态");
+    if (application.progress_status === "rejected") throw httpError(409, "请先将岗位状态改为非淘汰状态");
     if (!application.check_group_id) throw httpError(409, "岗位尚未加入检查组");
     const group = await context.db.selectFrom("check_groups").selectAll()
       .where("id", "=", application.check_group_id).executeTakeFirstOrThrow();

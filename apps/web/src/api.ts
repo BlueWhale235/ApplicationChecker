@@ -28,6 +28,7 @@ import type {
   TaskRunPage,
   UpdateApplication,
 } from "@application-checker/contracts";
+import { checkBackupPasswordLocally } from "./backup-header";
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`/api${path}`, {
@@ -58,6 +59,11 @@ export interface DataTransferSummary {
   screenshotBytes: number;
   sensitiveData: string[];
   targetHasData: boolean;
+}
+
+export interface DataBackupUploadProgress {
+  percent: number;
+  message: string;
 }
 
 async function transferError(response: Response): Promise<never> {
@@ -173,13 +179,66 @@ export const api = {
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
   },
-  inspectDataBackup: async (file: File, password: string) => {
-    const body = new FormData();
-    body.append("password", password);
-    body.append("backup", file, file.name);
-    const response = await fetch("/api/data-transfer/imports", { method: "POST", body });
-    if (!response.ok) return transferError(response);
-    return response.json() as Promise<{ id: string; summary: DataTransferSummary; expiresAt: string }>;
+  inspectDataBackup: async (
+    file: File,
+    password: string,
+    onProgress?: (progress: DataBackupUploadProgress) => void,
+  ) => {
+    let uploadId: string | null = null;
+    try {
+      onProgress?.({ percent: 0, message: "正在检查文件格式和迁移密码…" });
+      const localCheck = await checkBackupPasswordLocally(file, password, (progress) => {
+        onProgress?.({ percent: 0, message: `正在本地检查迁移密码… ${Math.round(progress * 100)}%` });
+      });
+      const preflightResponse = await fetch("/api/data-transfer/imports/preflight", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          size: file.size,
+          headerBase64: localCheck.headerBase64,
+        }),
+      });
+      if (!preflightResponse.ok) await transferError(preflightResponse);
+      const preflight = await preflightResponse.json() as {
+        id: string;
+        chunkSize: number;
+        formatVersion: number;
+      };
+      if (preflight.formatVersion !== localCheck.formatVersion) throw new Error("服务端识别的备份版本与本地不一致");
+      uploadId = preflight.id;
+      onProgress?.({
+        percent: 0,
+        message: "本地密码检查通过，正在分片上传…",
+      });
+      let chunkIndex = 0;
+      for (let offset = 0; offset < file.size; offset += preflight.chunkSize) {
+        const end = Math.min(offset + preflight.chunkSize, file.size);
+        const chunkResponse = await fetch(
+          `/api/data-transfer/imports/${encodeURIComponent(preflight.id)}/chunks/${chunkIndex}?offset=${offset}`,
+          {
+            method: "PUT",
+            headers: { "content-type": "application/octet-stream" },
+            body: file.slice(offset, end),
+          },
+        );
+        if (!chunkResponse.ok) await transferError(chunkResponse);
+        onProgress?.({ percent: Math.round((end / file.size) * 100), message: `正在上传备份… ${Math.round((end / file.size) * 100)}%` });
+        chunkIndex += 1;
+      }
+      onProgress?.({ percent: 100, message: "上传完成，正在解密并校验完整性…" });
+      const completeResponse = await fetch(`/api/data-transfer/imports/${encodeURIComponent(preflight.id)}/complete`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!completeResponse.ok) await transferError(completeResponse);
+      uploadId = null;
+      return completeResponse.json() as Promise<{ id: string; summary: DataTransferSummary; expiresAt: string }>;
+    } catch (error) {
+      if (uploadId) await fetch(`/api/data-transfer/imports/${encodeURIComponent(uploadId)}`, { method: "DELETE" }).catch(() => {});
+      throw error;
+    }
   },
   applyDataBackup: (id: string) => request<{ ok: true; summary: DataTransferSummary; resumedQueued: number }>(
     `/data-transfer/imports/${id}/apply`, { method: "POST", body: JSON.stringify({ confirmReplace: true }) },

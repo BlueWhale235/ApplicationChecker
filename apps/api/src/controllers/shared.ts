@@ -31,7 +31,7 @@ import { assertPublicUrl } from "../security.js";
 import {
   appSettings, calculateNextRun, cleanupExpiredScreenshots, clearGroupScheduleIfFullyPaused, loadBrowserState,
   loadBrowserStateWithVersion, queueRun, findOrCreateCheckGroup, recomputeInheritedSchedules, saveBrowserState,
-  saveBrowserStateIfVersion,
+  saveBrowserStateIfVersion, updateAppSettings,
 } from "../service.js";
 import {
   recognizerFromSettings, syncRuntimeSettingsFile, updateAiSettings,
@@ -199,6 +199,7 @@ export {
   stat,
   syncRuntimeSettingsFile,
   updateAiSettings,
+  updateAppSettings,
 };
 
 export type {

@@ -1,7 +1,7 @@
 import type { Config } from "./config.js";
 import type { DbContext } from "./db.js";
 import type { MaintenanceState } from "./data-transfer.js";
-import { calculateNextRun, cleanupExpiredScreenshots, queueRun } from "./service.js";
+import { appSettings, calculateNextRun, cleanupExpiredScreenshots, queueRun } from "./service.js";
 
 function localClock(now: Date, timezone: string): { date: string; hour: number; minute: number } {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
@@ -52,8 +52,7 @@ export function startScheduler(context: DbContext, config: Config, maintenance: 
       }).where("expires_at", "<=", now.toISOString())
         .where("status", "in", ["queued", "starting", "ready", "active", "saving"])
         .execute();
-      const settings = await context.db.selectFrom("app_settings").select(["timezone", "screenshot_retention_days"])
-        .where("id", "=", 1).executeTakeFirstOrThrow();
+      const settings = await appSettings(context);
       const local = localClock(now, settings.timezone);
       if (local.hour === 3 && local.minute >= 15 && lastCleanupDate !== local.date) {
         await cleanupExpiredScreenshots(context, config, settings.screenshot_retention_days, now);

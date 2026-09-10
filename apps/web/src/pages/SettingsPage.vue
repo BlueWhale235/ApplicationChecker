@@ -44,6 +44,8 @@ const importSessionId = ref<string | null>(null);
 const importSummary = ref<DataTransferSummary | null>(null);
 const replaceConfirmed = ref(false);
 const transferBusy = ref(false);
+const importProgress = ref(0);
+const importStatus = ref("");
 const passwordVisible = ref(false);
 const tableLabels: Record<string, string> = {
   applications: "岗位", runs: "运行记录", check_groups: "检查组", run_application_results: "识别结果",
@@ -79,8 +81,13 @@ async function inspectImport() {
   if (!file.name.toLowerCase().endsWith(".acbackup")) return emit("failure", "请选择 .acbackup 备份文件");
   if (!importPassword.value) return emit("failure", "请输入迁移密码");
   transferBusy.value = true;
+  importProgress.value = 0;
+  importStatus.value = "正在检查备份…";
   try {
-    const result = await api.inspectDataBackup(file, importPassword.value);
+    const result = await api.inspectDataBackup(file, importPassword.value, (progress) => {
+      importProgress.value = progress.percent;
+      importStatus.value = progress.message;
+    });
     importSessionId.value = result.id;
     importSummary.value = result.summary;
     importPassword.value = "";
@@ -96,6 +103,8 @@ async function closeImport() {
   importSessionId.value = null;
   importSummary.value = null;
   replaceConfirmed.value = false;
+  importProgress.value = 0;
+  importStatus.value = "";
   passwordVisible.value = false;
 }
 
@@ -271,9 +280,13 @@ const concurrencyOptions = [
       <v-card class="transfer-dialog">
         <v-card-title>{{ importSummary ? "确认覆盖数据" : "导入加密备份" }}</v-card-title>
         <v-card-text v-if="!importSummary">
-          <v-alert type="info" variant="tonal" density="compact" class="mb-4">文件会先完成解密和完整性校验，此阶段不会修改当前数据。</v-alert>
+          <v-alert type="info" variant="tonal" density="compact" class="mb-4">浏览器会先在本地读取文件头并检查密码，密码正确后才开始分片上传。校验阶段不会修改当前数据。</v-alert>
           <v-file-input v-model="importFile" accept=".acbackup" label="选择 .acbackup 文件" variant="outlined" prepend-icon="mdi-database-import-outline" />
           <v-text-field v-model="importPassword" label="迁移密码" :type="passwordVisible ? 'text' : 'password'" variant="outlined" hide-details :append-inner-icon="passwordVisible ? 'mdi-eye-off' : 'mdi-eye'" @click:append-inner="passwordVisible = !passwordVisible" />
+          <div v-if="transferBusy && importStatus" class="transfer-progress">
+            <v-progress-linear :model-value="importProgress" color="primary" rounded />
+            <span>{{ importStatus }}</span>
+          </div>
         </v-card-text>
         <v-card-text v-else>
           <v-alert type="error" variant="tonal" class="mb-4">导入会永久覆盖当前岗位、记录、设置、规则和截图，且不会自动备份旧数据。</v-alert>
@@ -331,6 +344,8 @@ const concurrencyOptions = [
 .transfer-summary strong { margin-top: 4px; color: #30453d; font-size: 11px; }
 .transfer-details { margin-top: 15px; color: #596a63; font-size: 10px; }
 .transfer-details div { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.transfer-progress { margin-top: 18px; }
+.transfer-progress span { display: block; margin-top: 7px; color: #66756e; font-size: 10px; }
 .storage-items { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .storage-items > div { display: grid; grid-template-columns: auto 1fr auto auto; gap: 11px; align-items: center; padding: 14px; border: 1px solid #e4ded3; border-radius: 9px; background: #fbf8f1; }
 .storage-items .logs-storage-item { grid-column: 1 / -1; }

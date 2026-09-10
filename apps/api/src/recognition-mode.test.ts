@@ -8,7 +8,7 @@ import type { LocalPageSnapshot, RecognitionMode } from "@application-checker/co
 import type { Config } from "./config.js";
 import { createDb } from "./db.js";
 import { registerRoutes } from "./routes.js";
-import { queueRun } from "./service.js";
+import { queueRun, updateAppSettings } from "./service.js";
 
 const folders: string[] = [];
 afterEach(async () => {
@@ -61,7 +61,7 @@ async function setup(mode: RecognitionMode) {
     desktopSessionToken: null,
     debugTools: false,
   } satisfies Config;
-  await context.db.updateTable("app_settings").set({ recognition_mode: mode }).where("id", "=", 1).execute();
+  updateAppSettings(context, { recognition_mode: mode });
   await context.db.insertInto("applications").values({
     id: "11111111-1111-4111-8111-111111111111",
     company: "示例公司",
@@ -74,7 +74,6 @@ async function setup(mode: RecognitionMode) {
     notes: null,
     site: "example.com",
     progress_status: "screening",
-    progress_status_v2: "screening",
     progress_source: null,
     manual_locked: 0,
     automation_paused: 0,

@@ -28,7 +28,7 @@ export const mapApplication = (
   site: row.site,
   checkGroupId: row.check_group_id ?? row.id,
   checkGroupMemberCount: Number(row.group_member_count ?? 1),
-  progressStatus: row.progress_status_v2 ?? "unset",
+  progressStatus: row.progress_status,
   progressSource: row.recognition_source ?? row.progress_source,
   manualLocked: Boolean(row.manual_locked),
   automationPaused: Boolean(row.automation_paused),

@@ -13,6 +13,7 @@
   "dependencies": {
     "@application-checker/contracts": "workspace:*",
     "@mdi/font": "^7.4.47",
+    "@noble/hashes": "^2.4.0",
     "monaco-editor": "^0.56.0",
     "vue": "^3.5.39",
     "vue-router": "^4.6.3",

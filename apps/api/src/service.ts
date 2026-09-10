@@ -7,12 +7,82 @@ import {
 } from "@application-checker/contracts";
 import { decryptBrowserState, encryptBrowserState, type EncryptedPayload } from "@application-checker/cookie-state";
 import type { Config } from "./config.js";
-import type { DbContext } from "./db.js";
+import {
+  APP_SETTINGS_DEFAULTS,
+  type AppSettingKey,
+  type AppSettingsValues,
+  type DbContext,
+} from "./db.js";
 import { effectiveCron, nextCronAt, validateCron } from "./cron.js";
 
-export async function appSettings(context: DbContext) {
-  const row = await context.db.selectFrom("app_settings").selectAll().where("id", "=", 1).executeTakeFirstOrThrow();
-  return row;
+function validatedSetting(key: AppSettingKey, value: unknown): AppSettingsValues[AppSettingKey] {
+  if (["global_cron", "ai_base_url", "ai_model", "ai_api_key_encrypted", "state_key_fingerprint"].includes(key)) {
+    if (value !== null && typeof value !== "string") throw new Error(`应用设置 ${key} 的值无效`);
+    return value as AppSettingsValues[AppSettingKey];
+  }
+  if (["timezone", "default_user_agent", "status_mappings"].includes(key)) {
+    if (typeof value !== "string") throw new Error(`应用设置 ${key} 的值无效`);
+    return value as AppSettingsValues[AppSettingKey];
+  }
+  if (key === "check_concurrency") {
+    if (!Number.isInteger(value) || Number(value) < 1 || Number(value) > 3) throw new Error(`应用设置 ${key} 的值无效`);
+    return value as AppSettingsValues[AppSettingKey];
+  }
+  if (key === "screenshot_retention_days") {
+    if (!Number.isInteger(value) || Number(value) < 1 || Number(value) > 3650) throw new Error(`应用设置 ${key} 的值无效`);
+    return value as AppSettingsValues[AppSettingKey];
+  }
+  if (key === "ai_confidence_threshold") {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) throw new Error(`应用设置 ${key} 的值无效`);
+    return value as AppSettingsValues[AppSettingKey];
+  }
+  if (key === "ai_deep_thinking") {
+    if (value !== 0 && value !== 1) throw new Error(`应用设置 ${key} 的值无效`);
+    return value as AppSettingsValues[AppSettingKey];
+  }
+  if (key === "recognition_mode") {
+    if (!['local_first', 'local_only', 'ai_only'].includes(String(value))) throw new Error(`应用设置 ${key} 的值无效`);
+    return value as AppSettingsValues[AppSettingKey];
+  }
+  throw new Error(`未知应用设置：${key}`);
+}
+
+export function decodeAppSettings(rows: Array<{ key: string; value_json: string; updated_at: string }>): AppSettingsValues {
+  const knownKeys = new Set(Object.keys(APP_SETTINGS_DEFAULTS));
+  const values = { ...APP_SETTINGS_DEFAULTS } as Omit<AppSettingsValues, "updated_at">;
+  let updatedAt = "";
+  for (const row of rows) {
+    if (!knownKeys.has(row.key)) continue;
+    let parsed: unknown;
+    try { parsed = JSON.parse(row.value_json); }
+    catch { throw new Error(`应用设置 ${row.key} 不是有效的 JSON`); }
+    const key = row.key as AppSettingKey;
+    values[key] = validatedSetting(key, parsed) as never;
+    if (row.updated_at > updatedAt) updatedAt = row.updated_at;
+  }
+  return { ...values, updated_at: updatedAt || new Date(0).toISOString() };
+}
+
+export async function appSettings(context: DbContext): Promise<AppSettingsValues> {
+  return decodeAppSettings(await context.db.selectFrom("app_settings").selectAll().execute());
+}
+
+export async function updateAppSettings(
+  context: DbContext,
+  values: Partial<Omit<AppSettingsValues, "updated_at">>,
+  updatedAt = new Date().toISOString(),
+): Promise<void> {
+  const entries = Object.entries(values) as Array<[AppSettingKey, AppSettingsValues[AppSettingKey]]>;
+  const upsert = context.raw.prepare(`
+    INSERT INTO app_settings(key,value_json,updated_at) VALUES(?,?,?)
+    ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at
+  `);
+  context.raw.transaction(() => {
+    for (const [key, value] of entries) {
+      validatedSetting(key, value);
+      upsert.run(key, JSON.stringify(value ?? null), updatedAt);
+    }
+  })();
 }
 
 export async function calculateNextRun(

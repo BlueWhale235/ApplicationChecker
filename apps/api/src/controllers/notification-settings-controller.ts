@@ -47,6 +47,7 @@ import {
   syncAppliedEvent,
   syncRuntimeSettingsFile,
   updateAiSettings,
+  updateAppSettings,
 } from "./shared.js";
 import {
   assertUnambiguousStatusMappings,
@@ -201,14 +202,13 @@ export async function registerNotificationSettingsController(
     } catch {
       throw httpError(400, "Cron 表达式或时区无效");
     }
-    await context.db.updateTable("app_settings").set({
+    await updateAppSettings(context, {
       global_cron: body.globalCron,
       timezone: body.timezone,
       check_concurrency: body.checkConcurrency ?? (await appSettings(context)).check_concurrency,
       screenshot_retention_days: body.screenshotRetentionDays,
       default_user_agent: body.defaultUserAgent.trim(),
-      updated_at: nowIso(),
-    }).where("id", "=", 1).execute();
+    }, nowIso());
     await recomputeInheritedSchedules(context);
     const screenshotCleanup = await cleanupExpiredScreenshots(context, config, body.screenshotRetentionDays);
     await syncRuntimeSettingsFile(await appSettings(context), config);
@@ -233,10 +233,9 @@ export async function registerNotificationSettingsController(
 
   app.post("/settings/recognition/update", { schema: { body: RecognitionSettingsUpdateSchema } }, async (request) => {
     const body = request.body as typeof RecognitionSettingsUpdateSchema.static;
-    await context.db.updateTable("app_settings").set({
+    await updateAppSettings(context, {
       recognition_mode: body.recognitionMode,
-      updated_at: nowIso(),
-    }).where("id", "=", 1).execute();
+    }, nowIso());
     await syncRuntimeSettingsFile(await appSettings(context), config);
     return { ok: true, recognitionMode: body.recognitionMode };
   });
@@ -250,10 +249,9 @@ export async function registerNotificationSettingsController(
     } catch (error) {
       throw httpError(400, error instanceof Error ? error.message : "状态映射存在冲突");
     }
-    await context.db.updateTable("app_settings").set({
+    await updateAppSettings(context, {
       status_mappings: JSON.stringify(mappings),
-      updated_at: nowIso(),
-    }).where("id", "=", 1).execute();
+    }, nowIso());
     await syncRuntimeSettingsFile(await appSettings(context), config);
     return { ok: true, statusMappings: mappings };
   });

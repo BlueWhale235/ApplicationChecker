@@ -9,7 +9,7 @@ import { normalizeCheckUrl, normalizeCompany } from "@application-checker/contra
 import type { Config } from "./config.js";
 import { createDb, type DbContext } from "./db.js";
 import { registerRoutes } from "./routes.js";
-import { cleanupExpiredScreenshots, queueRun } from "./service.js";
+import { appSettings, cleanupExpiredScreenshots, queueRun, updateAppSettings } from "./service.js";
 import { AiDebugStore } from "./ai-debug.js";
 import { RecognitionPreviewStore } from "./recognition-preview.js";
 import { recoverInterruptedWork } from "./startup-recovery.js";
@@ -58,7 +58,6 @@ async function setup(): Promise<{ folder: string; context: DbContext; config: Co
     notes: null,
     site: "example.com",
     progress_status: "screening",
-    progress_status_v2: "screening",
     progress_source: null,
     manual_locked: 0,
     automation_paused: 0,
@@ -86,7 +85,7 @@ describe("screenshot retention", () => {
     old.prepare("INSERT INTO app_settings VALUES(1,NULL,'Asia/Shanghai',?)").run(new Date().toISOString());
     old.close();
     const context = createDb(filename);
-    const row = await context.db.selectFrom("app_settings").selectAll().executeTakeFirstOrThrow();
+    const row = await appSettings(context);
     expect(row.check_concurrency).toBe(1);
     expect(row.screenshot_retention_days).toBe(30);
     expect(row.default_user_agent).toContain("Mozilla/5.0");
@@ -94,6 +93,41 @@ describe("screenshot retention", () => {
     expect(row.ai_deep_thinking).toBe(0);
     await context.db.destroy();
     context.raw.close();
+  });
+
+  it("keeps the precise v2 application status while removing the legacy status column", async () => {
+    const folder = await mkdtemp(path.join(os.tmpdir(), "application-checker-progress-migration-"));
+    folders.push(folder);
+    const filename = path.join(folder, "old.sqlite");
+    const initial = createDb(filename);
+    const now = new Date().toISOString();
+    initial.raw.prepare(`
+      INSERT INTO applications(
+        id,company,job_title,check_url,site,progress_status,manual_locked,schedule_mode,created_at,updated_at
+      ) VALUES(?,?,?,?,?,'screening_passed',0,'manual',?,?)
+    `).run("legacy-progress", "迁移公司", "迁移岗位", "https://example.com/status", "example.com", now, now);
+    initial.raw.exec(`
+      ALTER TABLE applications RENAME COLUMN progress_status TO progress_status_v2;
+      ALTER TABLE applications ADD COLUMN progress_status TEXT NOT NULL DEFAULT 'unset'
+        CHECK(progress_status IN ('unset','screening','interview_pending','interview_result_pending','signing_pending','offer','rejected'));
+      UPDATE applications SET progress_status = 'screening';
+    `);
+    await initial.db.destroy();
+    initial.raw.close();
+
+    const migrated = createDb(filename);
+    const columns = migrated.raw.prepare("PRAGMA table_info(applications)").all() as Array<{ name: string; notnull: number }>;
+    expect(columns.filter((column) => column.name.startsWith("progress_status"))).toEqual([
+      expect.objectContaining({ name: "progress_status", notnull: 1 }),
+    ]);
+    expect(migrated.raw.prepare("SELECT progress_status FROM applications WHERE id = ?").get("legacy-progress"))
+      .toEqual({ progress_status: "screening_passed" });
+    expect(migrated.raw.pragma("foreign_key_check")).toEqual([]);
+    expect(migrated.raw.pragma("integrity_check")).toEqual([{ integrity_check: "ok" }]);
+    await expect(migrated.db.updateTable("applications").set({ progress_status: "interviewed" }).where("id", "=", "legacy-progress").execute())
+      .resolves.toBeDefined();
+    await migrated.db.destroy();
+    migrated.raw.close();
   });
 
   it("migrates run statuses and script result reasons without losing rows", async () => {
@@ -336,7 +370,7 @@ describe("runtime settings and POST action routes", () => {
       },
     });
     expect(legacySettings.statusCode).toBe(200);
-    expect((await context.db.selectFrom("app_settings").select("check_concurrency").executeTakeFirstOrThrow()).check_concurrency).toBe(3);
+    expect((await appSettings(context)).check_concurrency).toBe(3);
 
     const ai = await app.inject({
       method: "POST",
@@ -371,7 +405,7 @@ describe("runtime settings and POST action routes", () => {
 
   it("uses POST delete/progress actions and passes the saved User-Agent to Runner", async () => {
     const { context, config } = await setup();
-    await context.db.updateTable("app_settings").set({ default_user_agent: "ApplicationChecker-QA/2.0" }).where("id", "=", 1).execute();
+    updateAppSettings(context, { default_user_agent: "ApplicationChecker-QA/2.0" });
     const app = Fastify();
     await registerRoutes(app, { context, config, runnerHeartbeat: { at: Date.now() } });
 
@@ -413,7 +447,7 @@ describe("task management routes", () => {
     const secondId = "22222222-2222-4222-8222-222222222222";
     await context.db.insertInto("applications").values({
       ...first, id: secondId, check_group_id: first.check_group_id, job_title: "销售工程师", progress_status: "screening",
-      progress_status_v2: "screening", created_at: "2026-01-02T00:00:00.000Z", updated_at: "2026-01-02T00:00:00.000Z",
+      created_at: "2026-01-02T00:00:00.000Z", updated_at: "2026-01-02T00:00:00.000Z",
     }).execute();
     const app = Fastify();
     await registerRoutes(app, { context, config, recognizer: { configured: false, model: null } as StatusRecognizer, runnerHeartbeat: { at: Date.now() } });
@@ -436,10 +470,10 @@ describe("task management routes", () => {
     expect(complete.statusCode, complete.body).toBe(200);
     expect(await context.db.selectFrom("runs").select(["status", "error_code"]).where("id", "=", runId!).executeTakeFirstOrThrow())
       .toEqual({ status: "partial", error_code: "SCRIPT_RULE_ERROR" });
-    expect(await context.db.selectFrom("applications").select(["id", "progress_status_v2", "last_run_status"])
+    expect(await context.db.selectFrom("applications").select(["id", "progress_status", "last_run_status"])
       .where("id", "in", [first.id, secondId]).orderBy("id").execute()).toEqual([
-      { id: first.id, progress_status_v2: "screening_passed", last_run_status: "succeeded" },
-      { id: secondId, progress_status_v2: "screening", last_run_status: "failed" },
+      { id: first.id, progress_status: "screening_passed", last_run_status: "succeeded" },
+      { id: secondId, progress_status: "screening", last_run_status: "failed" },
     ]);
     const notifications = await context.db.selectFrom("notifications").select(["application_id", "kind", "evidence"]).execute();
     expect(notifications.some((item) => item.application_id === secondId && item.kind === "recognition_failed" && item.evidence?.includes("Line:8"))).toBe(true);
@@ -481,9 +515,9 @@ describe("task management routes", () => {
     });
     expect(complete.statusCode, complete.body).toBe(200);
     const application = await context.db.selectFrom("applications")
-      .select(["progress_status_v2", "last_run_status"])
+      .select(["progress_status", "last_run_status"])
       .where("id", "=", applicationId).executeTakeFirstOrThrow();
-    expect(application).toEqual({ progress_status_v2: "unset", last_run_status: "succeeded" });
+    expect(application).toEqual({ progress_status: "unset", last_run_status: "succeeded" });
     const result = await context.db.selectFrom("run_application_results")
       .select(["matched", "suggested_status", "applied"])
       .where("run_id", "=", runId!).executeTakeFirstOrThrow();
@@ -863,9 +897,9 @@ describe("task management routes", () => {
       recognition_source: "ai",
     });
     const application = await context.db.selectFrom("applications")
-      .select(["progress_status_v2", "last_run_status"])
+      .select(["progress_status", "last_run_status"])
       .where("id", "=", "11111111-1111-4111-8111-111111111111").executeTakeFirstOrThrow();
-    expect(application).toEqual({ progress_status_v2: "screening", last_run_status: "needs_login" });
+    expect(application).toEqual({ progress_status: "screening", last_run_status: "needs_login" });
     const result = await context.db.selectFrom("run_application_results")
       .select(["matched", "raw_status", "suggested_status", "applied", "not_applied_reason"])
       .where("run_id", "=", runId!).executeTakeFirstOrThrow();
@@ -970,10 +1004,10 @@ describe("task management routes", () => {
     });
     expect(progress.statusCode).toBe(200);
     const row = await context.db.selectFrom("applications")
-      .select(["progress_status_v2", "automation_paused"])
+      .select(["progress_status", "automation_paused"])
       .where("id", "=", "11111111-1111-4111-8111-111111111111")
       .executeTakeFirstOrThrow();
-    expect(row).toMatchObject({ progress_status_v2: "rejected", automation_paused: 1 });
+    expect(row).toMatchObject({ progress_status: "rejected", automation_paused: 1 });
     expect((await app.inject({ method: "GET", url: "/notifications" })).json()).toMatchObject({ total: 0 });
     expect((await app.inject({
       method: "POST",

@@ -69,7 +69,7 @@ export async function registerApplicationController(app: FastifyInstance, deps: 
     const query = (request.query as { q?: string; status?: ProgressStatus }).q?.trim().toLowerCase() ?? "";
     const status = (request.query as { status?: ProgressStatus }).status;
     let builder = (await applicationRows(context)).orderBy("applications.updated_at", "desc");
-    if (status) builder = builder.where("applications.progress_status_v2", "=", status);
+    if (status) builder = builder.where("applications.progress_status", "=", status);
     const rows = await builder.execute();
     return rows.filter((row) => !query || `${row.company} ${row.job_title} ${row.check_url}`.toLowerCase().includes(query)).map(mapApplication);
   });
@@ -110,7 +110,6 @@ export async function registerApplicationController(app: FastifyInstance, deps: 
       notes: body.notes?.trim() || null,
       site,
       progress_status: "unset",
-      progress_status_v2: "unset",
       progress_source: null,
       manual_locked: 0,
       automation_paused: 0,
@@ -142,7 +141,7 @@ export async function registerApplicationController(app: FastifyInstance, deps: 
         .orderBy("runs.created_at", "desc").execute(),
       context.db.selectFrom("status_events").selectAll().where("application_id", "=", id).orderBy("created_at", "desc").execute(),
       context.db.selectFrom("check_groups").selectAll().where("id", "=", groupId).executeTakeFirstOrThrow(),
-      context.db.selectFrom("applications").select(["id", "job_title", "progress_status_v2", "manual_locked", "automation_paused"])
+      context.db.selectFrom("applications").select(["id", "job_title", "progress_status", "manual_locked", "automation_paused"])
         .where("check_group_id", "=", groupId).orderBy("created_at").execute(),
     ]);
     const allResults = await recognitionResults(context, runs.map((run) => run.id));
@@ -161,7 +160,7 @@ export async function registerApplicationController(app: FastifyInstance, deps: 
         members: members.map((member) => ({
           id: member.id,
           jobTitle: member.job_title,
-          progressStatus: member.progress_status_v2 ?? "unset",
+          progressStatus: member.progress_status,
           manualLocked: Boolean(member.manual_locked),
           automationPaused: Boolean(member.automation_paused),
         })),
@@ -301,7 +300,7 @@ export async function registerApplicationController(app: FastifyInstance, deps: 
         updated_at: now,
       }).where("check_group_id", "=", application.check_group_id!).execute();
     });
-    const members = await context.db.selectFrom("applications").select(["id", "job_title", "progress_status_v2", "manual_locked", "automation_paused"])
+    const members = await context.db.selectFrom("applications").select(["id", "job_title", "progress_status", "manual_locked", "automation_paused"])
       .where("check_group_id", "=", application.check_group_id).orderBy("created_at").execute();
     const group = await context.db.selectFrom("check_groups").selectAll().where("id", "=", application.check_group_id).executeTakeFirstOrThrow();
     return {
@@ -310,7 +309,7 @@ export async function registerApplicationController(app: FastifyInstance, deps: 
         site: group.site, scheduleMode: group.schedule_mode, cronExpression: group.cron_expression,
         nextRunAt: group.next_run_at, memberCount: members.length,
         members: members.map((member) => ({
-          id: member.id, jobTitle: member.job_title, progressStatus: member.progress_status_v2 ?? "unset",
+          id: member.id, jobTitle: member.job_title, progressStatus: member.progress_status,
           manualLocked: Boolean(member.manual_locked),
           automationPaused: Boolean(member.automation_paused),
         })),

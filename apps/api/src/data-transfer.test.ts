@@ -1,13 +1,15 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BrowserStateEnvelope } from "@application-checker/contracts";
 import type { Config } from "./config.js";
 import { createDb, type DbContext } from "./db.js";
 import { DataTransferService, verifyStateEncryptionKey } from "./data-transfer.js";
 import { decryptSecret, updateAiSettings } from "./runtime-settings.js";
-import { loadBrowserState, saveBrowserState } from "./service.js";
+import { appSettings, loadBrowserState, saveBrowserState } from "./service.js";
 
 const folders: string[] = [];
 const contexts: DbContext[] = [];
@@ -46,7 +48,7 @@ async function seedSource(context: DbContext, config: Config): Promise<void> {
     id: applicationId, check_group_id: null, company: "迁移公司", job_title: "测试岗位",
     check_url: "https://example.com/status", resolved_url: null, posting_url: null, applied_at: "2026-09-01",
     location: "上海", notes: "保留备注", site: "example.com", progress_status: "screening",
-    progress_status_v2: "screening", progress_source: "manual", manual_locked: 1,
+    progress_source: "manual", manual_locked: 1,
     automation_paused: 0, automation_pause_reason: null, automation_paused_at: null,
     schedule_mode: "manual", cron_expression: null, next_run_at: null, last_run_at: "2026-09-09T00:00:00.000Z",
     last_run_status: "queued", last_status_changed_at: "2026-09-09T00:00:00.000Z",
@@ -96,9 +98,9 @@ describe("full data transfer", () => {
     expect(run.status).toBe("queued");
     expect(await readFile(run.screenshot_path!)).toEqual(Buffer.from("fake-png"));
     expect((await loadBrowserState(target.context, target.config, "example.com"))?.cookies[0]?.value).toBe("secret-cookie");
-    const settings = await target.context.db.selectFrom("app_settings").selectAll().executeTakeFirstOrThrow();
+    const settings = await appSettings(target.context);
     expect(decryptSecret(settings.ai_api_key_encrypted, target.config.stateKey)).toBe("secret-api-key");
-    const sourceSettings = await source.context.db.selectFrom("app_settings").select("state_key_fingerprint").executeTakeFirstOrThrow();
+    const sourceSettings = await appSettings(source.context);
     expect(settings.state_key_fingerprint).not.toBe(sourceSettings.state_key_fingerprint);
   });
 
@@ -116,5 +118,46 @@ describe("full data transfer", () => {
     await seedSource(source.context, source.config);
     await expect(verifyStateEncryptionKey(source.context, { ...source.config, stateKey: Buffer.alloc(32, 6) }))
       .rejects.toThrow(/STATE_ENCRYPTION_KEY/);
+  });
+
+  it("restores a chunked v1 backup", async () => {
+    const source = await setup(7);
+    const target = await setup(8);
+    await seedSource(source.context, source.config);
+    const run = await source.context.db.selectFrom("runs").select("screenshot_path").executeTakeFirstOrThrow();
+    await writeFile(run.screenshot_path!, randomBytes(4 * 1024 * 1024 + 257));
+    const exported = await source.service.export("chunked-password");
+    const backup = await readFile(exported.filename);
+
+    const upload = await target.service.startUpload({
+      filename: "large.acbackup",
+      size: backup.length,
+      header: backup.subarray(0, 85),
+    });
+    expect(upload.formatVersion).toBe(1);
+    let index = 0;
+    for (let offset = 0; offset < backup.length; offset += upload.chunkSize) {
+      const end = Math.min(offset + upload.chunkSize, backup.length);
+      await target.service.appendUploadChunk(upload.id, index, offset, Readable.from(backup.subarray(offset, end)));
+      index += 1;
+    }
+    const inspected = await target.service.completeUpload(upload.id, "chunked-password");
+    await target.service.apply(inspected.id, true);
+    expect((await target.context.db.selectFrom("applications").selectAll().executeTakeFirstOrThrow()).company).toBe("迁移公司");
+  });
+
+  it("ignores removed form AI settings from an older backup", async () => {
+    const source = await setup(9);
+    const target = await setup(10);
+    await seedSource(source.context, source.config);
+    source.context.raw.prepare("INSERT INTO app_settings(key,value_json,updated_at) VALUES(?,?,?)")
+      .run("form_ai_base_url", JSON.stringify("https://removed.example.com/v1"), new Date().toISOString());
+
+    const exported = await source.service.export("legacy-settings-password");
+    const inspected = await target.service.inspect(exported.filename, "legacy-settings-password");
+    await target.service.apply(inspected.id, true);
+
+    expect(target.context.raw.prepare("SELECT 1 FROM app_settings WHERE key = ?").get("form_ai_base_url")).toBeUndefined();
+    expect((await appSettings(target.context)).ai_model).toBe("test-model");
   });
 });

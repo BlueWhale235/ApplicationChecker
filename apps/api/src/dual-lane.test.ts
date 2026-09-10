@@ -11,6 +11,7 @@ import {
   queueRun,
   saveBrowserState,
   saveBrowserStateIfVersion,
+  updateAppSettings,
 } from "./service.js";
 import { recoverInterruptedWork } from "./startup-recovery.js";
 
@@ -41,7 +42,7 @@ async function insertApplication(context: DbContext, id: string, company: string
   await context.db.insertInto("applications").values({
     id, company, job_title: jobTitle, check_url: checkUrl, resolved_url: null, posting_url: null,
     applied_at: null, location: null, notes: null, site, progress_status: "screening",
-    progress_status_v2: "screening", progress_source: null, manual_locked: 0, automation_paused: 0,
+    progress_source: null, manual_locked: 0, automation_paused: 0,
     automation_pause_reason: null, automation_paused_at: null, schedule_mode: "manual", cron_expression: null,
     next_run_at: null, last_run_at: null, last_run_status: null, last_status_changed_at: null,
     created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
@@ -142,7 +143,7 @@ describe("dual runner lanes", () => {
 
   it("claims login immediately while an automated capture is already running", async () => {
     const { context, config } = await setup();
-    await context.db.updateTable("app_settings").set({ check_concurrency: 3 }).where("id", "=", 1).execute();
+    updateAppSettings(context, { check_concurrency: 3 });
     const firstRun = await queueRun(context, "app-1", "manual");
     const secondRun = await queueRun(context, "app-2", "manual");
     await context.db.updateTable("runs").set({ status: "needs_login" }).where("id", "=", secondRun!).execute();
@@ -177,7 +178,7 @@ describe("dual runner lanes", () => {
       queueRun(context, "app-3", "cron"),
       queueRun(context, "app-4", "cron"),
     ]);
-    await context.db.updateTable("app_settings").set({ check_concurrency: 2 }).where("id", "=", 1).execute();
+    updateAppSettings(context, { check_concurrency: 2 });
     const app = Fastify();
     await registerRoutes(app, { context, config, runnerHeartbeat: { at: Date.now() } });
     const auth = { authorization: `Bearer ${config.runnerToken}` };
@@ -189,10 +190,10 @@ describe("dual runner lanes", () => {
     expect(new Set(captured.map((job) => job.runId)).size).toBe(2);
     expect(firstClaims.filter((response) => response.json().kind === "idle")).toHaveLength(2);
 
-    await context.db.updateTable("app_settings").set({ check_concurrency: 1 }).where("id", "=", 1).execute();
+    updateAppSettings(context, { check_concurrency: 1 });
     expect((await app.inject({ method: "POST", url: "/internal/claim/background", headers: auth })).json())
       .toEqual({ kind: "idle" });
-    await context.db.updateTable("app_settings").set({ check_concurrency: 3 }).where("id", "=", 1).execute();
+    updateAppSettings(context, { check_concurrency: 3 });
     const raised = await app.inject({ method: "POST", url: "/internal/claim/background", headers: auth });
     expect(raised.json()).toMatchObject({ kind: "capture" });
     expect(runIds).toContain(raised.json().runId);

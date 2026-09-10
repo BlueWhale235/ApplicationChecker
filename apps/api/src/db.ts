@@ -20,8 +20,7 @@ export interface ApplicationsTable {
   location: string | null;
   notes: string | null;
   site: string;
-  progress_status: string;
-  progress_status_v2: ProgressStatus | null;
+  progress_status: ProgressStatus;
   progress_source: "manual" | "ai" | null;
   recognition_source: Generated<Exclude<RecognitionSource, "mixed"> | null>;
   manual_locked: number;
@@ -159,11 +158,10 @@ export interface LoginSessionsTable {
   completed_at: string | null;
 }
 
-export interface AppSettingsTable {
-  id: Generated<number>;
+export interface AppSettingsValues {
   global_cron: string | null;
   timezone: string;
-  check_concurrency: Generated<number>;
+  check_concurrency: number;
   screenshot_retention_days: number;
   default_user_agent: string;
   ai_base_url: string | null;
@@ -171,11 +169,35 @@ export interface AppSettingsTable {
   ai_api_key_encrypted: string | null;
   ai_confidence_threshold: number;
   ai_deep_thinking: number;
-  recognition_mode: Generated<RecognitionMode>;
-  status_mappings: Generated<string>;
-  state_key_fingerprint: Generated<string | null>;
+  recognition_mode: RecognitionMode;
+  status_mappings: string;
+  state_key_fingerprint: string | null;
   updated_at: string;
 }
+
+export type AppSettingKey = Exclude<keyof AppSettingsValues, "updated_at">;
+
+export interface AppSettingsTable {
+  key: string;
+  value_json: string;
+  updated_at: string;
+}
+
+export const APP_SETTINGS_DEFAULTS: Record<AppSettingKey, AppSettingsValues[AppSettingKey]> = {
+  global_cron: null,
+  timezone: "Asia/Shanghai",
+  check_concurrency: 1,
+  screenshot_retention_days: 30,
+  default_user_agent: DEFAULT_USER_AGENT,
+  ai_base_url: null,
+  ai_model: null,
+  ai_api_key_encrypted: null,
+  ai_confidence_threshold: 0.75,
+  ai_deep_thinking: 0,
+  recognition_mode: "local_first",
+  status_mappings: "{}",
+  state_key_fingerprint: null,
+};
 
 export interface ParserRulesTable {
   id: string;
@@ -222,8 +244,7 @@ CREATE TABLE IF NOT EXISTS applications (
   location TEXT,
   notes TEXT,
   site TEXT NOT NULL,
-  progress_status TEXT NOT NULL DEFAULT 'unset' CHECK(progress_status IN ('unset','screening','interview_pending','interview_result_pending','signing_pending','offer','rejected')),
-  progress_status_v2 TEXT CHECK(progress_status_v2 IN ('unset','screening','screening_passed','interview_pending','interviewed','signing_pending','offer','rejected')),
+  progress_status TEXT NOT NULL DEFAULT 'unset' CHECK(progress_status IN ('unset','screening','screening_passed','interview_pending','interviewed','signing_pending','offer','rejected')),
   progress_source TEXT CHECK(progress_source IN ('manual','ai')),
   recognition_source TEXT CHECK(recognition_source IN ('local','ai')),
   manual_locked INTEGER NOT NULL DEFAULT 0,
@@ -362,20 +383,8 @@ CREATE TABLE IF NOT EXISTS login_sessions (
 CREATE UNIQUE INDEX IF NOT EXISTS login_one_active
   ON login_sessions((1)) WHERE status IN ('queued','starting','ready','active','saving');
 CREATE TABLE IF NOT EXISTS app_settings (
-  id INTEGER PRIMARY KEY CHECK(id = 1),
-  global_cron TEXT,
-  timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
-  check_concurrency INTEGER NOT NULL DEFAULT 1 CHECK(check_concurrency BETWEEN 1 AND 3),
-  screenshot_retention_days INTEGER NOT NULL DEFAULT 30 CHECK(screenshot_retention_days BETWEEN 1 AND 3650),
-  default_user_agent TEXT NOT NULL DEFAULT '${DEFAULT_USER_AGENT}',
-  ai_base_url TEXT,
-  ai_model TEXT,
-  ai_api_key_encrypted TEXT,
-  ai_confidence_threshold REAL NOT NULL DEFAULT 0.75 CHECK(ai_confidence_threshold BETWEEN 0 AND 1),
-  ai_deep_thinking INTEGER NOT NULL DEFAULT 0 CHECK(ai_deep_thinking IN (0,1)),
-  recognition_mode TEXT NOT NULL DEFAULT 'local_first' CHECK(recognition_mode IN ('local_first','local_only','ai_only')),
-  status_mappings TEXT NOT NULL DEFAULT '{}',
-  state_key_fingerprint TEXT,
+  key TEXT PRIMARY KEY,
+  value_json TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS parser_rules (
@@ -395,6 +404,60 @@ CREATE UNIQUE INDEX IF NOT EXISTS parser_rules_scope_priority
   ON parser_rules(hostname, pathname, priority);
 `;
 
+function migrateAppSettings(raw: DatabaseDriver.Database): void {
+  const columns = (raw.prepare("PRAGMA table_info(app_settings)").all() as Array<{ name: string }>).map((column) => column.name);
+  const now = new Date().toISOString();
+  if (!columns.includes("key")) {
+    const legacy = (raw.prepare("SELECT * FROM app_settings WHERE id = 1").get() ?? {}) as Record<string, unknown>;
+    const updatedAt = typeof legacy.updated_at === "string" ? legacy.updated_at : now;
+    const migrate = raw.transaction(() => {
+      raw.exec(`
+        ALTER TABLE app_settings RENAME TO app_settings_legacy;
+        CREATE TABLE app_settings (
+          key TEXT PRIMARY KEY,
+          value_json TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+      `);
+      const insert = raw.prepare("INSERT INTO app_settings(key,value_json,updated_at) VALUES(?,?,?)");
+      for (const [key, defaultValue] of Object.entries(APP_SETTINGS_DEFAULTS)) {
+        const value = Object.hasOwn(legacy, key) ? legacy[key] : defaultValue;
+        insert.run(key, JSON.stringify(value ?? null), updatedAt);
+      }
+      raw.exec("DROP TABLE app_settings_legacy");
+    });
+    migrate();
+    return;
+  }
+  const insert = raw.prepare("INSERT OR IGNORE INTO app_settings(key,value_json,updated_at) VALUES(?,?,?)");
+  const seed = raw.transaction(() => {
+    for (const [key, value] of Object.entries(APP_SETTINGS_DEFAULTS)) insert.run(key, JSON.stringify(value), now);
+  });
+  seed();
+}
+
+function migrateApplicationProgressStatus(raw: DatabaseDriver.Database): void {
+  const columns = (raw.prepare("PRAGMA table_info(applications)").all() as Array<{ name: string }>).map((column) => column.name);
+  const tableSql = String((raw.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'applications'").get() as { sql?: string } | undefined)?.sql ?? "");
+  const hasV2 = columns.includes("progress_status_v2");
+  const hasLegacyOnly = columns.includes("progress_status") && !hasV2 && tableSql.includes("interview_result_pending");
+  if (!hasV2 && !hasLegacyOnly) return;
+
+  const source = hasV2
+    ? "COALESCE(progress_status_v2, CASE WHEN progress_status = 'interview_result_pending' THEN 'interviewed' ELSE progress_status END, 'unset')"
+    : "COALESCE(CASE WHEN progress_status = 'interview_result_pending' THEN 'interviewed' ELSE progress_status END, 'unset')";
+  raw.transaction(() => {
+    raw.exec(`
+      ALTER TABLE applications ADD COLUMN progress_status_next TEXT NOT NULL DEFAULT 'unset'
+        CHECK(progress_status_next IN ('unset','screening','screening_passed','interview_pending','interviewed','signing_pending','offer','rejected'));
+      UPDATE applications SET progress_status_next = ${source};
+      ALTER TABLE applications DROP COLUMN progress_status;
+    `);
+    if (hasV2) raw.exec("ALTER TABLE applications DROP COLUMN progress_status_v2");
+    raw.exec("ALTER TABLE applications RENAME COLUMN progress_status_next TO progress_status");
+  })();
+}
+
 export function createDb(filename: string): DbContext {
   mkdirSync(path.dirname(filename), { recursive: true });
   const raw = new DatabaseDriver(filename);
@@ -402,6 +465,8 @@ export function createDb(filename: string): DbContext {
   raw.pragma("foreign_keys = ON");
   raw.pragma("busy_timeout = 5000");
   raw.exec(schema);
+  migrateAppSettings(raw);
+  migrateApplicationProgressStatus(raw);
   const loginIndexMigratedAt = new Date().toISOString();
   const activeLoginSessions = raw.prepare(`
     SELECT id FROM login_sessions
@@ -423,46 +488,9 @@ export function createDb(filename: string): DbContext {
     CREATE UNIQUE INDEX login_one_active ON login_sessions((1))
       WHERE status IN ('queued','starting','ready','active','saving');
   `);
-  const settingsColumns = raw.prepare("PRAGMA table_info(app_settings)").all() as Array<{ name: string }>;
-  if (!settingsColumns.some((column) => column.name === "check_concurrency")) {
-    raw.exec("ALTER TABLE app_settings ADD COLUMN check_concurrency INTEGER NOT NULL DEFAULT 1 CHECK(check_concurrency BETWEEN 1 AND 3)");
-  }
-  if (!settingsColumns.some((column) => column.name === "screenshot_retention_days")) {
-    raw.exec("ALTER TABLE app_settings ADD COLUMN screenshot_retention_days INTEGER NOT NULL DEFAULT 30 CHECK(screenshot_retention_days BETWEEN 1 AND 3650)");
-  }
-  if (!settingsColumns.some((column) => column.name === "default_user_agent")) {
-    raw.exec(`ALTER TABLE app_settings ADD COLUMN default_user_agent TEXT NOT NULL DEFAULT '${DEFAULT_USER_AGENT}'`);
-  }
-  if (!settingsColumns.some((column) => column.name === "ai_base_url")) {
-    raw.exec("ALTER TABLE app_settings ADD COLUMN ai_base_url TEXT");
-  }
-  if (!settingsColumns.some((column) => column.name === "ai_model")) {
-    raw.exec("ALTER TABLE app_settings ADD COLUMN ai_model TEXT");
-  }
-  if (!settingsColumns.some((column) => column.name === "ai_api_key_encrypted")) {
-    raw.exec("ALTER TABLE app_settings ADD COLUMN ai_api_key_encrypted TEXT");
-  }
-  if (!settingsColumns.some((column) => column.name === "ai_confidence_threshold")) {
-    raw.exec("ALTER TABLE app_settings ADD COLUMN ai_confidence_threshold REAL NOT NULL DEFAULT 0.75 CHECK(ai_confidence_threshold BETWEEN 0 AND 1)");
-  }
-  if (!settingsColumns.some((column) => column.name === "ai_deep_thinking")) {
-    raw.exec("ALTER TABLE app_settings ADD COLUMN ai_deep_thinking INTEGER NOT NULL DEFAULT 0 CHECK(ai_deep_thinking IN (0,1))");
-  }
-  if (!settingsColumns.some((column) => column.name === "recognition_mode")) {
-    raw.exec("ALTER TABLE app_settings ADD COLUMN recognition_mode TEXT NOT NULL DEFAULT 'local_first' CHECK(recognition_mode IN ('local_first','local_only','ai_only'))");
-  }
-  if (!settingsColumns.some((column) => column.name === "status_mappings")) {
-    raw.exec("ALTER TABLE app_settings ADD COLUMN status_mappings TEXT NOT NULL DEFAULT '{}'");
-  }
-  if (!settingsColumns.some((column) => column.name === "state_key_fingerprint")) {
-    raw.exec("ALTER TABLE app_settings ADD COLUMN state_key_fingerprint TEXT");
-  }
   const applicationColumns = raw.prepare("PRAGMA table_info(applications)").all() as Array<{ name: string }>;
   if (!applicationColumns.some((column) => column.name === "check_group_id")) {
     raw.exec("ALTER TABLE applications ADD COLUMN check_group_id TEXT");
-  }
-  if (!applicationColumns.some((column) => column.name === "progress_status_v2")) {
-    raw.exec("ALTER TABLE applications ADD COLUMN progress_status_v2 TEXT");
   }
   if (!applicationColumns.some((column) => column.name === "automation_paused")) {
     raw.exec("ALTER TABLE applications ADD COLUMN automation_paused INTEGER NOT NULL DEFAULT 0");
@@ -648,14 +676,6 @@ export function createDb(filename: string): DbContext {
   }
   raw.exec("CREATE UNIQUE INDEX IF NOT EXISTS status_events_one_applied ON status_events(application_id) WHERE event_type = 'applied'");
   raw.exec(`
-    UPDATE applications
-      SET progress_status_v2 = CASE
-        WHEN progress_status = 'interview_result_pending' THEN 'interviewed'
-        ELSE progress_status
-      END
-      WHERE progress_status_v2 IS NULL;
-    UPDATE applications SET progress_status = 'screening'
-      WHERE progress_status = 'interview_result_pending';
     UPDATE runs
       SET ai_suggested_status_v2 = CASE
         WHEN ai_suggested_status = 'interview_result_pending' THEN 'interviewed'
@@ -771,12 +791,6 @@ export function createDb(filename: string): DbContext {
     CREATE UNIQUE INDEX IF NOT EXISTS runs_one_active_per_group
       ON runs(check_group_id) WHERE check_group_id IS NOT NULL AND status IN ('queued','running','needs_login');
   `);
-  raw.prepare(`
-    INSERT OR IGNORE INTO app_settings(
-      id,global_cron,timezone,check_concurrency,screenshot_retention_days,default_user_agent,
-      ai_base_url,ai_model,ai_api_key_encrypted,ai_confidence_threshold,ai_deep_thinking,recognition_mode,updated_at
-    ) VALUES(1,NULL,'Asia/Shanghai',1,30,?,NULL,NULL,NULL,0.75,0,'local_first',?)
-  `).run(DEFAULT_USER_AGENT, new Date().toISOString());
   // Additive migration after legacy table rebuilds, safe on existing portable databases.
   for (const [table, columns] of Object.entries({
     applications: ["recognition_notice_key"],

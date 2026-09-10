@@ -1,13 +1,12 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { Selectable } from "kysely";
 import { OpenAiCompatibleRecognizer, type AiDebugObserver } from "@application-checker/ai-status";
 import type { AiSettingsUpdate } from "@application-checker/contracts";
 import { parseStatusMappings } from "@application-checker/status-mapping";
 import type { Config } from "./config.js";
-import type { AppSettingsTable, DbContext } from "./db.js";
-import { appSettings } from "./service.js";
+import type { AppSettingsValues, DbContext } from "./db.js";
+import { appSettings, updateAppSettings } from "./service.js";
 
 interface EncryptedSecret {
   version: 1;
@@ -40,7 +39,7 @@ export function decryptSecret(value: string | null, key: Buffer): string | null 
   ]).toString("utf8");
 }
 
-type RuntimeSettingsRow = Selectable<AppSettingsTable>;
+type RuntimeSettingsRow = AppSettingsValues;
 
 export async function syncRuntimeSettingsFile(settings: RuntimeSettingsRow, config: Config): Promise<void> {
   const output = {
@@ -75,7 +74,7 @@ export async function initializeRuntimeSettings(context: DbContext, config: Conf
     ai_confidence_threshold: current.ai_confidence_threshold ?? config.aiConfidenceThreshold,
   };
   if (Object.keys(seeded).length) {
-    await context.db.updateTable("app_settings").set(seeded).where("id", "=", 1).execute();
+    await updateAppSettings(context, seeded);
   }
   await syncRuntimeSettingsFile(await appSettings(context), config);
 }
@@ -91,14 +90,13 @@ export async function updateAiSettings(
     : body.apiKey === null
       ? null
       : encryptSecret(body.apiKey, config.stateKey);
-  await context.db.updateTable("app_settings").set({
+  await updateAppSettings(context, {
     ai_base_url: body.baseUrl?.trim().replace(/\/$/, "") || null,
     ai_model: body.model?.trim() || null,
     ai_api_key_encrypted: encrypted,
     ai_confidence_threshold: body.confidenceThreshold,
     ai_deep_thinking: body.deepThinking ? 1 : 0,
-    updated_at: new Date().toISOString(),
-  }).where("id", "=", 1).execute();
+  });
   const settings = await appSettings(context);
   await syncRuntimeSettingsFile(settings, config);
   return settings;
