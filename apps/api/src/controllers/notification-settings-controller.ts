@@ -73,7 +73,7 @@ export async function registerNotificationSettingsController(
   deps: RouteDeps,
 
 ): Promise<void> {
-  const { context, config, recognizer: injectedRecognizer, recognitionPreviewStore, runnerHeartbeat } = deps;
+  const { context, config, recognizer: injectedRecognizer, aiDebugStore, recognitionPreviewStore, runnerHeartbeat } = deps;
 
   app.get("/notifications", async (request) => {
     const query = request.query as { scope?: string; limit?: string; offset?: string };
@@ -169,6 +169,7 @@ export async function registerNotificationSettingsController(
       builtinStatusMappings: BUILTIN_STATUS_MAPPINGS,
       runnerHealthy: Date.now() - runnerHeartbeat.at < 20_000,
       loginPresentation: config.desktopMode ? "external-window" : "vnc",
+      debugEnabled: Boolean(config.debugTools && aiDebugStore),
     };
   });
 

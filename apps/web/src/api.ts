@@ -90,6 +90,7 @@ async function transferError(response: Response): Promise<never> {
 }
 
 export const api = {
+  health: () => request<{ status: "ok"; runner: "healthy" | "unavailable" }>("/health"),
   applications: (q = "", status = "") =>
     request<ApplicationSummary[]>(`/applications?q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}`),
   application: (id: string) => request<ApplicationDetail>(`/applications/${id}`),
@@ -133,7 +134,6 @@ export const api = {
     screenshotsMissing: number;
     screenshotsFailed: number;
   }>("/runs/history/delete-all", { method: "POST" }),
-  debugStatus: () => request<{ enabled: boolean }>("/debug/status"),
   aiDebugTraces: (limit = 50) => request<AiDebugTraceSummary[]>(`/debug/recognition-traces?limit=${limit}`),
   aiDebugTrace: (id: string) => request<AiDebugTraceDetail>(`/debug/recognition-traces/${id}`),
   clearAiDebugTraces: () => request<{ deleted: number }>("/debug/recognition-traces/clear", { method: "POST" }),

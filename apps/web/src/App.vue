@@ -24,6 +24,7 @@ import AiDebugPage from "./pages/AiDebugPage.vue";
 import type { AssistedParserRule } from "@application-checker/contracts";
 import { pagePaths, type AppPage } from "./router";
 import { sortApplicationsByAppliedAt, type AppliedAtSort } from "./application-sorting";
+import { startAppPolling } from "./app-polling";
 
 const RuleStudioPage = defineAsyncComponent(() => import("./pages/RuleStudioPage.vue"));
 
@@ -67,6 +68,7 @@ const settings = ref<AppSettings>({
   },
   runnerHealthy: false,
   loginPresentation: "vnc",
+  debugEnabled: false,
 });
 const settingsForm = reactive({
   globalCron: "",
@@ -116,7 +118,7 @@ const error = ref("");
 const notice = ref("");
 const debugEnabled = ref(false);
 const debugRefreshToken = ref(0);
-let timer: number | undefined;
+let stopPolling: (() => void) | undefined;
 let taskTimer: number | undefined;
 let taskSearchTimer: number | undefined;
 const confirmState = reactive({
@@ -165,26 +167,53 @@ async function refreshNotifications() {
   unreadNotificationCount.value = page.unreadCount;
 }
 
+let applicationsRefreshSequence = 0;
+async function refreshApplications(): Promise<void> {
+  const sequence = ++applicationsRefreshSequence;
+  const apps = await api.applications();
+  if (sequence !== applicationsRefreshSequence) return;
+  applications.value = apps;
+  const detailId = detail.value?.application.id;
+  if (detailId) {
+    const refreshed = await api.application(detailId).catch(() => null);
+    if (sequence === applicationsRefreshSequence && detail.value?.application.id === detailId) detail.value = refreshed;
+  }
+}
+
+async function refreshUnreadCount() {
+  const notificationCount = await api.unreadNotifications();
+  unreadNotificationCount.value = notificationCount.unreadCount;
+}
+
+async function refreshHealth() {
+  const health = await api.health();
+  settings.value = { ...settings.value, runnerHealthy: health.runner === "healthy" };
+}
+
+async function refreshProfiles() {
+  profiles.value = await api.profiles();
+}
+
+async function refreshSettings(syncForm = false) {
+  const appSettings = await api.settings();
+  settings.value = appSettings;
+  debugEnabled.value = appSettings.debugEnabled;
+  if (active.value === "debug" && !appSettings.debugEnabled) void router.replace(pagePaths.settings);
+  if (syncForm) {
+    settingsForm.globalCron = appSettings.globalCron ?? "";
+    settingsForm.timezone = appSettings.timezone;
+    settingsForm.checkConcurrency = appSettings.checkConcurrency;
+    settingsForm.screenshotRetentionDays = appSettings.screenshotRetentionDays;
+    settingsForm.defaultUserAgent = appSettings.defaultUserAgent;
+  }
+}
+
 async function refresh(silent = false) {
   if (!silent) loading.value = true;
   try {
-    const [apps, appSettings, browserProfiles, notificationCount, debugStatus] = await Promise.all([
-      api.applications(), api.settings(), api.profiles(), api.unreadNotifications(), api.debugStatus(),
+    await Promise.all([
+      refreshApplications(), refreshSettings(!silent), refreshProfiles(), refreshUnreadCount(),
     ]);
-    applications.value = apps;
-    settings.value = appSettings;
-    profiles.value = browserProfiles;
-    unreadNotificationCount.value = notificationCount.unreadCount;
-    debugEnabled.value = debugStatus.enabled;
-    if (active.value === "debug" && !debugStatus.enabled) void router.replace(pagePaths.settings);
-    if (!silent) {
-      settingsForm.globalCron = appSettings.globalCron ?? "";
-      settingsForm.timezone = appSettings.timezone;
-      settingsForm.checkConcurrency = appSettings.checkConcurrency;
-      settingsForm.screenshotRetentionDays = appSettings.screenshotRetentionDays;
-      settingsForm.defaultUserAgent = appSettings.defaultUserAgent;
-    }
-    if (detail.value) detail.value = await api.application(detail.value.application.id).catch(() => null);
   } catch (value) {
     error.value = value instanceof Error ? value.message : "加载失败";
   } finally {
@@ -193,14 +222,18 @@ async function refresh(silent = false) {
 }
 onMounted(() => {
   void refresh();
-  timer = window.setInterval(() => void refresh(true), 5000);
+  stopPolling = startAppPolling({
+    refreshApplications,
+    refreshHealth,
+    refreshUnreadNotifications: refreshUnreadCount,
+  });
   taskTimer = window.setInterval(() => {
     if (active.value === "tasks" && taskScope.value === "active") void refreshTasks();
     if (active.value === "notifications") void refreshNotifications();
   }, 3000);
 });
 onBeforeUnmount(() => {
-  if (timer) clearInterval(timer);
+  stopPolling?.();
   if (taskTimer) clearInterval(taskTimer);
   if (taskSearchTimer) clearTimeout(taskSearchTimer);
 });
@@ -211,6 +244,8 @@ watch([active, taskScope], ([page], previous) => {
   }
   if (page === "tasks") void refreshTasks();
   if (page === "notifications") void refreshNotifications();
+  if (page === "profiles") void refreshProfiles();
+  if (page === "settings") void refreshSettings(true);
 });
 watch(notificationScope, () => {
   if (notificationCurrentPage.value !== 1) {
@@ -304,7 +339,7 @@ async function clearAllHistoryTasks() {
     const result = await api.deleteAllHistoryRuns();
     taskCurrentPage.value = 1;
     screenshotRun.value = null;
-    await Promise.all([refreshTasks(), refresh(true)]);
+    await Promise.all([refreshTasks(), refreshApplications()]);
     const warning = result.screenshotsFailed ? `，${result.screenshotsFailed} 张截图清理失败` : "";
     flash(result.deleted ? `已删除 ${result.deleted} 条历史任务${warning}` : "没有可删除的历史任务");
   });
@@ -406,8 +441,7 @@ async function run(id: string) {
   await action(async () => {
     await api.run(id);
     flash("已加入检查队列");
-    await refresh(true);
-    if (detail.value?.application.id === id) detail.value = await api.application(id);
+    await refreshApplications();
   });
 }
 async function bulkRun() {
@@ -425,7 +459,7 @@ async function bulkRun() {
     const result = await api.bulkRun(applicationIds);
     selected.value = new Set();
     flash(`已加入 ${result.queued.length} 个检查${result.skipped ? `，跳过 ${result.skipped} 个进行中岗位` : ""}`);
-    await refresh(true);
+    await refreshApplications();
   });
 }
 async function saveApplication(value: CreateApplication, runNow: boolean) {
@@ -435,8 +469,7 @@ async function saveApplication(value: CreateApplication, runNow: boolean) {
       const updated = await api.updateApplication(id, value);
       closeApplicationForm();
       applications.value = applications.value.map((item) => item.id === id ? updated : item);
-      if (detail.value?.application.id === id) detail.value = await api.application(id);
-      await refresh(true);
+      await refreshApplications();
       flash("投递信息已更新");
       return;
     }
@@ -445,14 +478,13 @@ async function saveApplication(value: CreateApplication, runNow: boolean) {
     if (runNow) await api.run(created.id);
     const joined = created.checkGroupMemberCount > 1 ? "，已加入现有检查组并共享检查计划" : "";
     flash(`${runNow ? "岗位已保存并加入检查队列" : "岗位已保存"}${joined}`);
-    await refresh(true);
+    await refreshApplications();
   });
 }
 async function setProgress(id: string, status: ProgressStatus) {
   await action(async () => {
     await api.setProgress(id, status);
-    detail.value = await api.application(id);
-    await refresh(true);
+    await refreshApplications();
     flash(`已手动设置为“${progressLabels[status]}”`);
   });
 }
@@ -474,24 +506,21 @@ async function saveCheckPlan(value: CheckPlanUpdate) {
   await action(async () => {
     const result = await api.updateCheckPlan(detail.value!.application.id, value);
     checkPlanOpen.value = false;
-    detail.value = await api.application(detail.value!.application.id);
-    await refresh(true);
+    await refreshApplications();
     flash(`检查计划已更新，并同步到 ${result.affected} 个岗位`);
   });
 }
 async function unlock(id: string) {
   await action(async () => {
     await api.unlockProgress(id);
-    detail.value = await api.application(id);
-    await refresh(true);
+    await refreshApplications();
     flash("已恢复 AI 自动识别");
   });
 }
 async function resumeAutomation(id: string) {
   await action(async () => {
     await api.resumeAutomation(id);
-    detail.value = await api.application(id);
-    await refresh(true);
+    await refreshApplications();
     flash("已恢复自动检查");
   });
 }
@@ -502,8 +531,7 @@ function startLogin(runId: string) {
 async function refreshLogin(id: string) {
   await action(async () => {
     const result = await api.refreshLogin(id);
-    if (detail.value?.application.id === id) detail.value = await api.application(id);
-    await refresh(true);
+    await refreshApplications();
     startLogin(result.runId);
   });
 }
@@ -517,7 +545,7 @@ async function deleteApplication(id: string) {
   await action(async () => {
     await api.deleteApplication(id);
     detail.value = null;
-    await refresh(true);
+    await refreshApplications();
     flash("岗位及其截图已删除");
   });
 }
@@ -537,7 +565,7 @@ async function saveSettings() {
       screenshotRetentionDays: Number(settingsForm.screenshotRetentionDays),
       defaultUserAgent: settingsForm.defaultUserAgent.trim(),
     });
-    await refresh();
+    await Promise.all([refreshSettings(true), refreshApplications()]);
     const cleaned = result.screenshotCleanup.deleted + result.screenshotCleanup.missing;
     flash(cleaned ? `设置已保存，并清理了 ${cleaned} 张过期截图` : "设置已保存");
   });
@@ -583,7 +611,7 @@ async function saveAiSettings(value: AiSettingsUpdate) {
   await action(async () => {
     await api.updateAiSettings(value);
     aiSettingsOpen.value = false;
-    await refresh();
+    await refreshSettings();
     flash("AI 配置已保存并同步到本地加密配置文件");
   });
 }
@@ -633,7 +661,7 @@ async function cancelTask(run: TaskRunSummary) {
   })) return;
   await action(async () => {
     await api.cancelRun(run.id);
-    await Promise.all([refreshTasks(), refresh(true)]);
+    await Promise.all([refreshTasks(), refreshApplications()]);
     flash("任务已取消");
   });
 }
@@ -641,7 +669,7 @@ async function retryTask(run: TaskRunSummary) {
   await action(async () => {
     await api.retryRun(run.id);
     taskScope.value = "active";
-    await Promise.all([refreshTasks(), refresh(true)]);
+    await Promise.all([refreshTasks(), refreshApplications()]);
     flash("任务已重新加入队列");
   });
 }
@@ -654,9 +682,13 @@ async function deleteProfile(site: string) {
   })) return;
   await action(async () => {
     await api.deleteProfile(site);
-    await refresh(true);
+    await Promise.all([refreshProfiles(), refreshApplications()]);
     flash("浏览器状态已清除");
   });
+}
+
+async function handleLoginCompleted() {
+  await Promise.all([refreshProfiles(), refreshApplications()]);
 }
 </script>
 
@@ -819,7 +851,7 @@ async function deleteProfile(site: string) {
 
     </div>
     <ApplicationForm :open="formOpen" :edit-item="formEditItem" @close="closeApplicationForm" @save="saveApplication" />
-    <LoginDialog :open="loginOpen" :run-id="loginRunId" @close="loginOpen = false" @completed="refresh(true)" />
+    <LoginDialog :open="loginOpen" :run-id="loginRunId" @close="loginOpen = false" @completed="handleLoginCompleted" />
     <ScreenshotViewer
       :open="Boolean(screenshotRun)"
       :run="screenshotRun"

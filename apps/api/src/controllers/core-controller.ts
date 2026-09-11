@@ -79,8 +79,6 @@ export async function registerCoreController(app: FastifyInstance, deps: RouteDe
     runner: Date.now() - runnerHeartbeat.at < 20_000 ? "healthy" : "unavailable",
   }));
 
-  app.get("/debug/status", async () => ({ enabled: Boolean(config.debugTools && aiDebugStore) }));
-
   app.get("/debug/ai-traces", async (request) => {
     if (!config.debugTools || !aiDebugStore) throw httpError(404, "AI 调试功能未启用");
     const limit = Math.min(50, Math.max(1, Number((request.query as { limit?: string }).limit) || 50));

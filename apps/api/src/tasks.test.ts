@@ -251,6 +251,42 @@ describe("screenshot retention", () => {
 });
 
 describe("runtime settings and POST action routes", () => {
+  it("revalidates unchanged application lists without returning the response body", async () => {
+    const { context, config } = await setup();
+    const app = Fastify();
+    await registerRoutes(app, { context, config, runnerHeartbeat: { at: Date.now() } });
+
+    const initial = await app.inject({ method: "GET", url: "/applications" });
+    expect(initial.statusCode).toBe(200);
+    expect(initial.headers.etag).toMatch(/^"[a-f0-9]{64}"$/);
+    expect(initial.json()).toHaveLength(1);
+
+    const unchanged = await app.inject({
+      method: "GET",
+      url: "/applications",
+      headers: { "if-none-match": String(initial.headers.etag) },
+    });
+    expect(unchanged.statusCode).toBe(304);
+    expect(unchanged.body).toBe("");
+
+    await context.db.updateTable("applications").set({
+      job_title: "高级产品经理",
+      updated_at: "2026-01-02T00:00:00.000Z",
+    }).where("id", "=", "11111111-1111-4111-8111-111111111111").execute();
+    const changed = await app.inject({
+      method: "GET",
+      url: "/applications",
+      headers: { "if-none-match": String(initial.headers.etag) },
+    });
+    expect(changed.statusCode).toBe(200);
+    expect(changed.headers.etag).not.toBe(initial.headers.etag);
+    expect(changed.json()[0].jobTitle).toBe("高级产品经理");
+
+    await app.close();
+    await context.db.destroy();
+    context.raw.close();
+  });
+
   it("reports and clears browser storage only while no task is active", async () => {
     const { context, config } = await setup();
     await mkdir(path.join(config.browserCachePath, "Cache"), { recursive: true });
@@ -1241,7 +1277,8 @@ describe("task management routes", () => {
       recognitionPreviewStore: new RecognitionPreviewStore(),
       runnerHeartbeat: { at: Date.now() },
     });
-    expect((await disabledApp.inject({ method: "GET", url: "/debug/status" })).json()).toEqual({ enabled: false });
+    expect((await disabledApp.inject({ method: "GET", url: "/debug/status" })).statusCode).toBe(404);
+    expect((await disabledApp.inject({ method: "GET", url: "/settings" })).json().debugEnabled).toBe(false);
     expect((await disabledApp.inject({ method: "GET", url: "/debug/ai-traces" })).statusCode).toBe(404);
     expect((await disabledApp.inject({ method: "GET", url: "/parser-rules" })).json()).toEqual([]);
     expect((await disabledApp.inject({
@@ -1276,7 +1313,8 @@ describe("task management routes", () => {
       recognitionPreviewStore: new RecognitionPreviewStore(),
       runnerHeartbeat: { at: Date.now() },
     });
-    expect((await enabledApp.inject({ method: "GET", url: "/debug/status" })).json()).toEqual({ enabled: true });
+    expect((await enabledApp.inject({ method: "GET", url: "/debug/status" })).statusCode).toBe(404);
+    expect((await enabledApp.inject({ method: "GET", url: "/settings" })).json().debugEnabled).toBe(true);
     expect((await enabledApp.inject({ method: "GET", url: "/debug/ai-traces" })).json()[0]).toMatchObject({ id: traceId });
     const detail = await enabledApp.inject({ method: "GET", url: `/debug/ai-traces/${traceId}` });
     expect(detail.json().sanitizedRequest).toContain("[image omitted: 3 bytes]");

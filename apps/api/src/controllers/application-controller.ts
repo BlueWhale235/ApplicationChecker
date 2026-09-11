@@ -65,13 +65,22 @@ export async function registerApplicationController(app: FastifyInstance, deps: 
     allowUnresolvedHostname: config.desktopMode,
   };
 
-  app.get("/applications", async (request) => {
+  app.get("/applications", async (request, reply) => {
     const query = (request.query as { q?: string; status?: ProgressStatus }).q?.trim().toLowerCase() ?? "";
     const status = (request.query as { status?: ProgressStatus }).status;
     let builder = (await applicationRows(context)).orderBy("applications.updated_at", "desc");
     if (status) builder = builder.where("applications.progress_status", "=", status);
     const rows = await builder.execute();
-    return rows.filter((row) => !query || `${row.company} ${row.job_title} ${row.check_url}`.toLowerCase().includes(query)).map(mapApplication);
+    const applications = rows
+      .filter((row) => !query || `${row.company} ${row.job_title} ${row.check_url}`.toLowerCase().includes(query))
+      .map(mapApplication);
+    const payload = JSON.stringify(applications);
+    const etag = `"${sha(payload)}"`;
+    reply.header("etag", etag).header("cache-control", "private, no-cache");
+    if (request.headers["if-none-match"]?.split(",").map((value) => value.trim()).includes(etag)) {
+      return reply.code(304).send();
+    }
+    return reply.type("application/json; charset=utf-8").send(payload);
   });
 
   app.post("/applications", { schema: { body: CreateApplicationSchema } }, async (request, reply) => {

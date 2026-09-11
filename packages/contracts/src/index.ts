@@ -551,6 +551,7 @@ export interface AppSettings {
   builtinStatusMappings: StatusMappings;
   runnerHealthy: boolean;
   loginPresentation: "vnc" | "external-window";
+  debugEnabled: boolean;
 }
 
 export interface BrowserStorageUsage {
