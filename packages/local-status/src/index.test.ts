@@ -300,6 +300,29 @@ describe("page script recognition", () => {
     });
   });
 
+  it("prefers a terminal status category over a longer earlier-stage term", () => {
+    const result = recognizeScriptExecution({
+      ruleId: "script-beisen",
+      ruleVersion: 1,
+      durationMs: 10,
+      results: [{
+        applicationId: "job-1",
+        rawStatus: "简历初筛-本轮淘汰",
+        evidence: "北森接口返回复合状态",
+      }],
+      logs: [],
+      logsTruncated: false,
+    }, [{ id: "job-1", jobTitle: "销售工程师" }]);
+
+    expect(result.results[0]).toMatchObject({
+      matched: true,
+      rawStatus: "简历初筛-本轮淘汰",
+      status: "rejected",
+      statusRule: "rejected",
+      confidence: 0.99,
+    });
+  });
+
   it("accepts direct progress and login statuses without text mapping", () => {
     const direct = recognizeScriptExecution({
       ruleId: "script-direct", ruleVersion: 1, durationMs: 5,

@@ -324,11 +324,15 @@ export function recognizeScriptExecution(
       };
     }
     const normalized = normalizeRecognitionText(item.rawStatus);
-    const matches = statusRules.flatMap((rule) => rule.terms
-      .filter((term) => normalized.includes(normalizeRecognitionText(term)))
-      .map((term) => ({ rule, term })));
-    const selected = matches.sort((left, right) =>
-      normalizeRecognitionText(right.term).length - normalizeRecognitionText(left.term).length)[0];
+    const selected = statusRules
+      .map((rule) => {
+        const term = rule.terms
+          .filter((candidate) => normalized.includes(normalizeRecognitionText(candidate)))
+          .sort((left, right) =>
+            normalizeRecognitionText(right).length - normalizeRecognitionText(left).length)[0];
+        return term ? { rule, term } : null;
+      })
+      .find((match) => match !== null);
     if (!selected) {
       return {
         applicationId: candidate.id, matched: false, rawStatus: item.rawStatus, status: null, confidence: 0,
