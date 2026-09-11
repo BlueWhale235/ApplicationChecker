@@ -334,7 +334,13 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       .map((item) => [item.applicationId, item]));
     const hasControlledScriptErrors = scriptErrors.size > 0;
     const localResult = recognitionMode !== "ai_only" && body.pageSnapshot
-      ? recognizeLocalPage(body.pageSnapshot, candidates, statusMappings, assistedRules)
+      ? recognizeLocalPage(
+        body.pageSnapshot,
+        candidates,
+        statusMappings,
+        assistedRules,
+        body.scriptExecution?.routeAdapterId,
+      )
       : null;
     const diagnosticFrom = (result: typeof localResult): MergedResult[] => result ? result.results.map((item): MergedResult => ({
       applicationId: item.applicationId,
@@ -384,7 +390,10 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
     }
     const locallyResolved = new Set(groupResults.map((result) => result.applicationId));
     const aiMembers = hasControlledScriptErrors || recognitionMode === "local_only"
-      || (recognitionMode === "local_first" && isLocalOnlyRoute(body.finalUrl))
+      || (recognitionMode === "local_first" && (
+        isLocalOnlyRoute(body.finalUrl)
+        || ["beisen", "mokahr"].includes(body.scriptExecution?.routeAdapterId ?? "")
+      ))
       ? []
       : recognitionMode === "local_first"
         ? members.filter((member) => !locallyResolved.has(member.id))
@@ -735,6 +744,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       pageTitle: string;
       needsLogin?: boolean;
       loginReason?: string | null;
+      snapshot?: LocalPageSnapshot | null;
       scriptExecution: ScriptRuleExecution | null;
     };
     const result = recognitionPreviewStore.completeScriptTest(id, {
@@ -742,6 +752,7 @@ export async function registerRunnerController(app: FastifyInstance, deps: Route
       pageTitle: body.pageTitle,
       needsLogin: Boolean(body.needsLogin),
       loginReason: body.loginReason ?? null,
+      snapshot: body.snapshot ?? null,
       scriptExecution: body.scriptExecution,
     }, parseStatusMappings((await appSettings(context)).status_mappings));
     if (!result) throw httpError(404, "脚本测试预览不存在或状态无效");

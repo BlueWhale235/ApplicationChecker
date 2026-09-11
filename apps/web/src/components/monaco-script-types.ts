@@ -55,6 +55,11 @@ interface ScriptStatusOptions {
   evidence?: string;
 }
 
+interface ScriptAdapterRouteRequest {
+  /** 要使用的内置平台适配器。 */
+  readonly adapterId: "beisen" | "mokahr" | "feishu";
+}
+
 interface SelectorRuleLocator {
   readonly tag: string | null;
   readonly role: string | null;
@@ -112,6 +117,8 @@ interface ScriptRuleHelpers {
   currentUrl(): string;
   /** 跳转到规则 hostname 范围内的页面；加载后从脚本开头重新执行。 */
   goto(url: string): Promise<never>;
+  /** 将当前页面交给指定的内置平台适配器；不会跳转页面，必须作为脚本的唯一返回值。 */
+  routeAdapter(adapterId: "beisen" | "mokahr" | "feishu"): ScriptAdapterRouteRequest;
   /** Axios 风格 HTTP 请求；使用当前页面的浏览器网络环境。 */
   readonly axios: ScriptAxios;
   /** 输出临时调试信息，仅在规则工作台测试结果中显示，不写入应用日志。 */

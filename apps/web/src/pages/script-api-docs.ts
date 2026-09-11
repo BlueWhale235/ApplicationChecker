@@ -32,6 +32,20 @@ const applicationFields: ScriptApiEntry[] = [
 const helperMethods: ScriptApiEntry[] = [
   { signature: "helpers.currentUrl(): string", description: "获取当前页面的完整 URL", example: "if (!helpers.currentUrl().endsWith('/result')) await helpers.goto('/result');" },
   { signature: "await helpers.goto(url)", description: "跳转到规则 hostname 范围内的页面", detail: "页面加载后会从脚本开头重新执行；总计最多跳转 3 次，请使用 currentUrl() 避免循环。", example: "if (!helpers.currentUrl().includes('/history')) await helpers.goto('/history');" },
+  {
+    signature: "helpers.routeAdapter(adapterId): ScriptAdapterRouteRequest",
+    description: "将当前页面交给指定的内置适配器识别",
+    detail: "支持 beisen、mokahr 和 feishu。它不会跳转页面，必须作为脚本的唯一返回值；未知域名可返回 [] 继续普通回退链。",
+    example: `/** @type {Record<string, "beisen" | "mokahr" | "feishu">} */
+const domainAdapters = {
+  "career.company-a.com": "beisen",
+  "jobs.company-b.com": "mokahr",
+  "talent.company-c.com": "feishu"
+};
+const hostname = new URL(helpers.currentUrl()).hostname.toLowerCase();
+const adapterId = domainAdapters[hostname];
+return adapterId ? helpers.routeAdapter(adapterId) : [];`,
+  },
   { signature: "await helpers.axios(config)", description: "发送 Axios 风格的 HTTP 请求", detail: "支持 method、baseURL、params、headers、data、timeout、responseType 和 withCredentials。仅支持 HTTP(S)，并遵循页面的 CORS、CSP、Cookie 与 SameSite 策略。" },
   { signature: "await helpers.axios.get(url, config?)", description: "发送 GET 请求", example: "const { data } = await helpers.axios.get('/api/status', { params: { id: application.id } });" },
   { signature: "await helpers.axios.post(url, data?, config?)", description: "发送 POST 请求", detail: "同时提供 put、patch 和 delete；请求体最多 256KB，响应体最多 2MB，单次超时为 1000–60000ms。", example: "const response = await helpers.axios.post('/api/query', { jobId: application.id });" },

@@ -174,6 +174,13 @@ export interface ScriptRuleOutputItem {
   errorLine?: number;
 }
 
+export type BuiltinParserAdapterId = "beisen" | "mokahr" | "feishu";
+
+export interface ScriptAdapterRouteRequest {
+  readonly __applicationCheckerRouteAdapter: true;
+  readonly adapterId: BuiltinParserAdapterId;
+}
+
 export interface ScriptRuleLogEntry {
   atMs: number;
   message: string;
@@ -183,6 +190,7 @@ export interface ScriptRuleExecution {
   ruleId: string;
   ruleVersion: number;
   durationMs: number;
+  routeAdapterId?: BuiltinParserAdapterId;
   results: ScriptRuleOutputItem[];
   logs: ScriptRuleLogEntry[];
   logsTruncated: boolean;

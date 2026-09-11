@@ -250,6 +250,23 @@ API Key 使用 AES-256-GCM 加密保存。未配置 AI 或模型调用失败时�
 
 页面脚本可通过 `helpers.currentUrl()` 获取当前完整地址，并使用 `helpers.goto(url)` 跳转到同一规则 hostname 范围内的其他页面。跳转完成后脚本会从开头重新执行，因此应先判断当前地址以避免循环；单次执行最多允许 3 次跳转，跳转与重新执行共同受规则总超时限制。
 
+自定义招聘域名可以通过 `helpers.routeAdapter(adapterId)` 交给内置平台适配器识别。当前支持 `beisen`、`mokahr` 和 `feishu`；该方法不会跳转页面，必须作为脚本的唯一返回值。未配置的域名返回空数组后，会继续现有的本地识别与 AI 回退链：
+
+```js
+/** @type {Record<string, "beisen" | "mokahr" | "feishu">} */
+const domainAdapters = {
+  "career.company-a.com": "beisen",
+  "jobs.company-b.com": "mokahr",
+  "talent.company-c.com": "feishu"
+};
+
+const hostname = new URL(helpers.currentUrl()).hostname.toLowerCase();
+const adapterId = domainAdapters[hostname];
+return adapterId ? helpers.routeAdapter(adapterId) : [];
+```
+
+路由只是选择识别器，不会直接判定成功。内置适配器仍需可靠匹配岗位标题和状态；北森会优先调用投递记录接口，未完整识别的岗位再由北森 DOM 解析补充。
+
 `helpers.axios` 提供 Axios 风格的 `get`、`post`、`put`、`patch`、`delete` 和配置对象调用方式，支持查询参数、请求头、JSON 请求体、超时、响应类型及 `withCredentials`。请求在当前 Edge 页面网络环境中发出，可以访问任意 HTTP(S) 地址，但仍遵循浏览器的 CORS、CSP、Cookie 与 SameSite 策略；默认只向同源请求携带 Cookie。禁止脚本主动设置 `Cookie`、`Host`、`Origin`、`Referer` 和 `Sec-*` 请求头，请求体最多 256KB，响应体最多 2MB。
 
 ```js

@@ -137,6 +137,7 @@ const rule: AssistedParserRule = {
 
 export const beisenRuntimeStatusAdapter: RuntimeStatusAdapter = {
   id: "beisen-api",
+  routeAdapterId: "beisen",
   version: 1,
   matches(input) {
     try {

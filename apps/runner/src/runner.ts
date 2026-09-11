@@ -149,6 +149,42 @@ async function captureStablePage(page: Page, status: number | null, includeSnaps
   });
 }
 
+async function executeScriptRuleWithAdapterRouting(
+  page: Page,
+  rule: Parameters<typeof executeScriptRule>[1],
+  primaryApplicationId: string,
+  applications: Parameters<typeof executeScriptRule>[3],
+): Promise<ScriptRuleExecution> {
+  const scriptExecution = await executeScriptRule(page, rule, primaryApplicationId, applications);
+  if (!scriptExecution.routeAdapterId) return scriptExecution;
+
+  try {
+    const routedExecution = await executeRuntimeStatusAdapter({
+      page,
+      primaryApplicationId,
+      applications,
+      routeAdapterId: scriptExecution.routeAdapterId,
+    });
+    if (!routedExecution) return scriptExecution;
+    return {
+      ...scriptExecution,
+      durationMs: scriptExecution.durationMs + routedExecution.durationMs,
+      results: routedExecution.results,
+      logs: [
+        ...scriptExecution.logs,
+        ...routedExecution.logs.map((entry) => ({
+          ...entry,
+          atMs: scriptExecution.durationMs + entry.atMs,
+        })),
+      ],
+      logsTruncated: scriptExecution.logsTruncated || routedExecution.logsTruncated,
+    };
+  } catch (error) {
+    console.error(`Routed status adapter ${scriptExecution.routeAdapterId} failed; continuing with local recognition`, error);
+    return scriptExecution;
+  }
+}
+
 async function capture(job: RunnerJob): Promise<void> {
   let lease: BrowserLease | null = null;
   let cancelled = false;
@@ -179,7 +215,12 @@ async function capture(job: RunnerJob): Promise<void> {
       const scriptRule = selectScriptRule(job.scriptRules, page.url());
       try {
         if (scriptRule) {
-          scriptExecution = await executeScriptRule(page, scriptRule, job.applicationId, job.applications);
+          scriptExecution = await executeScriptRuleWithAdapterRouting(
+            page,
+            scriptRule,
+            job.applicationId,
+            job.applications,
+          );
         } else {
           scriptExecution = await executeRuntimeStatusAdapter({
             page,
@@ -321,9 +362,17 @@ async function completeScriptPreview(job: RunnerRecognitionPreviewJob, resource:
     return false;
   }
 
-  const scriptExecution = await executeScriptRule(resource.page, job.scriptRule, job.applicationId, job.applications);
+  const scriptExecution = await executeScriptRuleWithAdapterRouting(
+    resource.page,
+    job.scriptRule,
+    job.applicationId,
+    job.applications,
+  );
   const observed = await withNavigationRetry(resource.page, () => signals(resource.page, resource.responseStatus));
   const detection = classifyPage(observed);
+  const routedSnapshot = scriptExecution.routeAdapterId
+    ? (await captureStablePage(resource.page, resource.responseStatus, true)).snapshot
+    : null;
   const scriptNeedsLogin = scriptExecution.results.some((item) =>
     item.directStatus === "needs_login" || item.rawStatus === "login_required");
   await api(`/internal/recognition-previews/${job.previewId}/complete-script-test`, {
@@ -333,6 +382,7 @@ async function completeScriptPreview(job: RunnerRecognitionPreviewJob, resource:
       pageTitle: observed.title,
       needsLogin: detection.requiresLogin || scriptNeedsLogin,
       loginReason: detection.requiresLogin ? detection.reason : scriptNeedsLogin ? "login_required" : null,
+      snapshot: routedSnapshot,
       scriptExecution,
     }),
   });

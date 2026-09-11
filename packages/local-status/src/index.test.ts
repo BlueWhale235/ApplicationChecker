@@ -300,6 +300,19 @@ describe("page script recognition", () => {
     });
   });
 
+  it.each([
+    ["beisen", "简历筛选-进行中", "screening"],
+    ["mokahr", "待评估", "screening"],
+    ["feishu", "业务筛选", "screening_passed"],
+  ] as const)("forces the %s adapter for a custom domain", (adapterId, statusText, expectedStatus) => {
+    const result = recognizeLocalPage(snapshot("https://career.example.com/applications", [
+      node(1, "后端开发工程师", 10),
+      node(2, statusText, 50, null, ["current"]),
+    ]), [{ id: "job-1", jobTitle: "后端开发工程师" }], undefined, [], adapterId);
+
+    expect(result).toMatchObject({ adapterId, results: [{ matched: true, status: expectedStatus }] });
+  });
+
   it("prefers a terminal status category over a longer earlier-stage term", () => {
     const result = recognizeScriptExecution({
       ruleId: "script-beisen",

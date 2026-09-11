@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Page } from "puppeteer-core";
 import type { ScriptRuleApplication } from "@application-checker/contracts";
 import { beisenRuntimeStatusAdapter } from "./beisen.js";
-import { resolveRuntimeStatusAdapter } from "./index.js";
+import { executeRuntimeStatusAdapter, resolveRuntimeStatusAdapter } from "./index.js";
 
 const applications: ScriptRuleApplication[] = [
   {
@@ -48,6 +48,27 @@ describe("Beisen runtime status adapter", () => {
     expect(resolveRuntimeStatusAdapter("https://company.zhiye.com/personal/deliveryRecord")?.id).toBe("beisen-api");
     expect(resolveRuntimeStatusAdapter("https://zhiye.com/personal/deliveryRecord")?.id).toBe("beisen-api");
     expect(resolveRuntimeStatusAdapter("https://zhiye.com.example.org/")).toBeNull();
+  });
+
+  it("can be selected explicitly for a custom domain", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
+      Code: 200,
+      Data: {
+        Finished: { Submissions: [{ Datas: [
+          { ApplyId: "custom", JobAdTitle: "项目专员", DeliveryStatus: "筛选中" },
+        ] }] },
+        UnFinished: { Submissions: [] },
+      },
+    })));
+
+    const result = await executeRuntimeStatusAdapter({
+      page: page("https://career.example.com/applications"),
+      primaryApplicationId: "job-1",
+      applications,
+      routeAdapterId: "beisen",
+    });
+
+    expect(result?.results[0]).toMatchObject({ applicationId: "job-1", rawStatus: "筛选中" });
   });
 
   it("loads records, deduplicates by ApplyId, strips job codes and prioritizes cancellation", async () => {

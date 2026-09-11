@@ -8,7 +8,7 @@ describe("Monaco script API declarations", () => {
     expect(SCRIPT_EDITOR_EXTRA_LIB).toContain("declare const helpers");
 
     for (const helper of [
-      "currentUrl", "goto", "log", "status", "statusAll", "error", "errorAll", "runSelectorRule", "text", "texts", "textsWithin", "value", "attr", "nextText",
+      "currentUrl", "goto", "routeAdapter", "log", "status", "statusAll", "error", "errorAll", "runSelectorRule", "text", "texts", "textsWithin", "value", "attr", "nextText",
       "closestText", "exists", "count", "fill", "select", "click",
       "waitForSelector", "waitForText", "waitForTextChange", "scrollIntoView", "sleep",
     ]) {
@@ -22,5 +22,7 @@ describe("Monaco script API declarations", () => {
     expect(SCRIPT_EDITOR_EXTRA_LIB).toContain("页面脚本可使用的受控 DOM 操作与调试 API");
     expect(SCRIPT_EDITOR_EXTRA_LIB).toContain("等待元素出现；默认 5 秒");
     expect(SCRIPT_EDITOR_EXTRA_LIB).toContain("岗位 ID；返回识别结果时用作 applicationId");
+    expect(SCRIPT_EDITOR_EXTRA_LIB).toContain("不会跳转页面");
+    expect(SCRIPT_EDITOR_EXTRA_LIB).toContain('"beisen" | "mokahr" | "feishu"');
   });
 });

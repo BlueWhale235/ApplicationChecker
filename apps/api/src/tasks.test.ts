@@ -554,6 +554,117 @@ describe("task management routes", () => {
     context.raw.close();
   });
 
+  it("routes a custom domain through MokaHR without sending unresolved work to AI", async () => {
+    const { context, config } = await setup();
+    const recognizeGroup = vi.fn();
+    const recognizer = {
+      configured: true,
+      model: "vision-test",
+      recognize: vi.fn(),
+      recognizeGroup,
+    } satisfies StatusRecognizer;
+    const app = Fastify();
+    await registerRoutes(app, { context, config, recognizer, runnerHeartbeat: { at: Date.now() } });
+    const applicationId = "11111111-1111-4111-8111-111111111111";
+    const runId = await queueRun(context, applicationId, "manual");
+    await app.inject({
+      method: "POST", url: "/internal/claim",
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+    });
+
+    const complete = await app.inject({
+      method: "POST",
+      url: `/internal/runs/${runId}/complete`,
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+      payload: {
+        finalUrl: "https://career.example.com/applications",
+        pageTitle: "投递记录",
+        screenshotBase64: Buffer.from("png").toString("base64"),
+        truncated: false,
+        browserState: { version: 1, cookies: [], origins: [] },
+        pageSnapshot: {
+          url: "https://career.example.com/applications",
+          title: "投递记录",
+          language: "zh-CN",
+          visibleText: "产品经理\n待面试",
+          nodes: [
+            { id: 1, parentId: null, tag: "div", role: null, classes: [], dataStatus: null, text: "产品经理", x: 10, y: 10, width: 300, height: 30 },
+            { id: 2, parentId: null, tag: "div", role: null, classes: ["current"], dataStatus: null, text: "待面试", x: 10, y: 50, width: 300, height: 30 },
+          ],
+          truncated: false,
+          nodeLimitReached: false,
+          textLimitReached: false,
+        },
+        scriptExecution: {
+          ruleId: "route-rule", ruleVersion: 1, durationMs: 5, routeAdapterId: "mokahr",
+          results: [], logs: [{ atMs: 2, message: "路由到内置适配器 mokahr" }], logsTruncated: false,
+        },
+      },
+    });
+
+    expect(complete.statusCode, complete.body).toBe(200);
+    expect(recognizeGroup).not.toHaveBeenCalled();
+    expect(await context.db.selectFrom("applications").select(["progress_status", "last_run_status"])
+      .where("id", "=", applicationId).executeTakeFirstOrThrow())
+      .toEqual({ progress_status: "interview_pending", last_run_status: "succeeded" });
+    const result = await context.db.selectFrom("run_application_results")
+      .select(["adapter_id", "recognition_source", "suggested_status"])
+      .where("run_id", "=", runId!).executeTakeFirstOrThrow();
+    expect(result).toEqual({ adapter_id: "mokahr", recognition_source: "local", suggested_status: "interview_pending" });
+
+    await app.close();
+    await context.db.destroy();
+    context.raw.close();
+  });
+
+  it("preserves MokaHR's local-only policy when a routed custom page is unresolved", async () => {
+    const { context, config } = await setup();
+    const recognizeGroup = vi.fn().mockResolvedValue({ provider: "vision-test", results: [] });
+    const recognizer = {
+      configured: true,
+      model: "vision-test",
+      recognize: vi.fn(),
+      recognizeGroup,
+    } satisfies StatusRecognizer;
+    const app = Fastify();
+    await registerRoutes(app, { context, config, recognizer, runnerHeartbeat: { at: Date.now() } });
+    const applicationId = "11111111-1111-4111-8111-111111111111";
+    const runId = await queueRun(context, applicationId, "manual");
+    await app.inject({ method: "POST", url: "/internal/claim", headers: { authorization: `Bearer ${config.runnerToken}` } });
+
+    const complete = await app.inject({
+      method: "POST", url: `/internal/runs/${runId}/complete`,
+      headers: { authorization: `Bearer ${config.runnerToken}` },
+      payload: {
+        finalUrl: "https://career.example.com/applications",
+        pageTitle: "投递记录",
+        screenshotBase64: Buffer.from("png").toString("base64"),
+        truncated: false,
+        browserState: { version: 1, cookies: [], origins: [] },
+        pageSnapshot: {
+          url: "https://career.example.com/applications", title: "投递记录", language: "zh-CN",
+          visibleText: "产品经理\n未知阶段",
+          nodes: [
+            { id: 1, parentId: null, tag: "div", role: null, classes: [], dataStatus: null, text: "产品经理", x: 10, y: 10, width: 300, height: 30 },
+            { id: 2, parentId: null, tag: "div", role: null, classes: ["current"], dataStatus: null, text: "未知阶段", x: 10, y: 50, width: 300, height: 30 },
+          ],
+          truncated: false, nodeLimitReached: false, textLimitReached: false,
+        },
+        scriptExecution: {
+          ruleId: "route-rule", ruleVersion: 1, durationMs: 5, routeAdapterId: "mokahr",
+          results: [], logs: [], logsTruncated: false,
+        },
+      },
+    });
+
+    expect(complete.statusCode, complete.body).toBe(200);
+    expect(recognizeGroup).not.toHaveBeenCalled();
+
+    await app.close();
+    await context.db.destroy();
+    context.raw.close();
+  });
+
   it("applies validated per-application AI results from one group completion", async () => {
     const { context, config } = await setup();
     const recognizeGroup = vi.fn().mockResolvedValue({

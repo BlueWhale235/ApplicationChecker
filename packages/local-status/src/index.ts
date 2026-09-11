@@ -4,6 +4,7 @@ import type {
   AssistedParserRuleDefinition,
   AssistedRuleSelection,
   AssistedRuleTestResult,
+  BuiltinParserAdapterId,
   LocalDomNode,
   LocalPageSnapshot,
   LocalRecognitionResult,
@@ -351,12 +352,17 @@ export function recognizeScriptExecution(
       statusRule: selected.rule.id,
     };
   });
+  const routedAdapter = execution.routeAdapterId
+    ? adapters.find((adapter) => adapter.id === execution.routeAdapterId) ?? null
+    : null;
   return {
-    adapterId: `script:${execution.ruleId}`,
-    adapterVersion: String(execution.ruleVersion),
+    adapterId: routedAdapter?.id ?? `script:${execution.ruleId}`,
+    adapterVersion: routedAdapter?.version ?? String(execution.ruleVersion),
     route: null,
     pageType: "status",
-    pageEvidence: `页面脚本执行完成，耗时 ${execution.durationMs}ms`,
+    pageEvidence: execution.routeAdapterId
+      ? `页面脚本路由到内置适配器 ${execution.routeAdapterId}，耗时 ${execution.durationMs}ms`
+      : `页面脚本执行完成，耗时 ${execution.durationMs}ms`,
     results,
     fallbackReason: results.some((item) => !item.matched) ? "页面脚本未可靠识别全部岗位" : null,
   };
@@ -393,14 +399,24 @@ export function isLocalOnlyRoute(input: string): boolean {
   } catch { return false; }
 }
 
-export function resolveParserAdapter(snapshot: LocalPageSnapshot): {
+export function resolveParserAdapter(
+  snapshot: LocalPageSnapshot,
+  routeAdapterId?: BuiltinParserAdapterId,
+): {
   adapter: ParserAdapter | null;
   route: ParserRouteRule | null;
-  matchedBy: "path" | "dom" | null;
+  matchedBy: "path" | "dom" | "hint" | null;
 } {
   validateParserAdapters();
   const url = new URL(snapshot.url);
   const ordered = [...adapters].sort((a, b) => b.priority - a.priority);
+  if (routeAdapterId) {
+    return {
+      adapter: ordered.find((adapter) => adapter.id === routeAdapterId) ?? null,
+      route: null,
+      matchedBy: "hint",
+    };
+  }
   for (const adapter of ordered) {
     for (const candidate of adapter.routes) {
       if (urlPatternMatches(candidate, url)) {
@@ -682,6 +698,7 @@ export function recognizeLocalPage(
   candidates: LocalRecognitionCandidate[],
   customStatusMappings?: StatusMappings | null,
   assistedRules: AssistedParserRule[] = [],
+  routeAdapterId?: BuiltinParserAdapterId,
 ): LocalRecognitionResult {
   const statusRules = createStatusMappingRules(customStatusMappings);
   const orderedRules = assistedRules
@@ -691,15 +708,17 @@ export function recognizeLocalPage(
         value.definition.hostname.replaceAll("*", "").length + value.definition.pathname.replaceAll("*", "").length;
       return specificity(right) - specificity(left) || right.priority - left.priority;
     });
-  for (const rule of orderedRules) {
-    try {
-      const assisted = recognizeWithAssistedRule(snapshot, candidates, rule, statusRules);
-      if (assisted && assisted.result.results.some((result) => result.matched)) return assisted.result;
-    } catch {
-      // Invalid or stale user rules safely fall through to built-in parsing.
+  if (!routeAdapterId) {
+    for (const rule of orderedRules) {
+      try {
+        const assisted = recognizeWithAssistedRule(snapshot, candidates, rule, statusRules);
+        if (assisted && assisted.result.results.some((result) => result.matched)) return assisted.result;
+      } catch {
+        // Invalid or stale user rules safely fall through to built-in parsing.
+      }
     }
   }
-  const resolved = resolveParserAdapter(snapshot);
+  const resolved = resolveParserAdapter(snapshot, routeAdapterId);
   const classification = classifySnapshot(snapshot, candidates);
   if (!resolved.adapter) {
     return {

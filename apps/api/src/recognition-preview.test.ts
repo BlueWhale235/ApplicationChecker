@@ -116,6 +116,44 @@ describe("RecognitionPreviewStore", () => {
     expect(store.snapshot(created!.id)?.snapshot).toBe(snapshot);
   });
 
+  it("uses a routed adapter and the retained snapshot during a page script test", () => {
+    const customSnapshot = { ...snapshot, url: "https://career.example.com/applications/1" };
+    const store = new RecognitionPreviewStore();
+    const source = store.enqueue({
+      purpose: "capture", sourcePreviewId: null, keepAlive: true,
+      groupId: "group-route", applicationId: "job-1", url: customSnapshot.url, company: "示例公司",
+      applications: [{
+        id: "job-1", company: "示例公司", jobTitle: "后端工程师", checkUrl: customSnapshot.url,
+        postingUrl: null, appliedAt: null, location: null, notes: null, site: "example.com", progressStatus: "screening",
+      }],
+      site: "example.com", browserState: null, proxyUrl: null, userAgent: "test",
+    });
+    store.claim();
+    store.complete(source.id, {
+      snapshot: customSnapshot, screenshotBase64: Buffer.from("png").toString("base64"), needsLogin: false, loginReason: null,
+    });
+    const created = store.enqueueScriptTest(source.id, {
+      id: "script-route", name: "平台路由", enabled: true, priority: 100, version: 1,
+      definition: { schemaVersion: 2, kind: "script", hostname: "career.example.com", pathname: "/*", script: "return helpers.routeAdapter('mokahr')", timeoutMs: 5000 },
+      createdAt: new Date(0).toISOString(), updatedAt: new Date(0).toISOString(), lastTestedAt: null,
+    });
+    store.claim();
+
+    const completed = store.completeScriptTest(created!.id, {
+      finalUrl: customSnapshot.url, pageTitle: customSnapshot.title, needsLogin: false, loginReason: null,
+      snapshot: customSnapshot,
+      scriptExecution: {
+        ruleId: "script-route", ruleVersion: 1, durationMs: 3, routeAdapterId: "mokahr",
+        results: [], logs: [{ atMs: 1, message: "路由到内置适配器 mokahr" }], logsTruncated: false,
+      },
+    });
+
+    expect(completed).toMatchObject({
+      status: "succeeded", adapterId: "mokahr", matchedCount: 1,
+      results: [{ applicationId: "job-1", status: "screening" }],
+    });
+  });
+
   it("keeps direct login results as a valid script judgment", () => {
     const store = new RecognitionPreviewStore();
     const source = store.enqueue({

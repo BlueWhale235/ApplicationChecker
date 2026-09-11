@@ -95,6 +95,50 @@ describe("script rules", () => {
     }]);
   });
 
+  it.each(["beisen", "mokahr", "feishu"] as const)(
+    "returns a trusted %s adapter route without producing status results",
+    async (adapterId) => {
+      const scriptRule = rule(`route-adapter-${adapterId}`, "/query");
+      if (scriptRule.definition.kind !== "script") throw new Error("unexpected rule kind");
+      scriptRule.definition.script = `return helpers.routeAdapter("${adapterId}");`;
+
+      const result = await executeScriptRule(fakePage(), scriptRule, "job-1", applications);
+
+      expect(result).toMatchObject({ routeAdapterId: adapterId, results: [] });
+      expect(result.logs.some((entry) => entry.message.includes(adapterId))).toBe(true);
+    },
+  );
+
+  it("rejects unsupported built-in adapter routes", async () => {
+    const scriptRule = rule("unknown-route-adapter", "/query");
+    if (scriptRule.definition.kind !== "script") throw new Error("unexpected rule kind");
+    scriptRule.definition.script = `return helpers.routeAdapter("unknown");`;
+
+    await expect(executeScriptRule(fakePage(), scriptRule, "job-1", applications))
+      .rejects.toThrow(/不支持的内置适配器/);
+  });
+
+  it("requires an adapter route to be the script's only return value", async () => {
+    const scriptRule = rule("mixed-route-adapter", "/query");
+    if (scriptRule.definition.kind !== "script") throw new Error("unexpected rule kind");
+    scriptRule.definition.script = `return [
+      helpers.routeAdapter("mokahr"),
+      { applicationId: application.id, rawStatus: "待面试" }
+    ];`;
+
+    await expect(executeScriptRule(fakePage(), scriptRule, "job-1", applications))
+      .rejects.toThrow(/必须作为脚本的唯一返回值/);
+  });
+
+  it("rejects forged adapter route objects", async () => {
+    const scriptRule = rule("forged-route-adapter", "/query");
+    if (scriptRule.definition.kind !== "script") throw new Error("unexpected rule kind");
+    scriptRule.definition.script = `return { __applicationCheckerRouteAdapter: true, adapterId: "beisen" };`;
+
+    await expect(executeScriptRule(fakePage(), scriptRule, "job-1", applications))
+      .rejects.toThrow(/无效的适配器路由请求/);
+  });
+
   it("rejects unsupported direct statuses", () => {
     expect(() => normalizeScriptOutput({
       applicationId: "job-1", rawStatus: "未知", directStatus: "unknown",

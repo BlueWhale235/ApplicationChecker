@@ -1,6 +1,7 @@
 import type { Page } from "puppeteer-core";
 import type {
   AssistedParserRule,
+  BuiltinParserAdapterId,
   ScriptParserRuleDefinition,
   ScriptRuleApplication,
   ScriptRuleExecution,
@@ -147,6 +148,8 @@ export async function executeScriptRule(
     const formatLog = new Function(`return (${formatLogSource})`)() as (values: unknown[]) => string;
     const runSelectorRule = new Function(`return (${selectorRuleSource})`)() as
       (definition: unknown, candidates: typeof allApplications) => ScriptRuleOutputItem[];
+    const routeRequests = new WeakSet<object>();
+    const supportedAdapters = new Set(["beisen", "mokahr", "feishu"]);
     const markLogsTruncated = (): void => {
       if (logsTruncated) return;
       logsTruncated = true;
@@ -266,6 +269,18 @@ export async function executeScriptRule(
         throw new NavigationRequest(target.href);
       },
       axios: axiosApi,
+      routeAdapter(adapterId: string): object {
+        const normalized = String(adapterId).trim().toLowerCase();
+        if (!supportedAdapters.has(normalized)) {
+          throw new Error(`helpers.routeAdapter 不支持的内置适配器：${adapterId}`);
+        }
+        const request = Object.freeze({
+          __applicationCheckerRouteAdapter: true as const,
+          adapterId: normalized,
+        });
+        routeRequests.add(request);
+        return request;
+      },
       log(...values: unknown[]): void {
         if (logsTruncated || logEntries.length >= 100) { markLogsTruncated(); return; }
         const original = formatLog(values);
@@ -412,7 +427,24 @@ export async function executeScriptRule(
     const runnable = new AsyncFunction("application", "applications", "helpers", `"use strict";\n${source}`);
     try {
       const output = await runnable(freeze(application), freeze(allApplications), helpers);
-      return { kind: "success" as const, output, logs: logEntries, logsTruncated };
+      if (Array.isArray(output) && output.some((item) => item && typeof item === "object" && routeRequests.has(item))) {
+        throw new Error("helpers.routeAdapter 必须作为脚本的唯一返回值");
+      }
+      if (output && typeof output === "object" && routeRequests.has(output)) {
+        const routeAdapterId = (output as { adapterId: string }).adapterId;
+        const entry = {
+          index: logIndexOffset + logEntries.length,
+          atMs: Date.now() - scriptStartedAt,
+          message: `路由到内置适配器 ${routeAdapterId}`,
+        };
+        logEntries.push(entry);
+        void logBridge(entry);
+        return { kind: "success" as const, output: [], routeAdapterId, logs: logEntries, logsTruncated };
+      }
+      if (output && typeof output === "object" && "__applicationCheckerRouteAdapter" in output) {
+        throw new Error("无效的适配器路由请求");
+      }
+      return { kind: "success" as const, output, routeAdapterId: null, logs: logEntries, logsTruncated };
     } catch (error) {
       if (error instanceof NavigationRequest) return { kind: "navigate" as const, url: error.url, logs: logEntries, logsTruncated };
       return { kind: "failure" as const, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error), logs: logEntries, logsTruncated };
@@ -442,6 +474,9 @@ export async function executeScriptRule(
       if (envelope.kind === "failure") throw new ScriptRuleExecutionError(envelope.error, Date.now() - startedAt, snapshot.logs, snapshot.logsTruncated);
       return {
         ruleId: rule.id, ruleVersion: rule.version, durationMs: Date.now() - startedAt,
+        ...(envelope.routeAdapterId
+          ? { routeAdapterId: envelope.routeAdapterId as BuiltinParserAdapterId }
+          : {}),
         results: normalizeScriptOutput(envelope.output, applications), logs: snapshot.logs, logsTruncated: snapshot.logsTruncated,
       };
     }

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   LocalPageSnapshot,
+  LocalRecognitionResult,
   AssistedParserRule,
   RecognitionPreviewDetail,
   RecognitionPreviewSnapshot,
@@ -11,6 +12,37 @@ import type {
   StatusMappings,
 } from "@application-checker/contracts";
 import { recognizeLocalPage, recognizeScriptExecution } from "@application-checker/local-status";
+
+function recognizePreviewResult(
+  snapshot: LocalPageSnapshot,
+  execution: ScriptRuleExecution | null | undefined,
+  candidates: RunnerRecognitionPreviewJob["applications"],
+  statusMappings?: StatusMappings,
+  assistedRules: AssistedParserRule[] = [],
+): LocalRecognitionResult {
+  if (!execution) return recognizeLocalPage(snapshot, candidates, statusMappings, assistedRules);
+  const scriptResult = recognizeScriptExecution(execution, candidates, statusMappings);
+  if (!execution.routeAdapterId) return scriptResult;
+
+  const localResult = recognizeLocalPage(
+    snapshot,
+    candidates,
+    statusMappings,
+    [],
+    execution.routeAdapterId,
+  );
+  const scriptItems = new Map(scriptResult.results.map((item) => [item.applicationId, item]));
+  return {
+    ...localResult,
+    pageEvidence: scriptResult.pageEvidence,
+    results: localResult.results.map((localItem) => {
+      const scriptItem = scriptItems.get(localItem.applicationId);
+      return scriptItem && (scriptItem.matched || scriptItem.rawStatus === "login_required" || scriptItem.statusRule === "script_error")
+        ? scriptItem
+        : localItem;
+    }),
+  };
+}
 
 interface PreviewRecord extends RecognitionPreviewDetail {
   job: RunnerRecognitionPreviewJob;
@@ -166,9 +198,13 @@ export class RecognitionPreviewStore {
       record.error = input.loginReason;
       return publicDetail(record);
     }
-    const result = input.scriptExecution
-      ? recognizeScriptExecution(input.scriptExecution, record.job.applications, statusMappings)
-      : recognizeLocalPage(input.snapshot, record.job.applications, statusMappings, assistedRules);
+    const result = recognizePreviewResult(
+      input.snapshot,
+      input.scriptExecution,
+      record.job.applications,
+      statusMappings,
+      assistedRules,
+    );
     record.status = "succeeded";
     record.adapterId = result.adapterId;
     record.adapterVersion = result.adapterVersion;
@@ -189,6 +225,7 @@ export class RecognitionPreviewStore {
     pageTitle: string;
     needsLogin: boolean;
     loginReason: string | null;
+    snapshot?: LocalPageSnapshot | null;
     scriptExecution: ScriptRuleExecution | null;
   }, statusMappings?: StatusMappings): RecognitionPreviewDetail | null {
     const record = this.records.find((item) => item.id === id);
@@ -208,7 +245,9 @@ export class RecognitionPreviewStore {
       }
       return null;
     }
-    const result = recognizeScriptExecution(input.scriptExecution, record.job.applications, statusMappings);
+    const result = input.snapshot
+      ? recognizePreviewResult(input.snapshot, input.scriptExecution, record.job.applications, statusMappings)
+      : recognizeScriptExecution(input.scriptExecution, record.job.applications, statusMappings);
     record.status = input.needsLogin ? "needs_login" : "succeeded";
     record.error = input.needsLogin ? input.loginReason : null;
     record.adapterId = result.adapterId;
