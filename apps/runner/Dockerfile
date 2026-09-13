@@ -21,6 +21,7 @@ COPY --from=build /workspace/node_modules ./node_modules
 COPY --from=build /workspace/packages ./packages
 COPY --from=build /workspace/apps/runner ./apps/runner
 COPY apps/runner/docker-entrypoint.sh /usr/local/bin/application-checker-runner
+COPY docker/log-wrapper.mjs /usr/local/lib/application-checker-log-wrapper.mjs
 RUN chmod +x /usr/local/bin/application-checker-runner
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["application-checker-runner"]

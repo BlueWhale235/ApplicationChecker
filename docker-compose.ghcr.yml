@@ -40,11 +40,15 @@ services:
       <<: *shared-environment
       APP_INTERNAL_URL: http://app:8080/api
       BROWSER_BIN: /usr/bin/chromium
+      BROWSER_DATA_PATH: /data/browser
+      BROWSER_CACHE_PATH: /data/browser/cache
       DISPLAY: :99
     depends_on:
       app:
         condition: service_healthy
     networks: [internal]
+    volumes:
+      - ./data:/data
     shm_size: 1gb
     restart: unless-stopped
 

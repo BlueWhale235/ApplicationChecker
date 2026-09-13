@@ -25,5 +25,6 @@ COPY --from=build /workspace/apps/api/dist ./apps/api/dist
 COPY --from=build /workspace/apps/api/package.json ./apps/api/package.json
 COPY --from=build /workspace/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /workspace/apps/web/dist ./apps/web/dist
+COPY docker/log-wrapper.mjs /usr/local/lib/application-checker-log-wrapper.mjs
 EXPOSE 8080
-CMD ["node", "apps/api/dist/server.js"]
+CMD ["node", "/usr/local/lib/application-checker-log-wrapper.mjs", "/data/logs/api.log", "node", "apps/api/dist/server.js"]
